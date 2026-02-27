@@ -1,0 +1,12 @@
+@page "/admin/denied"
+@using Microsoft.AspNetCore.Components
+@layout FediProfile.Components.Layouts.MinimalLayout
+@rendermode InteractiveServer
+
+<section class="login-shell">
+    <div class="login-card">
+        <h1 class="admin-title">Access denied</h1>
+        <p class="admin-subtitle">This Mastodon account is not on the admin allowlist.</p>
+        <a class="button button-ghost" href="/admin/login">Back to login</a>
+    </div>
+</section>

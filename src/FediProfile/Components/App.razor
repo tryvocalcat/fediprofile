@@ -1,0 +1,42 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Authorization
+@using FediProfile.Components
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <base href="/" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="/assets/admin.css" rel="stylesheet" />
+</head>
+<body>
+    <CascadingAuthenticationState>
+        <Router AppAssembly="typeof(Program).Assembly">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layouts.MainLayout)">
+                    <NotAuthorized>
+                        @if (context.User.Identity?.IsAuthenticated ?? false)
+                        {
+                            <RedirectTo Target="/admin/denied" />
+                        }
+                        else
+                        {
+                            <RedirectTo Target="/admin/login" />
+                        }
+                    </NotAuthorized>
+                </AuthorizeRouteView>
+                <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            </Found>
+        </Router>
+    </CascadingAuthenticationState>
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>

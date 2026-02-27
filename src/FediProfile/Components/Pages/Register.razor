@@ -1,0 +1,39 @@
+@page "/register"
+@using Microsoft.AspNetCore.Components
+@using FediProfile.Services
+@layout FediProfile.Components.Layouts.MinimalLayout
+@rendermode InteractiveServer
+
+@inject NavigationManager NavigationManager
+
+<section class="login-shell">
+    <div class="login-card">
+        <h1 class="admin-title">Create Your FediProfile</h1>
+        <p class="admin-subtitle">Register with your Mastodon account.</p>
+
+        <label class="field-label" for="mastodonServer">Mastodon server</label>
+        <input id="mastodonServer" class="input" placeholder="mastodon.social" @bind="server" />
+
+        <button class="button button-primary" @onclick="StartRegistration" disabled="@string.IsNullOrWhiteSpace(server)">
+            Continue
+        </button>
+
+        <p class="muted small">You'll create your own unique profile URL based on your username.</p>
+        <p class="muted small">Not on Mastodon? <a href="https://joinmastodon.org" target="_blank" rel="noopener noreferrer">Join here</a></p>
+    </div>
+</section>
+
+@code {
+    private string? server;
+
+    private void StartRegistration()
+    {
+        if (string.IsNullOrWhiteSpace(server))
+        {
+            return;
+        }
+
+        var sanitized = server.Trim();
+        NavigationManager.NavigateTo($"/register/oauth/{sanitized}?returnUrl=/register/choose-username&registration=true", true);
+    }
+}

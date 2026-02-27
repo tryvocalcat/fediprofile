@@ -1,0 +1,59 @@
+@inherits LayoutComponentBase
+
+@inject UserScopedDb UserDb
+@inject DomainScopedDb DomainDb
+@inject AuthenticationStateProvider AuthStateProvider
+
+<div class="app-shell">
+    <header class="topbar">
+        <a class="brand" href="/">FediProfile</a>
+        <nav class="topbar-nav">
+            <a href="/admin/">Admin</a>
+            <a href="/@_currentUserSlug" class="topbar-user" title="@(_signedInAs ?? "Unknown")">
+                <svg class="topbar-avatar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
+                <span class="topbar-user-name">@(_currentUserSlug ?? "user")</span>
+            </a>
+        </nav>
+    </header>
+
+    <main class="page">
+        @Body
+    </main>
+</div>
+
+@code{
+    private string? _currentUserSlug;
+    private bool _isAuthorized;
+    private string? _signedInAs;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get authenticated user's Mastodon identity from claims
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
+        var mastodonHost = state.User.FindFirst("urn:mastodon:hostname")?.Value;
+        
+        if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonHost))
+        {
+            _signedInAs = $"{mastodonUser}@{mastodonHost}";
+        }
+        else
+        {
+            _signedInAs = state.User.Identity?.Name;
+        }
+
+        // Look up the user in the domain DB by Mastodon credentials to find their slug
+        _currentUserSlug = null;
+        _isAuthorized = false;
+        
+        if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonHost))
+        {
+            var dbUser = await DomainDb.GetUserByMastodonAsync(mastodonUser, mastodonHost);
+            if (dbUser.HasValue)
+            {
+                _currentUserSlug = dbUser.Value.Slug;
+                _isAuthorized = true;
+            }
+        }
+    }
+}

@@ -1,0 +1,280 @@
+@page "/register/choose-username"
+@using Microsoft.AspNetCore.Components
+@using System.Security.Claims
+@using FediProfile.Services
+@layout FediProfile.Components.Layouts.MinimalLayout
+@rendermode InteractiveServer
+
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject DomainScopedDb DomainDb
+@inject IHttpContextAccessor HttpContextAccessor
+
+<section class="login-shell">
+    <div class="login-card">
+        <h1 class="admin-title">Create Your Profile</h1>
+        <p class="admin-subtitle">Choose your unique username</p>
+
+        @if (string.IsNullOrWhiteSpace(_mastodonUser))
+        {
+            <p class="alert alert-info">Loading your information...</p>
+        }
+        else
+        {
+            <div class="form-group">
+                <label>Mastodon Account</label>
+                <div class="pill">@_mastodonUser@(@_mastodonDomain ?? "unknown")</div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_message))
+            {
+                <div class="alert @(_isError ? "alert-error" : "alert-success")">
+                    @_message
+                </div>
+            }
+
+            <form @onsubmit="CreateProfile" class="admin-form">
+                <div class="form-group">
+                    <label for="userSlug">Your Profile URL</label>
+                    <div class="input-group">
+                        <span class="prefix">@(_domain)/</span>
+                        <input type="text" id="userSlug" @bind="_userSlug" @bind:after="OnUserSlugChanged" 
+                               required placeholder="choose-a-username" pattern="[a-zA-Z0-9_-]+" 
+                               class="form-control" />
+                    </div>
+                    <small>Only letters, numbers, hyphens, and underscores allowed</small>
+                    @if (!string.IsNullOrWhiteSpace(_userSlug))
+                    {
+                        if (_isCheckingSlug)
+                        {
+                            <small class="status-checking">Checking availability...</small>
+                        }
+                        else if (_slugAvailable)
+                        {
+                            <small class="status-available">✓ Available</small>
+                        }
+                        else
+                        {
+                            <small class="status-taken">✗ Already taken (try another)</small>
+                        }
+                    }
+                </div>
+
+                <button type="submit" class="button button-primary" disabled="@(!_slugAvailable || _isProcessing)">
+                    @(_isProcessing ? "Creating..." : "Create Profile")
+                </button>
+            </form>
+        }
+    </div>
+</section>
+
+
+
+@code {
+    private string? _mastodonUser;
+    private string? _mastodonDomain;
+    private string? _userSlug;
+    private string? _domain;
+    private string? _message;
+    private bool _isError;
+    private bool _isProcessing;
+    private bool _isCheckingSlug;
+    private bool _slugAvailable;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Get domain from HTTP context
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null)
+            {
+                _message = "Unable to determine your domain";
+                _isError = true;
+                return;
+            }
+
+            _domain = httpContext.Request.Host.Host;
+            if (httpContext.Request.Host.Port.HasValue && httpContext.Request.Host.Port != 80 && httpContext.Request.Host.Port != 443)
+            {
+                _domain = $"{_domain}:{httpContext.Request.Host.Port}";
+            }
+
+            // Get authenticated user info
+            var state = await AuthStateProvider.GetAuthenticationStateAsync();
+            _mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
+            _mastodonDomain = state.User.FindFirst("urn:mastodon:hostname")?.Value;
+
+            if (string.IsNullOrWhiteSpace(_mastodonUser) || string.IsNullOrWhiteSpace(_mastodonDomain))
+            {
+                _message = "You must be logged in with Mastodon to register";
+                _isError = true;
+            //    NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            // Set default userSlug to mastodon username (e.g., mapache)
+            var sanitizedUser = _mastodonUser.ToLowerInvariant().Replace(" ", "-").Replace("@", "");
+            _userSlug = sanitizedUser;
+
+            // Check if the default slug is available
+            if (!LocalDbService.IsReservedUserSlug(_userSlug))
+            {
+                var existingUser = await DomainDb.GetUserBySlugAsync(_userSlug);
+                if (existingUser == null)
+                {
+                    _slugAvailable = true;
+                }
+                else
+                {
+                    // Try appending the domain (e.g., mapache_hachyderm_io)
+                    var sanitizedDomain = _mastodonDomain!.Replace(".", "_");
+                    _userSlug = $"{sanitizedUser}_{sanitizedDomain}";
+
+                    if (!LocalDbService.IsReservedUserSlug(_userSlug))
+                    {
+                        var existingUser2 = await DomainDb.GetUserBySlugAsync(_userSlug);
+                        if (existingUser2 == null)
+                        {
+                            _slugAvailable = true;
+                        }
+                        else
+                        {
+                            // Both taken, leave blank
+                            _userSlug = "";
+                            _slugAvailable = false;
+                        }
+                    }
+                    else
+                    {
+                        _userSlug = "";
+                        _slugAvailable = false;
+                    }
+                }
+            }
+            else
+            {
+                // Reserved slug, try with domain appended
+                var sanitizedDomain = _mastodonDomain!.Replace(".", "_");
+                _userSlug = $"{sanitizedUser}_{sanitizedDomain}";
+
+                if (!LocalDbService.IsReservedUserSlug(_userSlug))
+                {
+                    var existingUser = await DomainDb.GetUserBySlugAsync(_userSlug);
+                    if (existingUser == null)
+                    {
+                        _slugAvailable = true;
+                    }
+                    else
+                    {
+                        _userSlug = "";
+                        _slugAvailable = false;
+                    }
+                }
+                else
+                {
+                    _userSlug = "";
+                    _slugAvailable = false;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error during initialization: {ex.Message}";
+            _isError = true;
+        }
+    }
+
+    private async Task OnUserSlugChanged()
+    {
+        if (string.IsNullOrWhiteSpace(_userSlug))
+        {
+            _slugAvailable = false;
+            return;
+        }
+
+        // Validate format
+        if (!System.Text.RegularExpressions.Regex.IsMatch(_userSlug, @"^[a-zA-Z0-9_-]+$"))
+        {
+            _slugAvailable = false;
+            return;
+        }
+
+        // Check if it's reserved
+        if (LocalDbService.IsReservedUserSlug(_userSlug))
+        {
+            _slugAvailable = false;
+            return;
+        }
+
+        _isCheckingSlug = true;
+        await Task.Delay(300); // Debounce the check
+
+        try
+        {
+            var user = await DomainDb.GetUserBySlugAsync(_userSlug);
+            _slugAvailable = user == null;
+        }
+        catch
+        {
+            _slugAvailable = false;
+        }
+        finally
+        {
+            _isCheckingSlug = false;
+        }
+    }
+
+    private async Task CreateProfile()
+    {
+        if (!_slugAvailable || string.IsNullOrWhiteSpace(_userSlug))
+        {
+            _message = "Please choose an available username";
+            _isError = true;
+            return;
+        }
+
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            // Get domain
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null)
+            {
+                _message = "Unable to determine your domain";
+                _isError = true;
+                return;
+            }
+
+            var domain = _domain?.Split(':')[0] ?? "localhost";
+
+            // Create the user and their database
+            var displayName = $"{_mastodonUser} ({_mastodonDomain})";
+            var (userId, slug) = await DomainDb.InitializeNewUserAsync(domain, _userSlug.ToLowerInvariant(), displayName, _mastodonUser, _mastodonDomain);
+
+            _message = $"Welcome, {slug}! Redirecting to your profile...";
+            _isError = false;
+
+            // Redirect to admin page
+            await Task.Delay(500);
+            NavigationManager.NavigateTo("/admin/");
+        }
+        catch (ArgumentException ex)
+        {
+            _message = $"Error: {ex.Message}";
+            _isError = true;
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error creating profile: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+}

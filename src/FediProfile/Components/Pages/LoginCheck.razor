@@ -1,0 +1,69 @@
+@page "/login/check"
+@using Microsoft.AspNetCore.Components
+@using System.Security.Claims
+@using FediProfile.Services
+@layout FediProfile.Components.Layouts.MinimalLayout
+@rendermode InteractiveServer
+
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject DomainScopedDb DomainDb
+
+<section class="login-shell">
+    <div class="login-card">
+        <h1 class="admin-title">Checking your account...</h1>
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="alert @(_isError ? "alert-error" : "alert-info")">
+                @_message
+            </div>
+        }
+        else
+        {
+            <p class="muted">Please wait while we verify your identity.</p>
+        }
+    </div>
+</section>
+
+@code {
+    private string? _message;
+    private bool _isError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthStateProvider.GetAuthenticationStateAsync();
+            var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
+            var mastodonHost = state.User.FindFirst("urn:mastodon:hostname")?.Value;
+
+            if (string.IsNullOrWhiteSpace(mastodonUser) || string.IsNullOrWhiteSpace(mastodonHost))
+            {
+                _message = "Authentication failed. Please try again.";
+                _isError = true;
+                await Task.Delay(1500);
+                NavigationManager.NavigateTo("/login", true);
+                return;
+            }
+
+            // Check if user exists in the domain database
+            var dbUser = await DomainDb.GetUserByMastodonAsync(mastodonUser, mastodonHost);
+
+            if (dbUser.HasValue)
+            {
+                // Existing user — redirect to admin
+                NavigationManager.NavigateTo("/admin/", true);
+            }
+            else
+            {
+                // New user — redirect to registration to choose username
+                NavigationManager.NavigateTo("/register/choose-username", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error checking account: {ex.Message}";
+            _isError = true;
+        }
+    }
+}

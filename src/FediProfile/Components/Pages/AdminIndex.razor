@@ -1,0 +1,895 @@
+@page "/admin/"
+@using Microsoft.AspNetCore.Components
+@using System.Security.Claims
+@attribute [Authorize]
+@layout FediProfile.Components.Layouts.MainLayout
+@rendermode InteractiveServer
+
+@inject UserScopedDb UserDb
+@inject DomainScopedDb DomainDb
+@inject LocalDbFactory DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IHttpContextAccessor HttpContextAccessor
+@inject UserContextAccessor UserContextAccessor
+@inject FollowService FollowService
+@inject ILogger<AdminIndex> Logger
+
+<section class="admin-shell">
+    <header class="admin-header">
+        <div>
+            <h1 class="admin-title">Admin Console</h1>
+            <p class="admin-subtitle">Manage users and system settings.</p>
+        </div>
+        <a class="button button-ghost" href="/logout">Logout</a>
+    </header>
+
+    @if (!_isAuthorized)
+    {
+        <div class="admin-section">
+            <article class="card">
+                <div class="alert alert-error">
+                    Your Mastodon account is not associated with any profile on this instance.
+                    <a href="/login">Register a new profile</a> or contact the administrator.
+                </div>
+            </article>
+        </div>
+    }
+
+    <div class="admin-section">
+        @if (_isAuthorized && _isRootUser)
+        {
+            <article class="card">
+                <h2>User Management</h2>
+                <p class="muted">Register new users into the system</p>
+                
+                @if (!string.IsNullOrEmpty(_message))
+                {
+                    <div class="alert @(_isError ? "alert-error" : "alert-success")">
+                        @_message
+                    </div>
+                }
+
+                <form @onsubmit="CreateUser" class="admin-form">
+                    <div class="form-group">
+                        <label for="userSlug">User Slug (username)</label>
+                        <input type="text" id="userSlug" @bind="_newUserSlug" required 
+                               placeholder="e.g., john-doe" pattern="[a-zA-Z0-9_-]+" 
+                               class="form-control" />
+                        <small>Only letters, numbers, hyphens, and underscores allowed</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="displayName">Display Name (optional)</label>
+                        <input type="text" id="displayName" @bind="_newDisplayName" 
+                               placeholder="e.g., John Doe" class="form-control" />
+                    </div>
+
+                    <button type="submit" class="button button-primary" disabled="@_isProcessing">
+                        @(_isProcessing ? "Creating..." : "Create User")
+                    </button>
+                </form>
+
+                <div class="admin-section">
+                    <h3>Registered Users</h3>
+                    @if (_users == null)
+                    {
+                        <p>Loading users...</p>
+                    }
+                    else if (!_users.Any())
+                    {
+                        <p>No users registered yet.</p>
+                    }
+                    else
+                    {
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Slug</th>
+                                    <th>Display Name</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in _users)
+                                {
+                                    <tr>
+                                        <td><strong>@user.Slug</strong></td>
+                                        <td>@(user.DisplayName ?? "-")</td>
+                                        <td>@user.CreatedUtc</td>
+                                        <td>
+                                            <a href="/@user.Slug" target="_blank" class="button button-small">View</a>
+                                            @if (user.Slug != "root")
+                                            {
+                                                <button @onclick="() => CreateUserDatabase(user.Slug)" 
+                                                        class="button button-small button-secondary"
+                                                        disabled="@_isProcessing">
+                                                    Init DB
+                                                </button>
+                                                <button @onclick="() => DeleteUser(user.Slug)" 
+                                                        class="button button-small button-danger"
+                                                        disabled="@_isProcessing">
+                                                    Delete
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </article>
+        }
+    </div>
+
+    @if (_isAuthorized && !string.IsNullOrEmpty(_currentUserSlug))
+    {
+        <div class="admin-section">
+            <!-- Profile Settings -->
+            <article class="card">
+                <h2>Profile Settings</h2>
+                <p class="muted">Edit your profile information (applies to <strong>@_currentUserSlug</strong>)</p>
+
+                @if (!string.IsNullOrEmpty(_profileMessage))
+                {
+                    <div class="alert @(_profileIsError ? "alert-error" : "alert-success")">
+                        @_profileMessage
+                    </div>
+                }
+
+                <form @onsubmit="SaveProfile" class="admin-form">
+                    <div class="form-group">
+                        <label for="displayName2">Display Name</label>
+                        <input type="text" id="displayName2" @bind="_profileDisplayName" 
+                               placeholder="Your display name" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label for="bio">Bio</label>
+                        <textarea id="bio" @bind="_profileBio" rows="3" 
+                                  placeholder="Tell us about yourself" class="form-control"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="avatarUrl">Avatar URL</label>
+                        <input type="text" id="avatarUrl" @bind="_profileAvatarUrl" 
+                               placeholder="https://example.com/avatar.png" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label for="theme">Theme</label>
+                        <select id="theme" @bind="_profileTheme" class="form-control">
+                            <option value="theme-classic.css">Classic</option>
+                            <option value="theme-modern.css">Modern</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="button button-primary" disabled="@_isProcessing">
+                        Save Profile
+                    </button>
+                </form>
+            </article>
+
+            <!-- Link Management -->
+            <article class="card admin-card-spaced">
+                <h2>Links</h2>
+                <p class="muted">Manage your profile links</p>
+
+                @if (!string.IsNullOrEmpty(_linkMessage))
+                {
+                    <div class="alert @(_linkIsError ? "alert-error" : "alert-success")">
+                        @_linkMessage
+                    </div>
+                }
+
+                <form @onsubmit="AddLink" class="admin-form">
+                    <div class="form-group">
+                        <label for="linkName">Link Name</label>
+                        <input type="text" id="linkName" @bind="_newLinkName" required 
+                               placeholder="e.g., My Blog" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label for="linkUrl">URL</label>
+                        <input type="text" id="linkUrl" @bind="_newLinkUrl" required 
+                               placeholder="https://example.com" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>Icon (optional)</label>
+                        <div class="icon-picker">
+                            <div class="icon-picker-selected form-control" @onclick="ToggleIconDropdown">
+                                @if (!string.IsNullOrEmpty(_selectedIconKey) && _selectedIconKey != "__custom__" && _platformIcons.ContainsKey(_selectedIconKey))
+                                {
+                                    <img src="/assets/icons/@(_selectedIconKey).svg" alt="" class="icon-picker-img" />
+                                    <span>@_platformIcons[_selectedIconKey].Name</span>
+                                }
+                                else if (_selectedIconKey == "__custom__")
+                                {
+                                    <span>🔗 Custom URL…</span>
+                                }
+                                else
+                                {
+                                    <span class="icon-picker-placeholder">— None —</span>
+                                }
+                            </div>
+                            @if (_iconDropdownOpen)
+                            {
+                                <div class="icon-picker-dropdown">
+                                    <div class="icon-picker-option" @onclick="() => SelectIcon(null)">
+                                        <span>— None —</span>
+                                    </div>
+                                    @foreach (var icon in _platformIcons)
+                                    {
+                                        <div class="icon-picker-option" @onclick="() => SelectIcon(icon.Key)">
+                                            <img src="/assets/icons/@(icon.Key).svg" alt="" class="icon-picker-img" />
+                                            <span>@icon.Value.Name</span>
+                                        </div>
+                                    }
+                                    <div class="icon-picker-option" @onclick='() => SelectIcon("__custom__")'>
+                                        <span>🔗 Custom URL…</span>
+                                    </div>
+                                </div>
+                            }
+                            @if (_selectedIconKey == "__custom__")
+                            {
+                                <input type="text" @bind="_customIconUrl"
+                                       placeholder="https://example.com/icon.svg" class="form-control admin-mt-sm" />
+                                @if (!string.IsNullOrWhiteSpace(_customIconUrl))
+                                {
+                                    <div class="icon-preview">
+                                        <img src="@_customIconUrl" alt="Custom icon" />
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="linkDesc">Description (optional)</label>
+                        <input type="text" id="linkDesc" @bind="_newLinkDescription" 
+                               placeholder="A short description" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label for="linkCategory">Category (optional)</label>
+                        <select id="linkCategory" @bind="_newLinkCategory" class="form-control">
+                            <option value="">— None —</option>
+                            @foreach (var cat in _availableCategories)
+                            {
+                                <option value="@cat">@cat</option>
+                            }
+                            <option value="__custom__">+ Add custom…</option>
+                        </select>
+                        @if (_newLinkCategory == "__custom__")
+                        {
+                            <input type="text" @bind="_customCategory" 
+                                   placeholder="Enter custom category" class="form-control admin-mt-sm" />
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" @bind="_newLinkAutoBoost" /> AutoBoost (auto-announce this actor's posts)
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" @bind="_newLinkHidden" /> Hidden (not shown on profile)
+                        </label>
+                    </div>
+                    <button type="submit" class="button button-primary" disabled="@_isProcessing">
+                        Add Link
+                    </button>
+                </form>
+
+                <div class="admin-section">
+                    <h3>Current Links</h3>
+                    @if (_links == null)
+                    {
+                        <p>Loading links...</p>
+                    }
+                    else if (!_links.Any())
+                    {
+                        <p>No links added yet.</p>
+                    }
+                    else
+                    {
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Icon</th>
+                                    <th>Name</th>
+                                    <th>URL</th>
+                                    <th>Category</th>
+                                    <th>AutoBoost</th>
+                                    <th>Hidden</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var link in _links)
+                                {
+                                    var linkId = Convert.ToInt32(link["Id"]);
+                                    var iconVal = link.ContainsKey("Icon") ? link["Icon"]?.ToString() : null;
+                                    <tr>
+                                        <td>
+                                            @if (!string.IsNullOrWhiteSpace(iconVal))
+                                            {
+                                                <img src="@iconVal" alt="" style="width:20px;height:20px;object-fit:contain;" />
+                                            }
+                                        </td>
+                                        <td>@link["Name"]</td>
+                                        <td><a href="@link["Url"]" target="_blank">@TruncateUrl(link["Url"]?.ToString())</a></td>
+                                        <td>@(link["Category"]?.ToString() ?? "—")</td>
+                                        <td>@(Convert.ToInt32(link["AutoBoost"]) == 1 ? "Yes" : "No")</td>
+                                        <td>@(Convert.ToInt32(link["Hidden"]) == 1 ? "Yes" : "No")</td>
+                                        <td>
+                                            <button @onclick="() => DeleteLink(linkId)" 
+                                                    class="button button-small button-danger"
+                                                    disabled="@_isProcessing">
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </article>
+
+            <!-- Badge Issuers -->
+            <article class="card admin-card-spaced">
+                <h2>Badge Issuers</h2>
+                <p class="muted">Trusted actors that can issue you badges</p>
+
+                @if (_badgeIssuers == null)
+                {
+                    <p>Loading badge issuers...</p>
+                }
+                else if (!_badgeIssuers.Any())
+                {
+                    <p>No badge issuers configured.</p>
+                }
+                else
+                {
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Actor URL</th>
+                                <th>Following</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var issuer in _badgeIssuers)
+                            {
+                                <tr>
+                                    <td>@issuer["Name"]</td>
+                                    <td><a href="@issuer["ActorUrl"]" target="_blank">@TruncateUrl(issuer["ActorUrl"]?.ToString())</a></td>
+                                    <td>@(Convert.ToInt32(issuer["Following"]) == 1 ? "Yes" : "No")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </article>
+        </div>
+    }
+</section>
+
+
+
+@code {
+    private string? _signedInAs;
+    private string? _allowedHandle;
+    private string? _dbName;
+    private string? _newUserSlug;
+    private string? _newDisplayName;
+    private string? _message;
+    private bool _isError;
+    private bool _isProcessing;
+    private bool _isRootUser;
+    private bool _isAuthorized;
+    private string? _currentUserSlug;
+    private List<(int Id, string Slug, string? DisplayName, string CreatedUtc)>? _users;
+
+    // Profile editing fields
+    private string? _profileDisplayName;
+    private string? _profileBio;
+    private string? _profileAvatarUrl;
+    private string? _profileTheme;
+    private string? _profileMessage;
+    private bool _profileIsError;
+
+    // Link management fields
+    private string? _newLinkName;
+    private string? _newLinkUrl;
+    private string? _newLinkIcon;
+    private string? _selectedIconKey;
+    private string? _customIconUrl;
+    private bool _iconDropdownOpen;
+    private string? _newLinkDescription;
+    private string? _newLinkCategory;
+    private string? _customCategory;
+    private bool _newLinkAutoBoost;
+    private bool _newLinkHidden;
+    private string? _linkMessage;
+    private bool _linkIsError;
+    private List<Dictionary<string, object>>? _links;
+
+    // Platform icon definitions
+    private static readonly Dictionary<string, (string Name, string Path)> _platformIcons = new()
+    {
+        ["mastodon"] = ("Mastodon", "/assets/icons/mastodon.svg"),
+        ["loops"] = ("Loops", "/assets/icons/loops.svg"),
+        ["peertube"] = ("PeerTube", "/assets/icons/peertube.svg"),
+        ["pixelfed"] = ("Pixelfed", "/assets/icons/pixelfed.svg"),
+        ["youtube"] = ("YouTube", "/assets/icons/youtube.svg"),
+        ["rss"] = ("RSS", "/assets/icons/rss.svg"),
+        ["instagram"] = ("Instagram", "/assets/icons/instagram.svg"),
+        ["linkedin"] = ("LinkedIn", "/assets/icons/linkedin.svg"),
+    };
+
+    // Default link categories — user-added custom categories are merged in at runtime
+    private static readonly string[] _defaultCategories =
+        ["Social", "Portfolio", "Blog", "Code", "Music", "Video", "News", "Shopping", "Podcast", "Other"];
+    private List<string> _availableCategories = new(
+        ["Social", "Portfolio", "Blog", "Code", "Music", "Video", "News", "Shopping", "Podcast", "Other"]);
+
+    // Badge issuers
+    private List<Dictionary<string, object>>? _badgeIssuers;
+
+    // User-scoped database for the current authenticated user
+    private UserScopedDb? _currentUserDb;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get authenticated user's Mastodon identity from claims
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
+        var mastodonHost = state.User.FindFirst("urn:mastodon:hostname")?.Value;
+        
+        if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonHost))
+        {
+            _signedInAs = $"{mastodonUser}@{mastodonHost}";
+        }
+        else
+        {
+            _signedInAs = state.User.Identity?.Name;
+        }
+
+        // Look up the user in the domain DB by Mastodon credentials to find their slug
+        _currentUserSlug = null;
+        _isAuthorized = false;
+        
+        if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonHost))
+        {
+            var dbUser = await DomainDb.GetUserByMastodonAsync(mastodonUser, mastodonHost);
+            if (dbUser.HasValue)
+            {
+                _currentUserSlug = dbUser.Value.Slug;
+                _isAuthorized = true;
+            }
+        }
+
+        // Check if current user is "root"
+        _isRootUser = _currentUserSlug?.Equals("root", StringComparison.OrdinalIgnoreCase) ?? false;
+
+        _dbName = Path.GetFileName(DomainDb.DbPath);
+
+        if (_isRootUser)
+        {
+            await LoadUsers();
+        }
+
+        // Load user-specific data if authorized
+        if (_isAuthorized && !string.IsNullOrEmpty(_currentUserSlug))
+        {
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            _currentUserDb = DbFactory.GetInstance(domain, _currentUserSlug);
+
+            // Auto-generate actor keys if they don't exist yet
+            var (existingPubKey, _) = await _currentUserDb.GetActorKeysAsync();
+            if (string.IsNullOrEmpty(existingPubKey))
+            {
+                var keyPair = await CryptoService.GenerateKeyPairAsync();
+                await _currentUserDb.SetActorKeysAsync(keyPair.PublicKeyPem, keyPair.PrivateKeyPem);
+            }
+
+            await LoadProfileSettings();
+            await LoadLinks();
+            await LoadBadgeIssuers();
+        }
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            _users = await DomainDb.GetAllUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error loading users: {ex.Message}";
+            _isError = true;
+        }
+    }
+
+    private async Task CreateUser()
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_newUserSlug))
+            {
+                _message = "User slug is required";
+                _isError = true;
+                return;
+            }
+
+            // Validate slug format
+            if (!System.Text.RegularExpressions.Regex.IsMatch(_newUserSlug, @"^[a-zA-Z0-9_-]+$"))
+            {
+                _message = "Invalid slug format. Only letters, numbers, hyphens, and underscores allowed.";
+                _isError = true;
+                return;
+            }
+
+            var (id, slug) = await DomainDb.CreateOrGetUserAsync(_newUserSlug.Trim().ToLowerInvariant(), _newDisplayName?.Trim());
+
+            _message = $"User '{slug}' created successfully!";
+            _isError = false;
+            _newUserSlug = null;
+            _newDisplayName = null;
+
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error creating user: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task CreateUserDatabase(string userSlug)
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            // Create a user database for the given slug
+            var userDb = new UserScopedDb(DomainDb.GetDomain() ?? "localhost", userSlug, autoCreate: true);
+
+            // Accessing the database will create it if it doesn't exist
+            await userDb.GetSettingsAsync();
+
+            // Auto-generate actor keys if they don't exist yet
+            var (existingPubKey, _) = await userDb.GetActorKeysAsync();
+            if (string.IsNullOrEmpty(existingPubKey))
+            {
+                var keyPair = await CryptoService.GenerateKeyPairAsync();
+                await userDb.SetActorKeysAsync(keyPair.PublicKeyPem, keyPair.PrivateKeyPem);
+            }
+
+            _message = $"Database for user '{userSlug}' initialized successfully!";
+            _isError = false;
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error creating database: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task DeleteUser(string userSlug)
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            var success = await DomainDb.DeleteUserAsync(userSlug);
+            if (success)
+            {
+                _message = $"User '{userSlug}' has been deleted.";
+                _isError = false;
+                await LoadUsers();
+            }
+            else
+            {
+                _message = $"User '{userSlug}' not found.";
+                _isError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error deleting user: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task LoadProfileSettings()
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            var settings = await _currentUserDb.GetSettingsAsync();
+            if (settings is Dictionary<string, object> dict)
+            {
+                dict.TryGetValue("ActorUsername", out var username);
+                dict.TryGetValue("ActorBio", out var bio);
+                dict.TryGetValue("ActorAvatarUrl", out var avatar);
+                dict.TryGetValue("UiTheme", out var theme);
+                _profileDisplayName = username?.ToString();
+                _profileBio = bio?.ToString();
+                _profileAvatarUrl = avatar?.ToString();
+                _profileTheme = theme?.ToString() ?? "theme-classic.css";
+            }
+            else
+            {
+                _profileTheme = "theme-classic.css";
+            }
+        }
+        catch
+        {
+            _profileTheme = "theme-classic.css";
+        }
+    }
+
+    private async Task SaveProfile()
+    {
+        if (_currentUserDb == null) return;
+        _profileMessage = null;
+        _profileIsError = false;
+        _isProcessing = true;
+
+        try
+        {
+            await _currentUserDb.UpsertSettingsAsync(
+                actorUsername: _profileDisplayName,
+                actorBio: _profileBio,
+                actorAvatarUrl: _profileAvatarUrl,
+                uiTheme: _profileTheme
+            );
+            _profileMessage = "Profile saved successfully!";
+        }
+        catch (Exception ex)
+        {
+            _profileMessage = $"Error saving profile: {ex.Message}";
+            _profileIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task LoadLinks()
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            var links = await _currentUserDb.GetLinksAsync();
+            _links = links.Cast<Dictionary<string, object>>().ToList();
+            RebuildAvailableCategories();
+        }
+        catch
+        {
+            _links = new List<Dictionary<string, object>>();
+        }
+    }
+
+    private async Task AddLink()
+    {
+        if (_currentUserDb == null) return;
+        _linkMessage = null;
+        _linkIsError = false;
+        _isProcessing = true;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_newLinkName) || string.IsNullOrWhiteSpace(_newLinkUrl))
+            {
+                _linkMessage = "Name and URL are required.";
+                _linkIsError = true;
+                return;
+            }
+
+            // Resolve the effective icon from the picker
+            string? effectiveIcon = null;
+            if (_selectedIconKey == "__custom__")
+                effectiveIcon = _customIconUrl?.Trim();
+            else if (!string.IsNullOrEmpty(_selectedIconKey) && _platformIcons.ContainsKey(_selectedIconKey))
+                effectiveIcon = _platformIcons[_selectedIconKey].Path;
+
+            // Resolve the effective category (custom text takes precedence over sentinel)
+            var effectiveCategory = _newLinkCategory == "__custom__"
+                ? _customCategory?.Trim()
+                : _newLinkCategory;
+
+            // If AutoBoost is enabled, attempt to follow the actor first
+            if (_newLinkAutoBoost)
+            {
+                try
+                {
+                    var (pubKey, privKey) = await _currentUserDb.GetActorKeysAsync();
+                    if (string.IsNullOrEmpty(privKey))
+                    {
+                        _linkMessage = "Cannot enable AutoBoost: missing private key. Please initialize your profile keys first.";
+                        _linkIsError = true;
+                        return;
+                    }
+
+                    var domain = DomainDb.GetDomain() ?? "localhost";
+                    var httpContext = HttpContextAccessor.HttpContext;
+                    var scheme = httpContext?.Request.Scheme ?? "https";
+                    var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
+                    var actorId = $"{scheme}://{fullDomain}/{_currentUserSlug}";
+                    var keyId = $"{actorId}#main-key";
+
+                    var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
+                    var remoteActor = await actorHelper.FetchActorInformationAsync(_newLinkUrl.Trim());
+
+                    if (remoteActor?.Inbox == null)
+                    {
+                        _linkMessage = "Cannot enable AutoBoost: could not resolve the actor or find their inbox. The URL may not be a valid ActivityPub actor.";
+                        _linkIsError = true;
+                        return;
+                    }
+
+                    var (followSuccess, followError) = await FollowService.SendFollowRequestAsync(
+                        _newLinkUrl.Trim(), remoteActor.Inbox, _currentUserDb, actorId);
+
+                    if (!followSuccess)
+                    {
+                        _linkMessage = $"Cannot enable AutoBoost: failed to follow the actor. {followError}";
+                        _linkIsError = true;
+                        return;
+                    }
+
+                    // Record the follow in the domain-level index for shared inbox fan-out
+                    await DomainDb.AddFollowingAsync(_currentUserSlug!, _newLinkUrl.Trim());
+                }
+                catch (Exception ex)
+                {
+                    _linkMessage = $"Cannot enable AutoBoost: {ex.Message}";
+                    _linkIsError = true;
+                    return;
+                }
+            }
+
+            await _currentUserDb.UpsertLinkAsync(
+                _newLinkName.Trim(), 
+                _newLinkUrl.Trim(), 
+                effectiveIcon, 
+                _newLinkDescription?.Trim(),
+                _newLinkAutoBoost, 
+                category: string.IsNullOrWhiteSpace(effectiveCategory) ? null : effectiveCategory,
+                hidden: _newLinkHidden
+            );
+
+            _linkMessage = _newLinkAutoBoost 
+                ? "Link added successfully! Follow request sent to the actor."
+                : "Link added successfully!";
+            _newLinkName = null;
+            _newLinkUrl = null;
+            _newLinkIcon = null;
+            _selectedIconKey = null;
+            _customIconUrl = null;
+            _iconDropdownOpen = false;
+            _newLinkDescription = null;
+            _newLinkCategory = null;
+            _customCategory = null;
+            _newLinkAutoBoost = false;
+            _newLinkHidden = false;
+            RebuildAvailableCategories();
+            await LoadLinks();
+        }
+        catch (Exception ex)
+        {
+            _linkMessage = $"Error adding link: {ex.Message}";
+            _linkIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private void ToggleIconDropdown()
+    {
+        _iconDropdownOpen = !_iconDropdownOpen;
+    }
+
+    private void SelectIcon(string? key)
+    {
+        _selectedIconKey = key;
+        _iconDropdownOpen = false;
+        if (key != "__custom__")
+            _customIconUrl = null;
+    }
+
+    private async Task DeleteLink(int linkId)
+    {
+        if (_currentUserDb == null) return;
+        _linkMessage = null;
+        _linkIsError = false;
+        _isProcessing = true;
+
+        try
+        {
+            // If the link had AutoBoost, clean up the domain-level Following index
+            var link = _links?.FirstOrDefault(l => Convert.ToInt32(l["Id"]) == linkId);
+            if (link != null && Convert.ToInt32(link["AutoBoost"]) == 1 && !string.IsNullOrEmpty(_currentUserSlug))
+            {
+                var actorUrl = link["Url"]?.ToString();
+                if (!string.IsNullOrEmpty(actorUrl))
+                {
+                    await DomainDb.RemoveFollowingAsync(_currentUserSlug, actorUrl);
+                }
+            }
+
+            await _currentUserDb.DeleteLinkAsync(linkId);
+            _linkMessage = "Link deleted.";
+            await LoadLinks();
+        }
+        catch (Exception ex)
+        {
+            _linkMessage = $"Error deleting link: {ex.Message}";
+            _linkIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task LoadBadgeIssuers()
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            var issuers = await _currentUserDb.GetBadgeIssuersAsync();
+            _badgeIssuers = issuers.Cast<Dictionary<string, object>>().ToList();
+        }
+        catch
+        {
+            _badgeIssuers = new List<Dictionary<string, object>>();
+        }
+    }
+
+    /// <summary>
+    /// Merges the default categories with any custom categories found in existing links.
+    /// </summary>
+    private void RebuildAvailableCategories()
+    {
+        var custom = (_links ?? new())
+            .Select(l => l.TryGetValue("Category", out var v) ? v?.ToString() : null)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(c => !_defaultCategories.Contains(c, StringComparer.OrdinalIgnoreCase))
+            .OrderBy(c => c, StringComparer.OrdinalIgnoreCase);
+
+        _availableCategories = new List<string>(_defaultCategories);
+        _availableCategories.AddRange(custom);
+    }
+
+    private string TruncateUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "-";
+        return url.Length > 50 ? url.Substring(0, 47) + "..." : url;
+    }
+}

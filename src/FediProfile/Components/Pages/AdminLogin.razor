@@ -1,0 +1,37 @@
+@page "/admin/login"
+@using Microsoft.AspNetCore.Components
+@layout FediProfile.Components.Layouts.MinimalLayout
+@rendermode InteractiveServer
+
+@inject NavigationManager NavigationManager
+
+<section class="login-shell">
+    <div class="login-card">
+        <h1 class="admin-title">FediProfile Admin</h1>
+        <p class="admin-subtitle">Sign in with your Mastodon account.</p>
+
+        <label class="field-label" for="mastodonServer">Mastodon server</label>
+        <input id="mastodonServer" class="input" placeholder="mastodon.social" @bind="server" />
+
+        <button class="button button-primary" @onclick="StartLogin" disabled="@string.IsNullOrWhiteSpace(server)">
+            Continue
+        </button>
+
+        <p class="muted small">You must be on the allowlist stored in Settings to complete login.</p>
+    </div>
+</section>
+
+@code {
+    private string? server;
+
+    private void StartLogin()
+    {
+        if (string.IsNullOrWhiteSpace(server))
+        {
+            return;
+        }
+
+        var sanitized = server.Trim();
+        NavigationManager.NavigateTo($"/login/oauth/{sanitized}?returnUrl=/admin/", true);
+    }
+}

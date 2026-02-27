@@ -1,0 +1,39 @@
+@page "/login"
+@using Microsoft.AspNetCore.Components
+@layout FediProfile.Components.Layouts.MinimalLayout
+@rendermode InteractiveServer
+
+@inject NavigationManager NavigationManager
+
+<section class="login-shell">
+    <div class="login-card">
+        <h1 class="admin-title">Login or Sign Up</h1>
+        <p class="admin-subtitle">Sign in with your Mastodon account. If you don't have a profile yet, we'll help you create one.</p>
+
+        <label class="field-label" for="mastodonServer">Mastodon server</label>
+        <input id="mastodonServer" class="input" placeholder="mastodon.social" @bind="server" />
+
+        <button class="button button-primary" @onclick="StartLogin" disabled="@string.IsNullOrWhiteSpace(server)">
+            Continue
+        </button>
+
+        <p class="muted small">You'll be redirected to your Mastodon instance to authorize.</p>
+
+        <p class="muted small">Not on Mastodon? <a href="https://joinmastodon.org" target="_blank" rel="noopener noreferrer">Join here</a></p>
+    </div>
+</section>
+
+@code {
+    private string? server;
+
+    private void StartLogin()
+    {
+        if (string.IsNullOrWhiteSpace(server))
+        {
+            return;
+        }
+
+        var sanitized = server.Trim();
+        NavigationManager.NavigateTo($"/login/oauth/{sanitized}?returnUrl=/login/check", true);
+    }
+}
