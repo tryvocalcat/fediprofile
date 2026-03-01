@@ -227,10 +227,12 @@ public class AnnounceService
     {
         if (string.IsNullOrEmpty(message.Actor))
         {
+            Console.WriteLine("Create message missing actor");
             _logger.LogWarning("Create message missing actor");
             return;
         }
 
+        Console.WriteLine($"Handling Create activity from {message.Actor} with ID {message.Id}");
         _logger.LogInformation($"Handling Create from {message.Actor}");
 
         // First, check for badges in this Create activity
@@ -238,34 +240,28 @@ public class AnnounceService
 
         // Check if this actor is in our AutoBoost links
         var autoBoostLinks = await db.GetAutoBoostLinksAsync();
-        var matchingLink = autoBoostLinks.FirstOrDefault(l => ((string)l["Url"]).TrimEnd('/') == message.Actor.TrimEnd('/'));
+        var actorTrimmed = message.Actor.TrimEnd('/');
+        var matchingLink = autoBoostLinks.FirstOrDefault(l => 
+            l.Url.TrimEnd('/') == actorTrimmed || 
+            (!string.IsNullOrEmpty(l.ActorAPUri) && l.ActorAPUri.TrimEnd('/') == actorTrimmed));
 
         if (matchingLink == null)
         {
+            Console.WriteLine($"Actor {message.Actor} is not in AutoBoost links, ignoring");
             _logger.LogInformation($"Actor {message.Actor} is not in AutoBoost links, ignoring");
             return;
         }
 
+        Console.WriteLine($"Actor {message.Actor} is marked for AutoBoost, will announce");
         _logger.LogInformation($"Actor {message.Actor} is marked for AutoBoost, will announce");
 
         // Check if we're following this actor; if not, try to follow
-        var linkId = Convert.ToInt32(matchingLink["Id"]);
+        var linkId = matchingLink.Id;
         var isFollowing = await db.IsFollowingAsync(linkId);
         if (!isFollowing)
         {
-            _logger.LogInformation($"Not following {message.Actor}, attempting to follow");
-            // Fetch inbox to send follow request
-            var (pubKey, privKey) = await db.GetActorKeysAsync();
-            if (!string.IsNullOrEmpty(privKey))
-            {
-                var keyId = $"{actorId}#main-key";
-                var helper = new ActorHelper(privKey, keyId, _logger);
-                var remoteActor = await helper.FetchActorInformationAsync(message.Actor);
-                if (remoteActor?.Inbox != null)
-                {
-                    await _followService.SendFollowRequestAsync(message.Actor, remoteActor.Inbox, db, actorId);
-                }
-            }
+            Console.WriteLine($"Not following {message.Actor}, attempting to follow, ignoring Create for now");            
+            return;
         }
 
         // Announce the Create activity
@@ -292,7 +288,7 @@ public class AnnounceService
 
                 // Check if we're mentioned in the note (To, Cc, Tag) or if any of our links are mentioned
                 var userLinks = await db.GetLinksAsync();
-                var linkUrls = userLinks.Select(l => (string)l["Url"]).ToList();
+                var linkUrls = userLinks.Select(l => l.Url).ToList();
                 var mentionsUs = IsMentionedInObject(objectRoot, actorId, linkUrls);
                 if (!mentionsUs)
                 {
@@ -416,7 +412,7 @@ public class AnnounceService
         return false;
     }
 
-    private async Task SendAnnounceAsync(InboxMessage createMessage, UserScopedDb db, string actorId)
+    public async Task SendAnnounceAsync(InboxMessage createMessage, UserScopedDb db, string actorId)
     {
         try
         {
@@ -446,7 +442,7 @@ public class AnnounceService
             
             foreach (var follower in followers)
             {
-                var inbox = follower.ContainsKey("Inbox") ? follower["Inbox"]?.ToString() : null;
+                var inbox = follower.Inbox;
                 if (!string.IsNullOrEmpty(inbox))
                 {
                     try

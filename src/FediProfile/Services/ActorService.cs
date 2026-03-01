@@ -28,25 +28,31 @@ public class ActorService
 
         // Get actor keys for publicKey field
         var (pubKey, privKey) = await db.GetActorKeysAsync();
+        var theme = await db.GetUiThemeAsync();
 
-        var links = await db.GetLinksAsync();
+        var links = await db.GetLinksAsync(false);
         // Filter out hidden links and format as HTML attachments
         var attachments = links
-            .Cast<Dictionary<string, object>>()
-            .Where(link => link.TryGetValue("Hidden", out var h) && Convert.ToInt64(h) == 0)
             .Select(link => 
             {
-                var url = link["Url"]?.ToString() ?? "";
-                var name = link["Name"]?.ToString() ?? "";
-                var icon = link.TryGetValue("Icon", out var ic) ? ic?.ToString() : null;
+                var url = link.Url;
+                var name = link.Name;
+                var icon = link.Icon;
                 if (!string.IsNullOrEmpty(icon) && icon.StartsWith("/"))
                     icon = $"{baseDomain}{icon}";
-                var category = link.TryGetValue("Category", out var cat) ? cat?.ToString() : null;
-                var description = link.TryGetValue("Description", out var desc) ? desc?.ToString() : null;
-                var autoBoost = link.TryGetValue("AutoBoost", out var ab) && Convert.ToInt64(ab) != 0;
 
-                var uri = new Uri(url);
-                var displayUrl = uri.Host + uri.PathAndQuery;
+                string displayUrl = url;
+
+                try {
+                    // Validate URL
+                    var uri = new Uri(url);
+                    displayUrl = uri.Host + uri.PathAndQuery;
+                }
+                catch
+                {
+                    // If URL is invalid, skip this link
+                }
+
                 var invisibleStart = displayUrl.Length > 30 ? 
                     $"<span class=\"invisible\">https://</span><span class=\"ellipsis\">{displayUrl.Substring(0, 30)}</span>" :
                     $"<span class=\"invisible\">https://</span><span class=\"\">{displayUrl}</span>";
@@ -59,9 +65,9 @@ public class ActorService
                     Value = htmlValue,
                     Href = url,
                     Icon = !string.IsNullOrEmpty(icon) ? new ActivityPubImage { Type = "Image", Url = icon } : null,
-                    Category = category,
-                    Description = description,
-                    AutoBoost = autoBoost ? true : null
+                    Category = link.Category,
+                    Description = link.Description,
+                    AutoBoost = link.AutoBoost ? true : null
                 };
             })
             .ToList();
@@ -98,7 +104,11 @@ public class ActorService
                 MediaType = "image/png",
                 Url = avatarUrl
             },
-            Attachment = attachments.Count > 0 ? attachments : null
+            Attachment = attachments.Count > 0 ? attachments : null,
+            FediProfile = new FediProfileExtension
+            {
+                Theme = theme
+            }
         };
     }
 }

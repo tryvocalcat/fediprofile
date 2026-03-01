@@ -1,0 +1,142 @@
+:root {
+  color-scheme: light dark;
+  --bg: #fffbf5;
+  --ink: #2d1a0e;
+  --accent: #e85d04;
+  --accent-hover: #f48c06;
+  --card: #ffffff;
+  --card-hover: #fff7ed;
+  --border: #fed7aa;
+  --shadow: rgba(232, 93, 4, 0.08);
+  --link-hover: rgba(232, 93, 4, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a0f08;
+    --ink: #fde8d0;
+    --accent: #fb923c;
+    --accent-hover: #fdba74;
+    --card: #261710;
+    --card-hover: #3d2316;
+    --border: #4a2c1a;
+    --shadow: rgba(0, 0, 0, 0.4);
+    --link-hover: rgba(251, 146, 60, 0.08);
+  }
+}
+
+body {
+  background: linear-gradient(150deg, var(--bg) 0%, #fff1e6 40%, #ffe8d6 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: linear-gradient(150deg, #1a0f08 0%, #261710 40%, #1a1008 100%);
+  }
+}
+
+.card {
+  border-radius: 28px;
+  box-shadow: 0 20px 40px -10px var(--shadow);
+  animation: riseUp 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+h1 {
+  background: linear-gradient(135deg, #e85d04 0%, #f48c06 50%, #fb923c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  color: #b08968;
+}
+
+h2 {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+h2:before,
+h2:after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.link-card {
+  border-radius: 16px;
+  transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 3px 3px 0 var(--border);
+}
+
+.link-card:hover {
+  border-color: var(--accent);
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--accent);
+}
+
+.link-card:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #e85d04, #f48c06);
+  border-radius: 4px 0 0 4px;
+  transform: scaleY(0);
+  transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom;
+}
+
+.link-card:hover:before {
+  transform: scaleY(1);
+}
+
+.link-icon {
+  border-radius: 12px;
+}
+
+.link-content p {
+  color: #b08968;
+}
+
+.boost-badge {
+  background: linear-gradient(135deg, #e85d04 0%, #f48c06 100%);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(232, 93, 4, 0.3);
+}
+
+.info-section summary {
+  color: #b08968;
+  transition: color 200ms;
+}
+
+.info-section summary:hover {
+  color: var(--accent);
+}
+
+.info-section ul {
+  color: #b08968;
+}
+
+.info-section code {
+  color: var(--accent);
+}
+
+@keyframes riseUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

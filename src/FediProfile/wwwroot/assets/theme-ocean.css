@@ -1,0 +1,141 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f0fafb;
+  --ink: #0f2b3c;
+  --accent: #0891b2;
+  --accent-hover: #06b6d4;
+  --card: #ffffff;
+  --card-hover: #ecfeff;
+  --border: #cffafe;
+  --shadow: rgba(8, 145, 178, 0.08);
+  --link-hover: rgba(8, 145, 178, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a1a1f;
+    --ink: #e0f2f1;
+    --accent: #22d3ee;
+    --accent-hover: #67e8f9;
+    --card: #0f2b33;
+    --card-hover: #164e54;
+    --border: #1e4046;
+    --shadow: rgba(0, 0, 0, 0.4);
+    --link-hover: rgba(34, 211, 238, 0.08);
+  }
+}
+
+body {
+  background: linear-gradient(160deg, var(--bg) 0%, #e0f7fa 50%, #f0fafb 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: linear-gradient(160deg, #0a1a1f 0%, #0f2b33 50%, #0a1a24 100%);
+  }
+}
+
+.card {
+  border-radius: 20px;
+  box-shadow: 0 20px 40px -10px var(--shadow);
+  animation: fadeIn 500ms ease both;
+}
+
+h1 {
+  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 40%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  color: #6b9da8;
+}
+
+h2 {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+h2:before,
+h2:after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.link-card {
+  border-radius: 14px;
+  transition: all 200ms ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 3px 3px 0 var(--border);
+}
+
+.link-card:hover {
+  border-color: var(--accent);
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--accent);
+}
+
+.link-card:before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  transform: scaleX(0);
+  transition: transform 200ms ease;
+  transform-origin: left;
+}
+
+.link-card:hover:before {
+  transform: scaleX(1);
+}
+
+.link-icon {
+  border-radius: 10px;
+}
+
+.link-content p {
+  color: #6b9da8;
+}
+
+.boost-badge {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color: #0a1a1f;
+  box-shadow: 0 2px 8px rgba(8, 145, 178, 0.25);
+}
+
+.info-section summary {
+  color: #6b9da8;
+  transition: color 200ms;
+}
+
+.info-section summary:hover {
+  color: var(--accent);
+}
+
+.info-section ul {
+  color: #6b9da8;
+}
+
+.info-section code {
+  color: var(--accent);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

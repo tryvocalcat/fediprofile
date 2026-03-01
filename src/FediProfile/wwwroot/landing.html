@@ -460,6 +460,49 @@
             font-size: 0.9rem;
         }
 
+        /* ── Support ── */
+        .support {
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .support-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 24px;
+        }
+
+        .support-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #ff5e5b 0%, #ff9966 100%);
+            display: grid;
+            place-items: center;
+            font-size: 2rem;
+            box-shadow: 0 8px 24px rgba(255, 94, 91, 0.25);
+        }
+
+        .support-box p {
+            color: var(--muted);
+            max-width: 480px;
+            font-size: 1.05rem;
+        }
+
+        .btn-kofi {
+            background: #ff5e5b;
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(255, 94, 91, 0.35);
+        }
+        .btn-kofi:hover {
+            background: #e8524f;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(255, 94, 91, 0.45);
+        }
+
         /* ── CTA ── */
         .cta {
             text-align: center;
@@ -570,6 +613,8 @@
             <a href="#features" class="hide-mobile">Features</a>
             <a href="#compare" class="hide-mobile">Compare</a>
             <a href="#how" class="hide-mobile">How it works</a>
+            <a href="#support" class="hide-mobile">Support</a>
+            <a href="https://github.com/tryvocalcat/fediprofile" target="_blank" class="hide-mobile">GitHub</a>
             <a href="/login" class="btn btn-sm btn-primary" style="color: white">Get Started</a>
         </div>
     </nav>
@@ -663,7 +708,7 @@
                 <div class="feature-card reveal">
                     <div class="feature-icon">&#128640;</div>
                     <h3>Auto-Boost &amp; Relay</h3>
-                    <p>Automatically reshare content from accounts you follow. Your profile stays active even when you're away.</p>
+                    <p>Consolidate your Fediverse presence. Automatically boost posts from your other accounts into one unified profile.</p>
                 </div>
                 <div class="feature-card reveal">
                     <div class="feature-icon">&#129505;</div>
@@ -770,6 +815,24 @@
         </div>
     </section>
 
+    <!-- Support -->
+    <section id="support" class="support">
+        <div class="section-inner section-center">
+            <span class="section-label">&#10084;&#65039; Support</span>
+            <h2 class="section-title">Help keep FediProfile alive</h2>
+            <div class="support-box reveal">
+                <div class="support-icon">&#9749;</div>
+                <p>
+                    FediProfile and BadgeFed are free, open source, and built with love. 
+                    If it's useful to you, consider buying me a coffee to help cover hosting costs and fuel development.
+                </p>
+                <a href="https://ko-fi.com/mahopacheco" target="_blank" rel="noopener" class="btn btn-kofi">
+                    &#9749; Buy Me a Coffee on Ko-fi
+                </a>
+            </div>
+        </div>
+    </section>
+
     <!-- CTA -->
     <section class="cta">
         <div class="cta-box reveal">
@@ -785,6 +848,8 @@
             <a href="#features">Features</a>
             <a href="#compare">Compare</a>
             <a href="#how">How it works</a>
+            <a href="#support">Support</a>
+            <a href="https://github.com/tryvocalcat/fediprofile" target="_blank">GitHub</a>
             <a href="/login">Login</a>
         </div>
         <p>&copy; 2026 FediProfile &mdash; Open source, federated, yours.</p>

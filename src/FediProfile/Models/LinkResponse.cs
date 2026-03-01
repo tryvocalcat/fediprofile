@@ -7,6 +7,7 @@ public record LinkResponse(
     string Url,
     string? Description,
     bool AutoBoost,
+    bool IsActivityPub,
     string? Category,
     string? Type,
     bool Hidden,

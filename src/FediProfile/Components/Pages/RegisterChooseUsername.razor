@@ -1,5 +1,6 @@
 @page "/register/choose-username"
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.WebUtilities
 @using System.Security.Claims
 @using FediProfile.Services
 @layout FediProfile.Components.Layouts.MinimalLayout
@@ -9,13 +10,22 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject DomainScopedDb DomainDb
 @inject IHttpContextAccessor HttpContextAccessor
+@inject IConfiguration Configuration
 
 <section class="login-shell">
     <div class="login-card">
         <h1 class="admin-title">Create Your Profile</h1>
         <p class="admin-subtitle">Choose your unique username</p>
 
-        @if (string.IsNullOrWhiteSpace(_mastodonUser))
+        @if (!_registrationOpen)
+        {
+            <div class="alert alert-info">Registration is currently closed. Please check back later.</div>
+        }
+        else if (_invalidInvitation)
+        {
+            <div class="alert alert-error">Invalid or missing invitation code. <a href="/register/invitation">Enter your code</a>.</div>
+        }
+        else if (string.IsNullOrWhiteSpace(_mastodonUser))
         {
             <p class="alert alert-info">Loading your information...</p>
         }
@@ -23,7 +33,7 @@
         {
             <div class="form-group">
                 <label>Mastodon Account</label>
-                <div class="pill">@_mastodonUser@(@_mastodonDomain ?? "unknown")</div>
+                <div class="pill">@(_mastodonUser)@@@(_mastodonDomain ?? "unknown")</div>
             </div>
 
             @if (!string.IsNullOrEmpty(_message))
@@ -80,13 +90,35 @@
     private bool _isProcessing;
     private bool _isCheckingSlug;
     private bool _slugAvailable;
+    private bool _registrationOpen = true;
+    private bool _invalidInvitation;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            // Get domain from HTTP context
+            _registrationOpen = Configuration.GetValue<bool>("RegistrationOpen", true);
+            if (!_registrationOpen) return;
+
+            // Validate invitation code if one is configured
+            var expectedCode = Configuration.GetValue<string>("InvitationCode") ?? "";
+            if (!string.IsNullOrEmpty(expectedCode))
+            {
+                // Use NavigationManager.Uri instead of HttpContext.Request.Query
+                // because HttpContext is null during interactive (SignalR) rendering
+                var uri = new Uri(NavigationManager.Uri);
+                var queryParams = QueryHelpers.ParseQuery(uri.Query);
+                var providedCode = queryParams.ContainsKey("code") ? queryParams["code"].ToString() : "";
+                if (!providedCode.Equals(expectedCode, StringComparison.OrdinalIgnoreCase))
+                {
+                    _invalidInvitation = true;
+                    return;
+                }
+            }
+
             var httpContext = HttpContextAccessor.HttpContext;
+
+            // Get domain from HTTP context
             if (httpContext == null)
             {
                 _message = "Unable to determine your domain";

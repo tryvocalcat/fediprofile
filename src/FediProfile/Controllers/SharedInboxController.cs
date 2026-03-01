@@ -96,6 +96,8 @@ public class SharedInboxController : ControllerBase
             }
             else if (inboxMsg.IsCreate())
             {
+                Console.WriteLine($"Raw message object: {message.Value.GetRawText()}");
+                
                 // Fan-out: look up which local users follow this actor
                 var mainDb = _factory.GetInstance(domain);
                 var localFollowers = await mainDb.GetFollowersOfActorAsync(inboxMsg.Actor ?? "");
@@ -114,7 +116,7 @@ public class SharedInboxController : ControllerBase
                     {
                         var userDb = _factory.GetInstance(domain, userSlug);
                         var actorId = $"{scheme}://{fullDomain}/{userSlug}";
-                        await _announceService.HandleCreateActivityAsync(inboxMsg, userDb, actorId);
+                        await _announceService.SendAnnounceAsync(inboxMsg, userDb, actorId);
                     }
                     catch (Exception ex)
                     {

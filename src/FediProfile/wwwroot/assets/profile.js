@@ -14,6 +14,9 @@ async function loadProfile() {
     
     const actor = await response.json();
 
+    // Apply theme from _fediprofile extension
+    applyTheme(actor._fediprofile?.theme);
+
     // Populate name and bio
     const nameEl = document.getElementById('profile-name');
     const bioEl = document.getElementById('profile-bio');
@@ -55,6 +58,7 @@ function renderLinks(attachments) {
 
   // Group by category
   attachments.forEach(link => {
+    if (link == null || typeof link !== 'object') return;
     const cat = link.category || '';
     if (!categories[cat]) {
       categories[cat] = [];
@@ -62,19 +66,22 @@ function renderLinks(attachments) {
     categories[cat].push(link);
   });
 
-  // Render by category — uncategorized first, without a heading
+  // Render by category — uncategorized first, then social, then rest alphanumerically
   const sortedEntries = Object.entries(categories).sort(([a], [b]) => {
     if (a === '') return -1;
     if (b === '') return 1;
-    return 0;
+    if (a.toLowerCase() === 'social' && b.toLowerCase() !== 'social') return -1;
+    if (b.toLowerCase() === 'social' && a.toLowerCase() !== 'social') return 1;
+    return a.localeCompare(b, undefined, { numeric: true });
   });
+
   sortedEntries.forEach(([cat, catLinks]) => {
     html += cat ? `<div class="category"><h2>${escapeHtml(cat)}</h2>` : '<div class="category">';
     catLinks.forEach(link => {
       const url = link.href || '#';
       const iconUrl = link.icon?.url;
       html += `
-        <a href="${escapeHtml(url)}" class="link-card" data-type="${escapeHtml(link.type || 'link')}">
+        <a href="${escapeHtml(url)}" class="link-card" rel="me" data-type="${escapeHtml(link.type || 'link')}">
           ${iconUrl ? `<img src="${escapeHtml(iconUrl)}" alt="" class="link-icon" />` : ''}
           <div class="link-content">
             <strong>${escapeHtml(link.name)}</strong>
@@ -95,6 +102,16 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Apply theme CSS overlay from the actor's _fediprofile.theme setting
+function applyTheme(themeName) {
+  if (!themeName || themeName === 'theme.css') return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/assets/' + themeName;
+  link.id = 'fediprofile-theme-override';
+  document.head.appendChild(link);
 }
 
 // Populate the fediverse handle

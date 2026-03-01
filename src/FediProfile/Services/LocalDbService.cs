@@ -1,5 +1,6 @@
 using System.Data.SQLite;
 using Microsoft.Extensions.Logging;
+using FediProfile.Models;
 
 namespace FediProfile.Services;
 
@@ -99,7 +100,6 @@ public class LocalDbService
 
     public SQLiteConnection GetConnection()
     {
-        Console.WriteLine(_connectionString);
         return new SQLiteConnection(_connectionString);
     }
 
@@ -202,23 +202,27 @@ public class LocalDbService
     }
 
     // Settings management methods
-    public async Task<dynamic?> GetSettingsAsync()
+    public async Task<UserSettings?> GetSettingsAsync()
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM Settings WHERE Id = 1";
+        command.CommandText = "SELECT Id, ActorUsername, ActorBio, ActorAvatarUrl, UiTheme, CreatedUtc, UpdatedUtc FROM Settings WHERE Id = 1";
 
         using var reader = await command.ExecuteReaderAsync();
         if (await reader.ReadAsync())
         {
-            var settings = new Dictionary<string, object>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            return new UserSettings
             {
-                settings[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-            return settings;
+                Id = reader.GetInt32(0),
+                ActorUsername = reader.GetString(1),
+                ActorBio = reader.IsDBNull(2) ? null : reader.GetString(2),
+                ActorAvatarUrl = reader.IsDBNull(3) ? null : reader.GetString(3),
+                UiTheme = reader.GetString(4),
+                CreatedUtc = reader.GetString(5),
+                UpdatedUtc = reader.GetString(6)
+            };
         }
 
         return null;
@@ -227,57 +231,25 @@ public class LocalDbService
     public async Task<string> GetActorUsernameAsync()
     {
         var settings = await GetSettingsAsync();
-        if (settings != null)
-        {
-            var settingsDict = (Dictionary<string, object>)settings;
-            if (settingsDict.TryGetValue("ActorUsername", out var username))
-            {
-                return username?.ToString() ?? "profile";
-            }
-        }
-        return "profile";
+        return settings?.ActorUsername ?? "profile";
     }
 
     public async Task<string> GetActorBioAsync()
     {
         var settings = await GetSettingsAsync();
-        if (settings != null)
-        {
-            var settingsDict = (Dictionary<string, object>)settings;
-            if (settingsDict.TryGetValue("ActorBio", out var bio))
-            {
-                return bio?.ToString() ?? "A FediProfile instance";
-            }
-        }
-        return "A FediProfile instance";
+        return settings?.ActorBio ?? "A FediProfile instance";
     }
 
     public async Task<string> GetActorAvatarUrlAsync()
     {
         var settings = await GetSettingsAsync();
-        if (settings != null)
-        {
-            var settingsDict = (Dictionary<string, object>)settings;
-            if (settingsDict.TryGetValue("ActorAvatarUrl", out var url))
-            {
-                return url?.ToString() ?? "/assets/avatar.png";
-            }
-        }
-        return "/assets/avatar.png";
+        return settings?.ActorAvatarUrl ?? "/assets/avatar.png";
     }
 
     public async Task<string> GetUiThemeAsync()
     {
         var settings = await GetSettingsAsync();
-        if (settings != null)
-        {
-            var settingsDict = (Dictionary<string, object>)settings;
-            if (settingsDict.TryGetValue("UiTheme", out var theme))
-            {
-                return theme?.ToString() ?? "theme-classic.css";
-            }
-        }
-        return "theme-classic.css";
+        return Themes.Resolve(settings?.UiTheme);
     }
 
     // ===== STATIC UTILITIES =====

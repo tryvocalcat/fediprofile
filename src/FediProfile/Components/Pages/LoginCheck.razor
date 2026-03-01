@@ -8,6 +8,7 @@
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject DomainScopedDb DomainDb
+@inject IConfiguration Configuration
 
 <section class="login-shell">
     <div class="login-card">
@@ -56,8 +57,16 @@
             }
             else
             {
-                // New user — redirect to registration to choose username
-                NavigationManager.NavigateTo("/register/choose-username", true);
+                // New user — check if invitation code is required
+                var invitationCode = Configuration.GetValue<string>("InvitationCode") ?? "";
+                if (!string.IsNullOrEmpty(invitationCode))
+                {
+                    NavigationManager.NavigateTo("/register/invitation", true);
+                }
+                else
+                {
+                    NavigationManager.NavigateTo("/register/choose-username", true);
+                }
             }
         }
         catch (Exception ex)

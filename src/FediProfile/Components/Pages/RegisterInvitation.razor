@@ -1,0 +1,75 @@
+@page "/register/invitation"
+@using Microsoft.AspNetCore.Components
+@layout FediProfile.Components.Layouts.MinimalLayout
+@rendermode InteractiveServer
+
+@inject NavigationManager NavigationManager
+@inject IConfiguration Configuration
+
+<section class="login-shell">
+    <div class="login-card">
+        <h1 class="admin-title">Invitation Required</h1>
+        <p class="admin-subtitle">Enter your 6-character invitation code to continue registration.</p>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-error">@_errorMessage</div>
+        }
+
+        <div class="form-group" style="margin: 1.5rem 0;">
+            <label class="field-label" for="invitationCode">Invitation Code</label>
+            <input id="invitationCode"
+                   class="input"
+                   style="font-size: 1.8rem; text-align: center; letter-spacing: 0.5rem; text-transform: uppercase; padding: 0.75rem;"
+                   maxlength="6"
+                   placeholder="------"
+                   @bind="_code"
+                   @bind:after="OnCodeChanged"
+                   autocomplete="off"
+                   spellcheck="false" />
+        </div>
+
+        <button class="button button-primary" @onclick="SubmitCode" disabled="@(string.IsNullOrWhiteSpace(_code) || _code.Length < 6)">
+            Continue
+        </button>
+
+        <p class="muted small">Don't have a code? Ask the site administrator for an invitation.</p>
+    </div>
+</section>
+
+@code {
+    private string? _code;
+    private string? _errorMessage;
+
+    private void OnCodeChanged()
+    {
+        _errorMessage = null;
+    }
+
+    private void SubmitCode()
+    {
+        if (string.IsNullOrWhiteSpace(_code))
+        {
+            _errorMessage = "Please enter your invitation code.";
+            return;
+        }
+
+        var expectedCode = Configuration.GetValue<string>("InvitationCode") ?? "";
+
+        if (string.IsNullOrEmpty(expectedCode))
+        {
+            // No code required, just redirect
+            NavigationManager.NavigateTo("/register/choose-username", true);
+            return;
+        }
+
+        if (_code.Trim().Equals(expectedCode, StringComparison.OrdinalIgnoreCase))
+        {
+            NavigationManager.NavigateTo($"/register/choose-username?code={Uri.EscapeDataString(_code.Trim())}", true);
+        }
+        else
+        {
+            _errorMessage = "Invalid invitation code. Please try again.";
+        }
+    }
+}

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.Options;
 using FediProfile.Core;
 using FediProfile.Models;
 using FediProfile.Services;
+using Microsoft.Extensions.Caching.Memory;
 using FediProfile.Components;
 using FediProfile.Identity;
 
@@ -26,6 +28,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddServerSideBlazor();
 builder.Services.AddControllers();
 builder.Services.AddAuthorization();
+builder.Services.AddMemoryCache();
 
 // Register multi-tenant, multi-user database factory
 var localDbFactory = new LocalDbFactory();
@@ -49,6 +52,7 @@ builder.Services.AddScoped<UserScopedDb>();
 builder.Services.AddSingleton<ActorService>();
 builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<AnnounceService>();
+builder.Services.AddSingleton<ProfileHtmlService>();
 
 // Add Mastodon registration service
 builder.Services.AddScoped<MastodonRegistrationService>(provider =>
@@ -149,7 +153,7 @@ app.MapGet("/{userSlug}", async (HttpRequest request, string userSlug, LocalDbFa
         domain = $"{domain}:{request.Host.Port}";
     }
 
-    Console.WriteLine($"Received request for /{userSlug} with Accept: {accept}");
+    Console.WriteLine($"Received request for /{userSlug} with Accept: {accept} from {request.HttpContext.Connection.RemoteIpAddress} agent {request.Headers["User-Agent"]}");
 
     // Check if user exists in main database
     var mainDb = factory.GetInstance(domain);
@@ -159,32 +163,45 @@ app.MapGet("/{userSlug}", async (HttpRequest request, string userSlug, LocalDbFa
     {
         return NotFoundPage(env);
     }
-
-    // Check if user database file exists
-    // Note: User databases are created during user registration with InitializeNewUserAsync
-    var checkDb = factory.GetInstance(domain, userSlug, autoCreate: false);
-    if (!File.Exists(checkDb.DbPath))
-    {
-        return NotFoundPage(env);
-    }
-
-    // Get the user-specific database
-    var userDb = factory.GetInstance(domain, userSlug);
-
+   
     if (ActivityPubHelper.IsActivityPubRequest(accept))
     {
-        var actor = await actorService.BuildActorAsync(userDb, request);
-        var jsonString = JsonSerializer.Serialize(actor, new System.Text.Json.JsonSerializerOptions
-        {
-            WriteIndented = false,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        });
+        var cache = request.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
+        var cacheKey = $"actorjson:{domain}/{userSlug}";
 
-        Console.WriteLine($"Returning actor JSON: {jsonString}");
-        return Results.Content(jsonString, "application/activity+json");
+        if (!cache.TryGetValue(cacheKey, out string? jsonString) || true)
+        {
+             // Check if user database file exists
+            // Note: User databases are created during user registration with InitializeNewUserAsync
+            var userDb = factory.GetInstance(domain, userSlug, autoCreate: false);
+            if (!File.Exists(userDb.DbPath))
+            {
+                return NotFoundPage(env);
+            }
+
+            var actor = await actorService.BuildActorAsync(userDb, request);
+            jsonString = JsonSerializer.Serialize(actor, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = false,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            });
+
+            cache.Set(cacheKey, jsonString, TimeSpan.FromHours(1));
+            Console.WriteLine($"Built and cached actor JSON for {cacheKey}");
+        }
+        else
+        {
+            Console.WriteLine($"Serving cached actor JSON for {cacheKey}");
+        }
+
+        return Results.Content(jsonString!, "application/activity+json");
     }
 
-    var filePath = Path.Combine(env.WebRootPath, "profile.html");
+    // Serve pre-generated static profile if available (includes rel="me" links,
+    // OpenGraph meta, theme). Falls back to generic profile.html for new users
+    // whose profile hasn't been saved yet.
+    var staticPath = Path.Combine(env.WebRootPath, "profiles", $"{userSlug}.html");
+    var filePath = File.Exists(staticPath) ? staticPath : Path.Combine(env.WebRootPath, "profile.html");
     return Results.File(filePath, "text/html");
 });
 
@@ -243,7 +260,7 @@ app.MapGet("/.well-known/webfinger", async (HttpRequest request, LocalDbFactory 
         }
     };
 
-    var result = Results.Json(new { subject, aliases, links });
+    var result = Results.Json(new { subject, aliases, links }, contentType: "application/jrd+json");
     return result;
 });
 
@@ -266,20 +283,6 @@ app.MapGet("/.well-known/nodeinfo", () =>
 // ===== MAIN DOMAIN ADMIN ENDPOINTS =====
 // These must be registered BEFORE /{userSlug} routes to avoid routing conflicts
 
-
-// User-scoped theme endpoint: /{user}/theme.css
-app.MapGet("/{userSlug}/theme.dep.css", async (UserScopedDb db, IWebHostEnvironment env) =>
-{
-    var themeName = await db.GetUiThemeAsync();
-    var themePath = Path.Combine(env.WebRootPath, themeName);
-
-    if (!File.Exists(themePath))
-    {
-        themePath = Path.Combine(env.WebRootPath, "theme-classic.css");
-    }
-
-    return Results.File(themePath, "text/css");
-});
 
 // User-scoped links endpoint: /{user}/links
 app.MapGet("/{userSlug}/links", async (UserScopedDb db) =>
@@ -526,7 +529,7 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
         // InitializeNewUserAsync creates:
         // - User entry in main database (domain.db)
         // - User-specific database (domain_root.db) with all default tables
-        var (adminUserId, slug) = await mainDb.InitializeNewUserAsync(domain, adminUserSlug, adminDisplayName, adminMastodonUser, adminMastodonDomain);
+        var (adminUserId, slug) = await mainDb.InitializeNewUserAsync(domain, adminUserSlug, adminDisplayName, adminMastodonUser, adminMastodonDomain, false);
         
         logger.LogInformation("Initialized admin user '{AdminSlug}' (ID: {AdminUserId}) on domain {Domain} authenticated as {MastodonUser}@{MastodonDomain}",
             slug, adminUserId, domain, adminMastodonUser ?? "unconfigured", adminMastodonDomain ?? "unconfigured");
@@ -534,6 +537,29 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
     catch (Exception ex)
     {
         logger.LogError(ex, "Failed to initialize admin user '{AdminUserSlug}' on domain {Domain}", adminUserSlug, domain);
+    }
+
+    // 3. Apply pending migrations to ALL existing user databases for this domain
+    try
+    {
+        var allUsers = await mainDb.GetAllUsersAsync();
+        foreach (var (userId, userSlug, displayName, createdUtc) in allUsers)
+        {
+            try
+            {
+                // Instantiating UserScopedDb triggers EnsureCreated() → ApplyPendingMigrations()
+                var userDb = factory.GetInstance(domain, userSlug);
+                logger.LogInformation("Applied pending migrations to user DB: {Domain}_{UserSlug}", domain, userSlug);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to apply migrations for user '{UserSlug}' on domain {Domain}", userSlug, domain);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to enumerate users for migration on domain {Domain}", domain);
     }
 }
 

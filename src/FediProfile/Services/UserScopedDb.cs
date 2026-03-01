@@ -1,6 +1,7 @@
 namespace FediProfile.Services;
 
 using System.Data.SQLite;
+using FediProfile.Models;
 
 /// <summary>
 /// UserScopedDb provides scoped database access for user-level operations.
@@ -199,10 +200,12 @@ public class UserScopedDb : LocalDbService
                     Url TEXT NOT NULL,
                     Description TEXT,
                     AutoBoost INTEGER NOT NULL DEFAULT 0,
+                    IsActivityPub INTEGER NOT NULL DEFAULT 0,
                     Category TEXT,
                     Type TEXT,
                     Following INTEGER NOT NULL DEFAULT 0,
                     Hidden INTEGER NOT NULL DEFAULT 0,
+                    ActorAPUri TEXT,
                     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             ";
@@ -286,7 +289,7 @@ public class UserScopedDb : LocalDbService
                     ActorUsername TEXT NOT NULL DEFAULT 'profile',
                     ActorBio TEXT,
                     ActorAvatarUrl TEXT,
-                    UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
+                    UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
                     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
@@ -353,6 +356,20 @@ public class UserScopedDb : LocalDbService
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
+            if (!columns.Contains("IsActivityPub"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Links ADD COLUMN IsActivityPub INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!columns.Contains("ActorAPUri"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Links ADD COLUMN ActorAPUri TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
             connection.Close();
         }
         catch (Exception ex)
@@ -364,23 +381,26 @@ public class UserScopedDb : LocalDbService
     // ===== LINKS MANAGEMENT =====
 
     public async Task<int> UpsertLinkAsync(string name, string url, string? icon = null, string? description = null, 
-        bool autoBoost = false, string? category = null, string? type = null, bool hidden = false)
+        bool autoBoost = false, string? category = null, string? type = null, bool hidden = false, bool isActivityPub = false,
+        string? actorAPUri = null)
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            INSERT INTO Links (Name, Url, Icon, Description, AutoBoost, Category, Type, Hidden)
-            VALUES (@Name, @Url, @Icon, @Description, @AutoBoost, @Category, @Type, @Hidden)
+            INSERT INTO Links (Name, Url, Icon, Description, AutoBoost, IsActivityPub, Category, Type, Hidden, ActorAPUri)
+            VALUES (@Name, @Url, @Icon, @Description, @AutoBoost, @IsActivityPub, @Category, @Type, @Hidden, @ActorAPUri)
             ON CONFLICT(Url) DO UPDATE SET 
                 Name = @Name,
                 Icon = @Icon,
                 Description = @Description,
                 AutoBoost = @AutoBoost,
+                IsActivityPub = @IsActivityPub,
                 Category = @Category,
                 Type = @Type,
-                Hidden = @Hidden;
+                Hidden = @Hidden,
+                ActorAPUri = @ActorAPUri;
             SELECT last_insert_rowid();
         ";
 
@@ -389,20 +409,22 @@ public class UserScopedDb : LocalDbService
         command.Parameters.AddWithValue("@Icon", icon ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@AutoBoost", autoBoost ? 1 : 0);
+        command.Parameters.AddWithValue("@IsActivityPub", isActivityPub ? 1 : 0);
         command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Type", type ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Hidden", hidden ? 1 : 0);
+        command.Parameters.AddWithValue("@ActorAPUri", actorAPUri ?? (object)DBNull.Value);
 
         // log console.writeline the actual SQL
-        Console.WriteLine($"Executing SQL:\n{command.CommandText}\nWith parameters: Name={name}, Url={url}, Icon={icon}, Description={description}, AutoBoost={autoBoost}, Category={category}, Type={type}, Hidden={hidden}");
+        Console.WriteLine($"Executing SQL:\n{command.CommandText}\nWith parameters: Name={name}, Url={url}, Icon={icon}, Description={description}, AutoBoost={autoBoost}, IsActivityPub={isActivityPub}, Category={category}, Type={type}, Hidden={hidden}");
 
         var result = await command.ExecuteScalarAsync();
         return result != null ? Convert.ToInt32(result) : 0;
     }
 
-    public async Task<List<dynamic>> GetLinksAsync(bool? hidden = null)
+    public async Task<List<Link>> GetLinksAsync(bool? hidden = null)
     {
-        var links = new List<dynamic>();
+        var links = new List<Link>();
 
         using var connection = GetConnection();
         await connection.OpenAsync();
@@ -410,26 +432,72 @@ public class UserScopedDb : LocalDbService
         using var command = connection.CreateCommand();
         if (hidden.HasValue)
         {
-            command.CommandText = "SELECT * FROM Links WHERE Hidden = @Hidden ORDER BY CreatedUtc DESC";
+            command.CommandText = "SELECT Id, Name, Icon, Url, Description, AutoBoost, IsActivityPub, Category, Type, Following, Hidden, CreatedUtc, ActorAPUri FROM Links WHERE Hidden = @Hidden ORDER BY Category DESC, CreatedUtc DESC";
             command.Parameters.AddWithValue("@Hidden", hidden.Value ? 1 : 0);
         }
         else
         {
-            command.CommandText = "SELECT * FROM Links ORDER BY CreatedUtc DESC";
+            command.CommandText = "SELECT Id, Name, Icon, Url, Description, AutoBoost, IsActivityPub, Category, Type, Following, Hidden, CreatedUtc, ActorAPUri FROM Links ORDER BY Category DESC, CreatedUtc DESC";
         }
 
         using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            var link = new Dictionary<string, object>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            links.Add(new Link
             {
-                link[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-            links.Add(link);
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Icon = reader.IsDBNull(2) ? null : reader.GetString(2),
+                Url = reader.GetString(3),
+                Description = reader.IsDBNull(4) ? null : reader.GetString(4),
+                AutoBoost = reader.GetInt64(5) != 0,
+                IsActivityPub = reader.GetInt64(6) != 0,
+                Category = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Type = reader.IsDBNull(8) ? null : reader.GetString(8),
+                Following = reader.GetInt64(9) != 0,
+                Hidden = reader.GetInt64(10) != 0,
+                CreatedUtc = reader.GetString(11),
+                ActorAPUri = reader.IsDBNull(12) ? null : reader.GetString(12)
+            });
         }
 
         return links;
+    }
+
+    public async Task UpdateLinkAsync(int id, string name, string url, string? icon = null, string? description = null,
+        bool autoBoost = false, string? category = null, bool hidden = false, bool isActivityPub = false,
+        string? actorAPUri = null)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Links SET
+                Name = @Name,
+                Url = @Url,
+                Icon = @Icon,
+                Description = @Description,
+                AutoBoost = @AutoBoost,
+                IsActivityPub = @IsActivityPub,
+                Category = @Category,
+                Hidden = @Hidden,
+                ActorAPUri = @ActorAPUri
+            WHERE Id = @Id;
+        ";
+
+        command.Parameters.AddWithValue("@Id", id);
+        command.Parameters.AddWithValue("@Name", name);
+        command.Parameters.AddWithValue("@Url", url);
+        command.Parameters.AddWithValue("@Icon", icon ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@AutoBoost", autoBoost ? 1 : 0);
+        command.Parameters.AddWithValue("@IsActivityPub", isActivityPub ? 1 : 0);
+        command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@Hidden", hidden ? 1 : 0);
+        command.Parameters.AddWithValue("@ActorAPUri", actorAPUri ?? (object)DBNull.Value);
+
+        await command.ExecuteNonQueryAsync();
     }
 
     public async Task DeleteLinkAsync(int id)
@@ -444,25 +512,35 @@ public class UserScopedDb : LocalDbService
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<List<dynamic>> GetAutoBoostLinksAsync()
+    public async Task<List<Link>> GetAutoBoostLinksAsync()
     {
-        var links = new List<dynamic>();
+        var links = new List<Link>();
 
         using var connection = GetConnection();
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM Links WHERE AutoBoost = 1 ORDER BY CreatedUtc DESC";
+        command.CommandText = "SELECT Id, Name, Icon, Url, Description, AutoBoost, IsActivityPub, Category, Type, Following, Hidden, CreatedUtc, ActorAPUri FROM Links WHERE AutoBoost = 1 ORDER BY CreatedUtc DESC";
 
         using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            var link = new Dictionary<string, object>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            links.Add(new Link
             {
-                link[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-            links.Add(link);
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Icon = reader.IsDBNull(2) ? null : reader.GetString(2),
+                Url = reader.GetString(3),
+                Description = reader.IsDBNull(4) ? null : reader.GetString(4),
+                AutoBoost = reader.GetInt64(5) != 0,
+                IsActivityPub = reader.GetInt64(6) != 0,
+                Category = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Type = reader.IsDBNull(8) ? null : reader.GetString(8),
+                Following = reader.GetInt64(9) != 0,
+                Hidden = reader.GetInt64(10) != 0,
+                CreatedUtc = reader.GetString(11),
+                ActorAPUri = reader.IsDBNull(12) ? null : reader.GetString(12)
+            });
         }
 
         return links;
@@ -555,9 +633,9 @@ public class UserScopedDb : LocalDbService
         return result != null ? Convert.ToInt32(result) : 0;
     }
 
-    public async Task<List<dynamic>> GetBadgeIssuersAsync(bool? following = null)
+    public async Task<List<BadgeIssuer>> GetBadgeIssuersAsync(bool? following = null)
     {
-        var issuers = new List<dynamic>();
+        var issuers = new List<BadgeIssuer>();
 
         using var connection = GetConnection();
         await connection.OpenAsync();
@@ -565,23 +643,27 @@ public class UserScopedDb : LocalDbService
         using var command = connection.CreateCommand();
         if (following.HasValue)
         {
-            command.CommandText = "SELECT * FROM BadgeIssuers WHERE Following = @Following ORDER BY CreatedUtc DESC";
+            command.CommandText = "SELECT Id, Name, ActorUrl, Avatar, Bio, Following, CreatedUtc FROM BadgeIssuers WHERE Following = @Following ORDER BY CreatedUtc DESC";
             command.Parameters.AddWithValue("@Following", following.Value ? 1 : 0);
         }
         else
         {
-            command.CommandText = "SELECT * FROM BadgeIssuers ORDER BY CreatedUtc DESC";
+            command.CommandText = "SELECT Id, Name, ActorUrl, Avatar, Bio, Following, CreatedUtc FROM BadgeIssuers ORDER BY CreatedUtc DESC";
         }
 
         using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            var issuer = new Dictionary<string, object>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            issuers.Add(new BadgeIssuer
             {
-                issuer[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-            issuers.Add(issuer);
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                ActorUrl = reader.GetString(2),
+                Avatar = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Bio = reader.IsDBNull(4) ? null : reader.GetString(4),
+                Following = reader.GetInt64(5) != 0,
+                CreatedUtc = reader.GetString(6)
+            });
         }
 
         return issuers;
@@ -625,25 +707,31 @@ public class UserScopedDb : LocalDbService
         return result != null ? Convert.ToInt32(result) : 0;
     }
 
-    public async Task<List<dynamic>> GetReceivedBadgesAsync()
+    public async Task<List<ReceivedBadge>> GetReceivedBadgesAsync()
     {
-        var badges = new List<dynamic>();
+        var badges = new List<ReceivedBadge>();
 
         using var connection = GetConnection();
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM ReceivedBadges ORDER BY ReceivedUtc DESC";
+        command.CommandText = "SELECT Id, NoteId, IssuerId, Title, Image, Description, IssuedOn, AcceptedOn, ReceivedUtc FROM ReceivedBadges ORDER BY ReceivedUtc DESC";
 
         using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            var badge = new Dictionary<string, object>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            badges.Add(new ReceivedBadge
             {
-                badge[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-            badges.Add(badge);
+                Id = reader.GetInt32(0),
+                NoteId = reader.GetString(1),
+                IssuerId = reader.GetInt32(2),
+                Title = reader.GetString(3),
+                Image = reader.IsDBNull(4) ? null : reader.GetString(4),
+                Description = reader.IsDBNull(5) ? null : reader.GetString(5),
+                IssuedOn = reader.IsDBNull(6) ? null : reader.GetString(6),
+                AcceptedOn = reader.IsDBNull(7) ? null : reader.GetString(7),
+                ReceivedUtc = reader.GetString(8)
+            });
         }
 
         return badges;
@@ -685,25 +773,29 @@ public class UserScopedDb : LocalDbService
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<List<dynamic>> GetFollowersAsync()
+    public async Task<List<Follower>> GetFollowersAsync()
     {
-        var followers = new List<dynamic>();
+        var followers = new List<Follower>();
 
         using var connection = GetConnection();
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM Followers ORDER BY CreatedUtc DESC";
+        command.CommandText = "SELECT FollowerUri, Domain, AvatarUri, DisplayName, Inbox, Status, CreatedUtc FROM Followers ORDER BY CreatedUtc DESC";
 
         using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            var follower = new Dictionary<string, object>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            followers.Add(new Follower
             {
-                follower[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-            followers.Add(follower);
+                FollowerUri = reader.GetString(0),
+                Domain = reader.GetString(1),
+                AvatarUri = reader.IsDBNull(2) ? null : reader.GetString(2),
+                DisplayName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Inbox = reader.GetString(4),
+                Status = reader.GetInt32(5),
+                CreatedUtc = reader.GetString(6)
+            });
         }
 
         return followers;
@@ -739,22 +831,35 @@ public class UserScopedDb : LocalDbService
         using var connection = GetConnection();
         await connection.OpenAsync();
 
+        // Build the SET clauses dynamically — only update fields the caller explicitly provided
+        var setClauses = new List<string>();
+        if (actorUsername != null) setClauses.Add("ActorUsername = @ActorUsername");
+        if (actorBio != null) setClauses.Add("ActorBio = @ActorBio");
+        if (actorAvatarUrl != null) setClauses.Add("ActorAvatarUrl = @ActorAvatarUrl");
+        if (uiTheme != null) setClauses.Add("UiTheme = @UiTheme");
+        setClauses.Add("UpdatedUtc = CURRENT_TIMESTAMP");
+
+        var updateSet = string.Join(",\n                ", setClauses);
+
         using var command = connection.CreateCommand();
-        command.CommandText = @"
+        command.CommandText = $@"
             INSERT INTO Settings (Id, ActorUsername, ActorBio, ActorAvatarUrl, UiTheme, CreatedUtc, UpdatedUtc)
-            VALUES (1, @ActorUsername, @ActorBio, @ActorAvatarUrl, @UiTheme, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (1, @InsertActorUsername, @InsertActorBio, @InsertActorAvatarUrl, @InsertUiTheme, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(Id) DO UPDATE SET
-                ActorUsername = COALESCE(@ActorUsername, ActorUsername),
-                ActorBio = COALESCE(@ActorBio, ActorBio),
-                ActorAvatarUrl = COALESCE(@ActorAvatarUrl, ActorAvatarUrl),
-                UiTheme = COALESCE(@UiTheme, UiTheme),
-                UpdatedUtc = CURRENT_TIMESTAMP;
+                {updateSet};
         ";
 
-        command.Parameters.AddWithValue("@ActorUsername", (object?)actorUsername ?? DBNull.Value);
-        command.Parameters.AddWithValue("@ActorBio", (object?)actorBio ?? DBNull.Value);
-        command.Parameters.AddWithValue("@ActorAvatarUrl", (object?)actorAvatarUrl ?? DBNull.Value);
-        command.Parameters.AddWithValue("@UiTheme", (object?)uiTheme ?? DBNull.Value);
+        // INSERT defaults: use provided value or fall back to sensible defaults
+        command.Parameters.AddWithValue("@InsertActorUsername", actorUsername ?? "username");
+        command.Parameters.AddWithValue("@InsertActorBio", (object?)actorBio ?? DBNull.Value);
+        command.Parameters.AddWithValue("@InsertActorAvatarUrl", (object?)actorAvatarUrl ?? DBNull.Value);
+        command.Parameters.AddWithValue("@InsertUiTheme", uiTheme ?? "theme-classic.css");
+
+        // UPDATE params: only added when the caller provided a non-null value
+        if (actorUsername != null) command.Parameters.AddWithValue("@ActorUsername", actorUsername);
+        if (actorBio != null) command.Parameters.AddWithValue("@ActorBio", actorBio);
+        if (actorAvatarUrl != null) command.Parameters.AddWithValue("@ActorAvatarUrl", actorAvatarUrl);
+        if (uiTheme != null) command.Parameters.AddWithValue("@UiTheme", uiTheme);
 
         await command.ExecuteNonQueryAsync();
     }

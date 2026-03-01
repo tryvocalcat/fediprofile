@@ -1,6 +1,9 @@
 namespace FediProfile.Services;
 
 using System.Data.SQLite;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using FediProfile.Models;
 
 /// <summary>
 /// DomainScopedDb provides scoped database access for domain-level operations.
@@ -123,7 +126,7 @@ public class DomainScopedDb : LocalDbService
                 ActorUsername TEXT NOT NULL DEFAULT 'profile',
                 ActorBio TEXT,
                 ActorAvatarUrl TEXT,
-                UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
+                UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
                 AdminMastodonUser TEXT,
                 AdminMastodonDomain TEXT,
                 CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -379,6 +382,42 @@ public class DomainScopedDb : LocalDbService
     }
 
     /// <summary>
+    /// Hard-deletes a user by slug: removes the user row, their following entries,
+    /// and deletes the user's database file from disk.
+    /// </summary>
+    public async Task<bool> HardDeleteUserAsync(string slug)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        // Delete following entries for this user
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM Following WHERE UserSlug = @Slug;";
+            cmd.Parameters.AddWithValue("@Slug", slug);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Hard-delete the user row
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM Users WHERE Slug = @Slug;";
+            cmd.Parameters.AddWithValue("@Slug", slug);
+            var affected = await cmd.ExecuteNonQueryAsync();
+            if (affected == 0) return false;
+        }
+
+        // Delete the user's database file
+        var userDbPath = LocalDbService.GetDbPath($"{_domain}_{slug}.db");
+        if (File.Exists(userDbPath))
+        {
+            File.Delete(userDbPath);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Ensures the admin user exists in the main database.
     /// </summary>
     public async Task EnsureAdminUserExistsAsync(string? adminMastodonUser = null, string? adminMastodonDomain = null)
@@ -409,7 +448,7 @@ public class DomainScopedDb : LocalDbService
     /// 2. Creating a user-specific database file
     /// 3. Initializing all tables in the user database
     /// </summary>
-    public async Task<(int UserId, string UserSlug)> InitializeNewUserAsync(string domain, string userSlug, string? displayName = null, string? mastodonUser = null, string? mastodonServer = null)
+    public async Task<(int UserId, string UserSlug)> InitializeNewUserAsync(string domain, string userSlug, string? displayName = null, string? mastodonUser = null, string? mastodonServer = null, bool autoPopulate = true)
     {
         // Normalize inputs
         domain = domain.Trim().ToLowerInvariant().TrimEnd('/').Split(':')[0];
@@ -457,6 +496,212 @@ public class DomainScopedDb : LocalDbService
             var keyPair = await CryptoService.GenerateKeyPairAsync();
             await userDb.SetActorKeysAsync(keyPair.PublicKeyPem, keyPair.PrivateKeyPem);
             Console.WriteLine($"[Information] Generated actor keys for user '{userSlug}'");
+        }
+
+        if (!autoPopulate)
+        {
+            return (userId, slug);
+        }
+
+        // 5. Fetch ActivityPub profile to prepopulate avatar & links
+        if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonServer))
+        {
+            var mastodonUrl = $"https://{mastodonServer}/@{mastodonUser}";
+
+            // Always add the default Mastodon link (we know it's a fediverse account)
+            await userDb.UpsertLinkAsync(
+                name: "Mastodon",
+                url: mastodonUrl,
+                autoBoost: false,
+                hidden: false,
+                isActivityPub: true,
+                icon: "/assets/icons/mastodon.svg"
+            );
+            Console.WriteLine($"[Information] Added default Mastodon link for user '{userSlug}': {mastodonUrl}");
+
+            // Try to fetch the ActivityPub actor to get avatar and attachment links
+            try
+            {
+                var (pubKey, privKey) = await userDb.GetActorKeysAsync();
+                if (!string.IsNullOrEmpty(privKey))
+                {
+                    var actorId = $"https://{domain}/{userSlug}";
+                    var keyId = $"{actorId}#main-key";
+                    var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId);
+
+                    Console.WriteLine(mastodonUrl);
+                    var jsonContent = await actorHelper.SendGetSignedRequest(new Uri(mastodonUrl));
+                    if (!string.IsNullOrWhiteSpace(jsonContent))
+                    {
+                        
+                        using var doc = JsonDocument.Parse(jsonContent);
+                        var root = doc.RootElement;
+
+                        // --- Parse avatar from "icon" ---
+                        try
+                        {
+                            string? avatarUrl = null;
+                            if (root.TryGetProperty("icon", out var iconEl))
+                            {
+                                // icon can be an object with "url" or a string or an array
+                                if (iconEl.ValueKind == JsonValueKind.Object)
+                                {
+                                    if (iconEl.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
+                                        avatarUrl = urlEl.GetString();
+                                }
+                                else if (iconEl.ValueKind == JsonValueKind.String)
+                                {
+                                    avatarUrl = iconEl.GetString();
+                                }
+                                else if (iconEl.ValueKind == JsonValueKind.Array && iconEl.GetArrayLength() > 0)
+                                {
+                                    var first = iconEl[0];
+                                    if (first.ValueKind == JsonValueKind.Object && first.TryGetProperty("url", out var arrUrl) && arrUrl.ValueKind == JsonValueKind.String)
+                                        avatarUrl = arrUrl.GetString();
+                                    else if (first.ValueKind == JsonValueKind.String)
+                                        avatarUrl = first.GetString();
+                                }
+                            }
+
+                            var actorUsername = root.TryGetProperty("name", out var nameEl2) && nameEl2.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(nameEl2.GetString())
+                                    ? nameEl2.GetString()!
+                                    : root.TryGetProperty("preferredUsername", out var prefUserEl) && prefUserEl.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(prefUserEl.GetString())
+                                        ? prefUserEl.GetString()!
+                                        : userSlug;
+
+                            if (!string.IsNullOrWhiteSpace(avatarUrl))
+                            {
+                                await userDb.UpsertSettingsAsync(actorUsername: actorUsername, actorAvatarUrl: avatarUrl);
+                                Console.WriteLine($"[Information] Set avatar for user '{userSlug}': {avatarUrl}");
+                            } else {
+                                await userDb.UpsertSettingsAsync(actorUsername: actorUsername);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Warning] Failed to parse avatar from AP response for '{userSlug}': {ex}");
+                            await userDb.UpsertSettingsAsync(actorUsername: userSlug);
+                        }
+
+                        // --- Parse links from "attachment" ---
+                        try
+                        {
+                            if (root.TryGetProperty("attachment", out var attachEl))
+                            {
+                                var attachments = new List<JsonElement>();
+                                if (attachEl.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var item in attachEl.EnumerateArray())
+                                        attachments.Add(item);
+                                }
+                                else if (attachEl.ValueKind == JsonValueKind.Object)
+                                {
+                                    attachments.Add(attachEl);
+                                }
+
+                                foreach (var att in attachments)
+                                {
+                                    try
+                                    {
+                                        // Only process PropertyValue types
+                                        if (att.ValueKind != JsonValueKind.Object) continue;
+
+                                        var typeStr = "";
+                                        if (att.TryGetProperty("type", out var typeEl) && typeEl.ValueKind == JsonValueKind.String)
+                                            typeStr = typeEl.GetString() ?? "";
+
+                                        if (!typeStr.Equals("PropertyValue", StringComparison.OrdinalIgnoreCase)) continue;
+
+                                        var linkName = "";
+                                        if (att.TryGetProperty("name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String)
+                                            linkName = nameEl.GetString()?.Trim() ?? "";
+
+                                        if (string.IsNullOrWhiteSpace(linkName)) continue;
+
+                                        // The value is typically HTML, extract the href
+                                        var rawValue = "";
+                                        if (att.TryGetProperty("value", out var valEl) && valEl.ValueKind == JsonValueKind.String)
+                                            rawValue = valEl.GetString() ?? "";
+
+                                        if (string.IsNullOrWhiteSpace(rawValue)) continue;
+
+                                        // Try to extract URL from href attribute in HTML
+                                        string? linkUrl = null;
+                                        var hrefMatch = Regex.Match(rawValue, @"href=""([^""]+)""", RegexOptions.IgnoreCase);
+                                        if (hrefMatch.Success)
+                                        {
+                                            linkUrl = hrefMatch.Groups[1].Value;
+                                        }
+                                        else
+                                        {
+                                            // Fallback: maybe value is a plain URL
+                                            var trimmed = rawValue.Trim();
+                                            if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                                trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                linkUrl = trimmed;
+                                            }
+                                        }
+
+                                        if (!string.IsNullOrWhiteSpace(linkUrl))
+                                        {
+                                            // Probe the link to check if it's a fediverse account
+                                            bool isAP = false;
+
+                                            Console.WriteLine($"Testing {linkUrl}");
+                                            try
+                                            {
+                                                var probeJson = await actorHelper.SendGetSignedRequest(new Uri(linkUrl));
+                                                Console.WriteLine($"Probe response for {linkUrl}: {probeJson.Substring(0, Math.Min(200, probeJson.Length))}...");
+
+                                                if (!string.IsNullOrWhiteSpace(probeJson))
+                                                {
+                                                    using var probeDoc = JsonDocument.Parse(probeJson);
+                                                    var probeRoot = probeDoc.RootElement;
+                                                    // If it has an inbox, it's an ActivityPub actor
+                                                    if (probeRoot.TryGetProperty("inbox", out var inboxEl) && 
+                                                        inboxEl.ValueKind == JsonValueKind.String &&
+                                                        !string.IsNullOrWhiteSpace(inboxEl.GetString()))
+                                                    {
+                                                        isAP = true;
+                                                    }
+                                                }
+                                            }
+                                            catch (Exception e)
+                                            {
+                                                // Not an AP actor or unreachable, that's fine
+                                                Console.WriteLine($"[Information] Probing link for user '{userSlug}' is not an AP actor: {linkUrl}. Exception: {e.Message}");
+                                            }
+
+                                            await userDb.UpsertLinkAsync(
+                                                name: linkName,
+                                                url: linkUrl,
+                                                autoBoost: false,
+                                                hidden: false,
+                                                isActivityPub: isAP
+                                            );
+                                            Console.WriteLine($"[Information] Added attachment link for user '{userSlug}': {linkName} -> {linkUrl} (ActivityPub: {isAP})");
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"[Warning] Failed to parse one attachment for '{userSlug}': {ex.Message}");
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Warning] Failed to parse attachments from AP response for '{userSlug}': {ex.Message}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Don't let AP fetch failure block registration
+                Console.WriteLine($"[Warning] Failed to fetch ActivityPub profile for '{userSlug}': {ex.Message}");
+            }
         }
 
         return (userId, slug);

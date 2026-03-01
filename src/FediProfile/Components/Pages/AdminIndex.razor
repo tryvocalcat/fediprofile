@@ -1,5 +1,6 @@
 @page "/admin/"
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
 @using System.Security.Claims
 @attribute [Authorize]
 @layout FediProfile.Components.Layouts.MainLayout
@@ -13,6 +14,10 @@
 @inject UserContextAccessor UserContextAccessor
 @inject FollowService FollowService
 @inject ILogger<AdminIndex> Logger
+@inject IWebHostEnvironment WebEnv
+@inject NavigationManager Navigation
+@inject ProfileHtmlService ProfileHtml
+@inject Microsoft.Extensions.Caching.Memory.IMemoryCache MemoryCache
 
 <section class="admin-shell">
     <header class="admin-header">
@@ -126,11 +131,8 @@
     @if (_isAuthorized && !string.IsNullOrEmpty(_currentUserSlug))
     {
         <div class="admin-section">
-            <!-- Profile Settings -->
-            <article class="card">
-                <h2>Profile Settings</h2>
-                <p class="muted">Edit your profile information (applies to <strong>@_currentUserSlug</strong>)</p>
-
+            <!-- Profile Editor (WYSIWYG) -->
+            <article class="pe-card">
                 @if (!string.IsNullOrEmpty(_profileMessage))
                 {
                     <div class="alert @(_profileIsError ? "alert-error" : "alert-success")">
@@ -138,197 +140,341 @@
                     </div>
                 }
 
-                <form @onsubmit="SaveProfile" class="admin-form">
-                    <div class="form-group">
-                        <label for="displayName2">Display Name</label>
-                        <input type="text" id="displayName2" @bind="_profileDisplayName" 
-                               placeholder="Your display name" class="form-control" />
-                    </div>
-                    <div class="form-group">
-                        <label for="bio">Bio</label>
-                        <textarea id="bio" @bind="_profileBio" rows="3" 
-                                  placeholder="Tell us about yourself" class="form-control"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="avatarUrl">Avatar URL</label>
-                        <input type="text" id="avatarUrl" @bind="_profileAvatarUrl" 
-                               placeholder="https://example.com/avatar.png" class="form-control" />
-                    </div>
-                    <div class="form-group">
-                        <label for="theme">Theme</label>
-                        <select id="theme" @bind="_profileTheme" class="form-control">
-                            <option value="theme-classic.css">Classic</option>
-                            <option value="theme-modern.css">Modern</option>
+                <div class="pe-save-bar pe-save-bar-top">
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        <label class="muted" style="white-space:nowrap;margin:0">Theme</label>
+                        <select value="@_profileTheme" @onchange="OnThemeChanged" class="form-control">
+                            @foreach (var t in Themes.All)
+                            {
+                                <option value="@t.FileName">@t.DisplayName</option>
+                            }
                         </select>
+                        @if (_themeSaved)
+                        {
+                            <span class="muted" style="font-size:0.8rem">✓ saved</span>
+                        }
                     </div>
-                    <button type="submit" class="button button-primary" disabled="@_isProcessing">
-                        Save Profile
-                    </button>
-                </form>
-            </article>
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto">
+                        <a href="/@_currentUserSlug" target="_blank" class="button button-ghost button-small">Preview ↗</a>
+                        <button class="button button-primary" @onclick="SaveProfile" disabled="@_isProcessing">
+                            @(_isProcessing ? "Saving..." : "Save Profile")
+                        </button>
+                    </div>
+                </div>
 
-            <!-- Link Management -->
-            <article class="card admin-card-spaced">
-                <h2>Links</h2>
-                <p class="muted">Manage your profile links</p>
+                <!-- Avatar -->
+                <div class="pe-avatar-section">
+                    <div class="pe-avatar-frame">
+                        @if (!string.IsNullOrEmpty(_profileAvatarUrl))
+                        {
+                            <img src="@_profileAvatarUrl" alt="Avatar" class="pe-avatar-img" />
+                        }
+                        else
+                        {
+                            <div class="pe-avatar-placeholder">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <circle cx="12" cy="8" r="4"/>
+                                    <path d="M4 20c0-4 4-7 8-7s8 3 8 7"/>
+                                </svg>
+                            </div>
+                        }
+                    </div>
+                    <div class="pe-avatar-controls">
+                        <input type="text" @bind="_profileAvatarUrl" placeholder="Avatar image URL..." class="form-control" />
+                        <label class="pe-upload-label" style="display: none;">
+                            📷 Upload
+                            <InputFile OnChange="HandleAvatarUpload" accept="image/*" style="display:none" />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Display Name -->
+                <input type="text" @bind="_profileDisplayName" class="pe-name-input" placeholder="Display Name" />
+
+                <!-- Bio -->
+                <textarea @bind="_profileBio" class="pe-bio-input" rows="2" placeholder="A FediProfile instance"></textarea>
+
+                
+
+                <!-- Links -->
+                <div class="pe-links">
+                    @if (_editableLinks != null)
+                    {
+                        @foreach (var group in GetGroupedLinks())
+                        {
+                            @if (!string.IsNullOrEmpty(group.Key))
+                            {
+                                <div class="pe-category-label">@group.Key</div>
+                            }
+                            @foreach (var link in group.Value)
+                            {
+                                <div class="pe-link-card @(link.IsEditing ? "pe-link-editing" : "")">
+                                    <div class="pe-link-row">
+                                        <!-- Icon -->
+                                        <div class="pe-link-icon-btn" @onclick="() => ToggleLinkIconGrid(link)" title="Change icon">
+                                            @if (!string.IsNullOrWhiteSpace(link.Icon))
+                                            {
+                                                <img src="@link.Icon" alt="" />
+                                            }
+                                            else
+                                            {
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                                </svg>
+                                            }
+                                        </div>
+
+                                        <!-- Name -->
+                                        <div class="pe-link-name" @onclick="() => { if (!link.IsEditing) ToggleEditLink(link); }">
+                                            @if (link.IsEditing)
+                                            {
+                                                <input type="text" @bind="link.Name" class="pe-link-name-input" placeholder="Link name" />
+                                            }
+                                            else
+                                            {
+                                                <span>@link.Name</span>
+                                                @if (!string.IsNullOrWhiteSpace(link.Description))
+                                                {
+                                                    <span class="pe-link-desc">@link.Description</span>
+                                                }
+                                            }
+                                        </div>
+
+                                        <!-- Toggles -->
+                                        @if (link.IsActivityPub)
+                                        {
+                                            <label class="pe-toggle" title="@(link.AutoBoost ? "AutoBoost ON" : "AutoBoost OFF")">
+                                                <input type="checkbox" checked="@link.AutoBoost" @onchange="() => ToggleAutoBoost(link)" />
+                                                <span class="pe-toggle-badge @(link.AutoBoost ? "pe-toggle-on" : "")">BOOSTED</span>
+                                            </label>
+                                        }
+                                        <label class="pe-toggle" title="@(link.Hidden ? "Hidden" : "Visible")">
+                                            <input type="checkbox" checked="@link.Hidden" @onchange="() => ToggleHidden(link)" />
+                                            <span class="pe-toggle-badge pe-toggle-hidden @(link.Hidden ? "pe-toggle-on" : "")">HIDDEN</span>
+                                        </label>
+
+                                        <!-- Actions -->
+                                        <button class="pe-link-action" @onclick="() => ToggleEditLink(link)" title="@(link.IsEditing ? "Collapse" : "Edit")">
+                                            @(link.IsEditing ? "▲" : "✏️")
+                                        </button>
+                                        <button class="pe-link-action pe-link-delete" @onclick="() => DeleteLinkById(link.Id)" title="Delete">
+                                            🗑️
+                                        </button>
+                                    </div>
+
+                                    <!-- Icon Grid -->
+                                    @if (link.IconGridOpen)
+                                    {
+                                        <div class="pe-icon-grid">
+                                            <div class="pe-icon-grid-item @(string.IsNullOrEmpty(link.SelectedIconKey) ? "pe-icon-selected" : "")"
+                                                 @onclick="() => SelectLinkIcon(link, null)">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28">
+                                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                                </svg>
+                                                <small>None</small>
+                                            </div>
+                                            @foreach (var icon in _platformIcons)
+                                            {
+                                                <div class="pe-icon-grid-item @(link.SelectedIconKey == icon.Key ? "pe-icon-selected" : "")"
+                                                     @onclick="() => SelectLinkIcon(link, icon.Key)">
+                                                    <img src="/assets/icons/@(icon.Key).svg" alt="" />
+                                                    <small>@icon.Value.Name</small>
+                                                </div>
+                                            }
+                                            <div class="pe-icon-grid-item @(link.SelectedIconKey == "__custom__" ? "pe-icon-selected" : "")"
+                                                 @onclick='() => SelectLinkIcon(link, "__custom__")'>
+                                                <span style="font-size:1.4rem">🌐</span>
+                                                <small>Custom</small>
+                                            </div>
+                                            @if (link.SelectedIconKey == "__custom__")
+                                            {
+                                                <div class="pe-icon-grid-custom">
+                                                    <input type="text" @bind="link.CustomIconUrl" @bind:after="() => ApplyCustomIcon(link)"
+                                                           placeholder="https://example.com/icon.svg" class="form-control" />
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+
+                                    <!-- Expanded edit fields -->
+                                    @if (link.IsEditing)
+                                    {
+                                        <div class="pe-link-edit-fields">
+                                            <div class="form-group">
+                                                <label>URL</label>
+                                                <input type="text" @bind="link.Url" placeholder="https://example.com" class="form-control" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Description</label>
+                                                <input type="text" @bind="link.Description" placeholder="A short description (optional)" class="form-control" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Category</label>
+                                                <select @bind="link.Category" class="form-control">
+                                                    <option value="">— None —</option>
+                                                    @foreach (var cat in _availableCategories)
+                                                    {
+                                                        <option value="@cat">@cat</option>
+                                                    }
+                                                    <option value="__custom__">+ Add custom…</option>
+                                                </select>
+                                                @if (link.Category == "__custom__")
+                                                {
+                                                    <input type="text" @bind="link.CustomCategory"
+                                                           placeholder="Enter custom category" class="form-control admin-mt-sm" />
+                                                }
+                                            </div>
+                                            <div class="pe-link-edit-actions">
+                                                <button class="button button-primary button-small" @onclick="() => SaveLinkInline(link)">
+                                                    Save Link
+                                                </button>
+                                                <button class="button button-ghost button-small" @onclick="() => CancelEditLink(link)">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                    }
+
+                    <!-- Add new link -->
+                    @if (!_addingNewLink)
+                    {
+                        <button class="pe-add-link-btn" @onclick="StartAddingLink">
+                            + Add a link
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="pe-link-card pe-link-editing pe-link-new">
+                            <div class="pe-link-row">
+                                <div class="pe-link-icon-btn" @onclick="ToggleNewLinkIconGrid" title="Choose icon">
+                                    @if (!string.IsNullOrWhiteSpace(ResolveNewLinkIcon()))
+                                    {
+                                        <img src="@ResolveNewLinkIcon()" alt="" />
+                                    }
+                                    else
+                                    {
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                        </svg>
+                                    }
+                                </div>
+                                <div class="pe-link-name" style="flex:1">
+                                    <input type="text" @bind="_newLinkName" class="pe-link-name-input" placeholder="Link name" />
+                                </div>
+                                <label class="pe-toggle" title="Hidden">
+                                    <input type="checkbox" @bind="_newLinkHidden" />
+                                    <span class="pe-toggle-badge pe-toggle-hidden @(_newLinkHidden ? "pe-toggle-on" : "")">HIDDEN</span>
+                                </label>
+                            </div>
+
+                            @if (_newLinkIconGridOpen)
+                            {
+                                <div class="pe-icon-grid">
+                                    <div class="pe-icon-grid-item @(string.IsNullOrEmpty(_selectedIconKey) ? "pe-icon-selected" : "")"
+                                         @onclick="() => SelectIcon(null)">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28">
+                                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                        </svg>
+                                        <small>None</small>
+                                    </div>
+                                    @foreach (var icon in _platformIcons)
+                                    {
+                                        <div class="pe-icon-grid-item @(_selectedIconKey == icon.Key ? "pe-icon-selected" : "")"
+                                             @onclick="() => SelectIcon(icon.Key)">
+                                            <img src="/assets/icons/@(icon.Key).svg" alt="" />
+                                            <small>@icon.Value.Name</small>
+                                        </div>
+                                    }
+                                    <div class="pe-icon-grid-item @(_selectedIconKey == "__custom__" ? "pe-icon-selected" : "")"
+                                         @onclick='() => SelectIcon("__custom__")'>
+                                        <span style="font-size:1.4rem">🌐</span>
+                                        <small>Custom</small>
+                                    </div>
+                                    @if (_selectedIconKey == "__custom__")
+                                    {
+                                        <div class="pe-icon-grid-custom">
+                                            <input type="text" @bind="_customIconUrl"
+                                                   placeholder="https://example.com/icon.svg" class="form-control" />
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            <div class="pe-link-edit-fields">
+                                <div class="form-group">
+                                    <label>URL</label>
+                                    <input type="text" @bind="_newLinkUrl" placeholder="https://example.com" class="form-control" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Description (optional)</label>
+                                    <input type="text" @bind="_newLinkDescription" placeholder="A short description" class="form-control" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Category</label>
+                                    <select @bind="_newLinkCategory" class="form-control">
+                                        <option value="">— None —</option>
+                                        @foreach (var cat in _availableCategories)
+                                        {
+                                            <option value="@cat">@cat</option>
+                                        }
+                                        <option value="__custom__">+ Add custom…</option>
+                                    </select>
+                                    @if (_newLinkCategory == "__custom__")
+                                    {
+                                        <input type="text" @bind="_customCategory"
+                                               placeholder="Enter custom category" class="form-control admin-mt-sm" />
+                                    }
+                                </div>
+                                <div class="pe-link-edit-actions">
+                                    <button class="button button-primary button-small" @onclick="AddLink" disabled="@_isProcessing">
+                                        Add Link
+                                    </button>
+                                    <button class="button button-ghost button-small" @onclick="CancelAddingLink">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
 
                 @if (!string.IsNullOrEmpty(_linkMessage))
                 {
-                    <div class="alert @(_linkIsError ? "alert-error" : "alert-success")">
+                    <div class="alert @(_linkIsError ? "alert-error" : "alert-success")" style="margin-top:1rem">
                         @_linkMessage
                     </div>
                 }
 
-                <form @onsubmit="AddLink" class="admin-form">
-                    <div class="form-group">
-                        <label for="linkName">Link Name</label>
-                        <input type="text" id="linkName" @bind="_newLinkName" required 
-                               placeholder="e.g., My Blog" class="form-control" />
-                    </div>
-                    <div class="form-group">
-                        <label for="linkUrl">URL</label>
-                        <input type="text" id="linkUrl" @bind="_newLinkUrl" required 
-                               placeholder="https://example.com" class="form-control" />
-                    </div>
-                    <div class="form-group">
-                        <label>Icon (optional)</label>
-                        <div class="icon-picker">
-                            <div class="icon-picker-selected form-control" @onclick="ToggleIconDropdown">
-                                @if (!string.IsNullOrEmpty(_selectedIconKey) && _selectedIconKey != "__custom__" && _platformIcons.ContainsKey(_selectedIconKey))
-                                {
-                                    <img src="/assets/icons/@(_selectedIconKey).svg" alt="" class="icon-picker-img" />
-                                    <span>@_platformIcons[_selectedIconKey].Name</span>
-                                }
-                                else if (_selectedIconKey == "__custom__")
-                                {
-                                    <span>🔗 Custom URL…</span>
-                                }
-                                else
-                                {
-                                    <span class="icon-picker-placeholder">— None —</span>
-                                }
-                            </div>
-                            @if (_iconDropdownOpen)
-                            {
-                                <div class="icon-picker-dropdown">
-                                    <div class="icon-picker-option" @onclick="() => SelectIcon(null)">
-                                        <span>— None —</span>
-                                    </div>
-                                    @foreach (var icon in _platformIcons)
-                                    {
-                                        <div class="icon-picker-option" @onclick="() => SelectIcon(icon.Key)">
-                                            <img src="/assets/icons/@(icon.Key).svg" alt="" class="icon-picker-img" />
-                                            <span>@icon.Value.Name</span>
-                                        </div>
-                                    }
-                                    <div class="icon-picker-option" @onclick='() => SelectIcon("__custom__")'>
-                                        <span>🔗 Custom URL…</span>
-                                    </div>
-                                </div>
-                            }
-                            @if (_selectedIconKey == "__custom__")
-                            {
-                                <input type="text" @bind="_customIconUrl"
-                                       placeholder="https://example.com/icon.svg" class="form-control admin-mt-sm" />
-                                @if (!string.IsNullOrWhiteSpace(_customIconUrl))
-                                {
-                                    <div class="icon-preview">
-                                        <img src="@_customIconUrl" alt="Custom icon" />
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="linkDesc">Description (optional)</label>
-                        <input type="text" id="linkDesc" @bind="_newLinkDescription" 
-                               placeholder="A short description" class="form-control" />
-                    </div>
-                    <div class="form-group">
-                        <label for="linkCategory">Category (optional)</label>
-                        <select id="linkCategory" @bind="_newLinkCategory" class="form-control">
-                            <option value="">— None —</option>
-                            @foreach (var cat in _availableCategories)
-                            {
-                                <option value="@cat">@cat</option>
-                            }
-                            <option value="__custom__">+ Add custom…</option>
-                        </select>
-                        @if (_newLinkCategory == "__custom__")
-                        {
-                            <input type="text" @bind="_customCategory" 
-                                   placeholder="Enter custom category" class="form-control admin-mt-sm" />
-                        }
-                    </div>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" @bind="_newLinkAutoBoost" /> AutoBoost (auto-announce this actor's posts)
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" @bind="_newLinkHidden" /> Hidden (not shown on profile)
-                        </label>
-                    </div>
-                    <button type="submit" class="button button-primary" disabled="@_isProcessing">
-                        Add Link
-                    </button>
-                </form>
-
-                <div class="admin-section">
-                    <h3>Current Links</h3>
-                    @if (_links == null)
-                    {
-                        <p>Loading links...</p>
-                    }
-                    else if (!_links.Any())
-                    {
-                        <p>No links added yet.</p>
-                    }
-                    else
-                    {
-                        <table class="user-table">
-                            <thead>
-                                <tr>
-                                    <th>Icon</th>
-                                    <th>Name</th>
-                                    <th>URL</th>
-                                    <th>Category</th>
-                                    <th>AutoBoost</th>
-                                    <th>Hidden</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var link in _links)
-                                {
-                                    var linkId = Convert.ToInt32(link["Id"]);
-                                    var iconVal = link.ContainsKey("Icon") ? link["Icon"]?.ToString() : null;
-                                    <tr>
-                                        <td>
-                                            @if (!string.IsNullOrWhiteSpace(iconVal))
-                                            {
-                                                <img src="@iconVal" alt="" style="width:20px;height:20px;object-fit:contain;" />
-                                            }
-                                        </td>
-                                        <td>@link["Name"]</td>
-                                        <td><a href="@link["Url"]" target="_blank">@TruncateUrl(link["Url"]?.ToString())</a></td>
-                                        <td>@(link["Category"]?.ToString() ?? "—")</td>
-                                        <td>@(Convert.ToInt32(link["AutoBoost"]) == 1 ? "Yes" : "No")</td>
-                                        <td>@(Convert.ToInt32(link["Hidden"]) == 1 ? "Yes" : "No")</td>
-                                        <td>
-                                            <button @onclick="() => DeleteLink(linkId)" 
-                                                    class="button button-small button-danger"
-                                                    disabled="@_isProcessing">
-                                                Delete
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    }
+                <!-- Fedi handle info -->
+                <div class="pe-info-section">
+                    <p class="muted">Follow me in the fediverse: <strong>@_currentUserSlug@@@(_currentDomain)</strong></p>
+                    <p class="muted" style="font-size:0.82rem">This is a read-only profile — it doesn't post or reply. It boosts and relays content from linked accounts.</p>
                 </div>
+
+                <!-- Footer: Save -->
+                <div class="pe-save-bar">
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto">
+                        <a href="/@_currentUserSlug" target="_blank" class="button button-ghost button-small">Preview ↗</a>
+                        <button class="button button-primary" @onclick="SaveProfile" disabled="@_isProcessing">
+                            @(_isProcessing ? "Saving..." : "Save Profile")
+                        </button>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_profileMessage))
+                {
+                    <div class="alert @(_profileIsError ? "alert-error" : "alert-success")">
+                        @_profileMessage
+                    </div>
+                }
             </article>
 
             <!-- Badge Issuers -->
@@ -358,18 +504,101 @@
                             @foreach (var issuer in _badgeIssuers)
                             {
                                 <tr>
-                                    <td>@issuer["Name"]</td>
-                                    <td><a href="@issuer["ActorUrl"]" target="_blank">@TruncateUrl(issuer["ActorUrl"]?.ToString())</a></td>
-                                    <td>@(Convert.ToInt32(issuer["Following"]) == 1 ? "Yes" : "No")</td>
+                                    <td>@issuer.Name</td>
+                                    <td><a href="@issuer.ActorUrl" target="_blank">@TruncateUrl(issuer.ActorUrl)</a></td>
+                                    <td>@(issuer.Following ? "Yes" : "No")</td>
                                 </tr>
                             }
                         </tbody>
                     </table>
                 }
             </article>
+
+            <!-- Danger Zone -->
+            <article class="card admin-card-spaced" style="border:2px solid #dc3545;">
+                <h2 style="color:#dc3545;">⚠️ Danger Zone</h2>
+                <p class="muted">Permanently delete your account and all associated data. This action cannot be undone.</p>
+
+                @if (!string.IsNullOrEmpty(_deleteAccountMessage))
+                {
+                    <div class="alert @(_deleteAccountIsError ? "alert-error" : "alert-success")">
+                        @_deleteAccountMessage
+                    </div>
+                }
+
+                @if (!_deleteAccountConfirming)
+                {
+                    <button class="button button-danger" @onclick="() => _deleteAccountConfirming = true" disabled="@_isProcessing">
+                        Delete My Account
+                    </button>
+                }
+                else
+                {
+                    <div class="alert alert-error" style="margin-bottom:1rem;">
+                        <strong>Are you sure?</strong> This will permanently delete your profile, all links, badges, and data.
+                        Type your username <strong>@_currentUserSlug</strong> below to confirm.
+                    </div>
+                    <div class="form-group">
+                        <input type="text" @bind="_deleteAccountConfirmText" placeholder="Type your username to confirm" class="form-control" />
+                    </div>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                        <button class="button button-danger" 
+                                @onclick="DeleteMyAccount" 
+                                disabled="@(_isProcessing || _deleteAccountConfirmText != _currentUserSlug)">
+                            @(_isProcessing ? "Deleting..." : "Permanently Delete Account")
+                        </button>
+                        <button class="button button-ghost" @onclick="CancelDeleteAccount">
+                            Cancel
+                        </button>
+                    </div>
+                }
+            </article>
         </div>
     }
 </section>
+
+@if (_isAuthorized && _followers != null)
+{
+    <section class="pe-section">
+        <h2>Followers (@_followerCount)</h2>
+        @if (_followerCount == 0)
+        {
+            <p class="text-muted">No followers yet.</p>
+        }
+        else
+        {
+            <table class="pe-table">
+                <thead>
+                    <tr>
+                        <th>Actor</th>
+                        <th>Domain</th>
+                        <th>Followed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in _followers.Take(10))
+                    {
+                        <tr>
+                            <td>
+                                @if (!string.IsNullOrEmpty(f.AvatarUri))
+                                {
+                                    <img src="@f.AvatarUri" alt="" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:0.4rem;" />
+                                }
+                                <a href="@f.FollowerUri" target="_blank" rel="noopener">@(f.DisplayName ?? f.FollowerUri)</a>
+                            </td>
+                            <td>@f.Domain</td>
+                            <td>@f.CreatedUtc</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_followerCount > 10)
+            {
+                <p class="text-muted" style="margin-top:0.5rem;">Showing newest 10 of @_followerCount followers.</p>
+            }
+        }
+    </section>
+}
 
 
 
@@ -385,6 +614,7 @@
     private bool _isRootUser;
     private bool _isAuthorized;
     private string? _currentUserSlug;
+    private string? _currentDomain;
     private List<(int Id, string Slug, string? DisplayName, string CreatedUtc)>? _users;
 
     // Profile editing fields
@@ -395,50 +625,94 @@
     private string? _profileMessage;
     private bool _profileIsError;
 
-    // Link management fields
+    // Link fields (new link form)
     private string? _newLinkName;
     private string? _newLinkUrl;
-    private string? _newLinkIcon;
     private string? _selectedIconKey;
     private string? _customIconUrl;
-    private bool _iconDropdownOpen;
     private string? _newLinkDescription;
     private string? _newLinkCategory;
     private string? _customCategory;
     private bool _newLinkAutoBoost;
     private bool _newLinkHidden;
+    private bool _newLinkIconGridOpen;
+    private bool _addingNewLink;
     private string? _linkMessage;
     private bool _linkIsError;
-    private List<Dictionary<string, object>>? _links;
+
+    // Editable link list
+    private List<EditableLink>? _editableLinks;
 
     // Platform icon definitions
     private static readonly Dictionary<string, (string Name, string Path)> _platformIcons = new()
     {
-        ["mastodon"] = ("Mastodon", "/assets/icons/mastodon.svg"),
+        ["bluesky"] = ("Bluesky", "/assets/icons/bluesky.svg"),
+        ["github"] = ("GitHub", "/assets/icons/github.svg"),
+        ["instagram"] = ("Instagram", "/assets/icons/instagram.svg"),
+        ["lemmy"] = ("Lemmy", "/assets/icons/lemmy.svg"),
+        ["linkedin"] = ("LinkedIn", "/assets/icons/linkedin.svg"),
         ["loops"] = ("Loops", "/assets/icons/loops.svg"),
+        ["mastodon"] = ("Mastodon", "/assets/icons/mastodon.svg"),
+        ["matrix"] = ("Matrix", "/assets/icons/matrix.svg"),
         ["peertube"] = ("PeerTube", "/assets/icons/peertube.svg"),
         ["pixelfed"] = ("Pixelfed", "/assets/icons/pixelfed.svg"),
-        ["youtube"] = ("YouTube", "/assets/icons/youtube.svg"),
         ["rss"] = ("RSS", "/assets/icons/rss.svg"),
-        ["instagram"] = ("Instagram", "/assets/icons/instagram.svg"),
-        ["linkedin"] = ("LinkedIn", "/assets/icons/linkedin.svg"),
+        ["threads"] = ("Threads", "/assets/icons/threads.svg"),
+        ["youtube"] = ("YouTube", "/assets/icons/youtube.svg"),
     };
 
-    // Default link categories — user-added custom categories are merged in at runtime
+    // Default link categories
     private static readonly string[] _defaultCategories =
         ["Social", "Portfolio", "Blog", "Code", "Music", "Video", "News", "Shopping", "Podcast", "Other"];
     private List<string> _availableCategories = new(
         ["Social", "Portfolio", "Blog", "Code", "Music", "Video", "News", "Shopping", "Podcast", "Other"]);
 
     // Badge issuers
-    private List<Dictionary<string, object>>? _badgeIssuers;
+    private List<BadgeIssuer>? _badgeIssuers;
+
+    // Followers
+    private List<Follower>? _followers;
+    private int _followerCount;
+
+    // Danger Zone - Delete Account
+    private bool _deleteAccountConfirming;
+    private string? _deleteAccountConfirmText;
+    private string? _deleteAccountMessage;
+    private bool _deleteAccountIsError;
 
     // User-scoped database for the current authenticated user
     private UserScopedDb? _currentUserDb;
 
+    // ===== EditableLink helper class =====
+    private class EditableLink
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string? Icon { get; set; }
+        public string? Description { get; set; }
+        public string? Category { get; set; }
+        public bool AutoBoost { get; set; }
+        public bool IsActivityPub { get; set; }
+        public bool Hidden { get; set; }
+        public string? ActorAPUri { get; set; }
+        public bool IsEditing { get; set; }
+        public string? SelectedIconKey { get; set; }
+        public string? CustomIconUrl { get; set; }
+        public bool IconGridOpen { get; set; }
+        public string? CustomCategory { get; set; }
+        // Snapshot for cancel
+        public string? OrigName { get; set; }
+        public string? OrigUrl { get; set; }
+        public string? OrigIcon { get; set; }
+        public string? OrigDescription { get; set; }
+        public string? OrigCategory { get; set; }
+        public bool OrigAutoBoost { get; set; }
+        public bool OrigHidden { get; set; }
+    }
+
     protected override async Task OnInitializedAsync()
     {
-        // Get authenticated user's Mastodon identity from claims
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
         var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
         var mastodonHost = state.User.FindFirst("urn:mastodon:hostname")?.Value;
@@ -452,7 +726,6 @@
             _signedInAs = state.User.Identity?.Name;
         }
 
-        // Look up the user in the domain DB by Mastodon credentials to find their slug
         _currentUserSlug = null;
         _isAuthorized = false;
         
@@ -466,23 +739,20 @@
             }
         }
 
-        // Check if current user is "root"
         _isRootUser = _currentUserSlug?.Equals("root", StringComparison.OrdinalIgnoreCase) ?? false;
-
         _dbName = Path.GetFileName(DomainDb.DbPath);
+        _currentDomain = DomainDb.GetDomain() ?? "localhost";
 
         if (_isRootUser)
         {
             await LoadUsers();
         }
 
-        // Load user-specific data if authorized
         if (_isAuthorized && !string.IsNullOrEmpty(_currentUserSlug))
         {
             var domain = DomainDb.GetDomain() ?? "localhost";
             _currentUserDb = DbFactory.GetInstance(domain, _currentUserSlug);
 
-            // Auto-generate actor keys if they don't exist yet
             var (existingPubKey, _) = await _currentUserDb.GetActorKeysAsync();
             if (string.IsNullOrEmpty(existingPubKey))
             {
@@ -493,8 +763,11 @@
             await LoadProfileSettings();
             await LoadLinks();
             await LoadBadgeIssuers();
+            await LoadFollowers();
         }
     }
+
+    // ===== User Management (Root only) =====
 
     private async Task LoadUsers()
     {
@@ -524,7 +797,6 @@
                 return;
             }
 
-            // Validate slug format
             if (!System.Text.RegularExpressions.Regex.IsMatch(_newUserSlug, @"^[a-zA-Z0-9_-]+$"))
             {
                 _message = "Invalid slug format. Only letters, numbers, hyphens, and underscores allowed.";
@@ -560,13 +832,9 @@
 
         try
         {
-            // Create a user database for the given slug
             var userDb = new UserScopedDb(DomainDb.GetDomain() ?? "localhost", userSlug, autoCreate: true);
-
-            // Accessing the database will create it if it doesn't exist
             await userDb.GetSettingsAsync();
 
-            // Auto-generate actor keys if they don't exist yet
             var (existingPubKey, _) = await userDb.GetActorKeysAsync();
             if (string.IsNullOrEmpty(existingPubKey))
             {
@@ -620,32 +888,58 @@
         }
     }
 
+    // ===== Profile Settings =====
+
     private async Task LoadProfileSettings()
     {
         if (_currentUserDb == null) return;
         try
         {
             var settings = await _currentUserDb.GetSettingsAsync();
-            if (settings is Dictionary<string, object> dict)
+            if (settings != null)
             {
-                dict.TryGetValue("ActorUsername", out var username);
-                dict.TryGetValue("ActorBio", out var bio);
-                dict.TryGetValue("ActorAvatarUrl", out var avatar);
-                dict.TryGetValue("UiTheme", out var theme);
-                _profileDisplayName = username?.ToString();
-                _profileBio = bio?.ToString();
-                _profileAvatarUrl = avatar?.ToString();
-                _profileTheme = theme?.ToString() ?? "theme-classic.css";
+                _profileDisplayName = settings.ActorUsername;
+                _profileBio = settings.ActorBio;
+                _profileAvatarUrl = settings.ActorAvatarUrl;
+                _profileTheme = Themes.Resolve(settings.UiTheme);
             }
             else
             {
-                _profileTheme = "theme-classic.css";
+                _profileTheme = Themes.DefaultFile;
             }
         }
         catch
         {
-            _profileTheme = "theme-classic.css";
+            _profileTheme = Themes.DefaultFile;
         }
+    }
+
+    private bool _themeSaved;
+
+    private async Task OnThemeChanged(ChangeEventArgs e)
+    {
+        _profileTheme = e.Value?.ToString();
+        _themeSaved = false;
+        if (_currentUserDb == null) return;
+
+        try
+        {
+            await _currentUserDb.UpsertSettingsAsync(uiTheme: _profileTheme);
+            _themeSaved = true;
+            _ = ClearThemeSavedFlag();
+        }
+        catch (Exception ex)
+        {
+            _profileMessage = $"Error saving theme: {ex.Message}";
+            _profileIsError = true;
+        }
+    }
+
+    private async Task ClearThemeSavedFlag()
+    {
+        await Task.Delay(2000);
+        _themeSaved = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task SaveProfile()
@@ -663,6 +957,14 @@
                 actorAvatarUrl: _profileAvatarUrl,
                 uiTheme: _profileTheme
             );
+            await RegenerateStaticProfileAsync();
+
+            // Invalidate cached ActivityPub actor JSON so federation picks up changes
+            if (_currentDomain != null && _currentUserSlug != null)
+            {
+                MemoryCache.Remove($"actorjson:{_currentDomain}/{_currentUserSlug}");
+            }
+
             _profileMessage = "Profile saved successfully!";
         }
         catch (Exception ex)
@@ -676,19 +978,410 @@
         }
     }
 
+    private async Task HandleAvatarUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        const long maxSize = 2 * 1024 * 1024; // 2 MB
+        if (file.Size > maxSize)
+        {
+            _profileMessage = "Avatar file must be under 2 MB.";
+            _profileIsError = true;
+            return;
+        }
+
+        try
+        {
+            var uploadsDir = Path.Combine(WebEnv.WebRootPath, "uploads", _currentUserSlug!);
+            Directory.CreateDirectory(uploadsDir);
+
+            var ext = Path.GetExtension(file.Name);
+            var fileName = $"avatar{ext}";
+            var filePath = Path.Combine(uploadsDir, fileName);
+
+            await using var stream = file.OpenReadStream(maxSize);
+            await using var fs = new FileStream(filePath, FileMode.Create);
+            await stream.CopyToAsync(fs);
+
+            _profileAvatarUrl = $"/uploads/{_currentUserSlug}/{fileName}";
+            _profileMessage = "Avatar uploaded! Remember to save your profile.";
+            _profileIsError = false;
+        }
+        catch (Exception ex)
+        {
+            _profileMessage = $"Error uploading avatar: {ex.Message}";
+            _profileIsError = true;
+        }
+    }
+
+    // ===== Link Management =====
+
     private async Task LoadLinks()
     {
         if (_currentUserDb == null) return;
         try
         {
             var links = await _currentUserDb.GetLinksAsync();
-            _links = links.Cast<Dictionary<string, object>>().ToList();
+            _editableLinks = links.Select(d => new EditableLink
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Url = d.Url,
+                Icon = d.Icon,
+                Description = d.Description,
+                Category = d.Category,
+                AutoBoost = d.AutoBoost,
+                IsActivityPub = d.IsActivityPub,
+                Hidden = d.Hidden,
+                ActorAPUri = d.ActorAPUri,
+                SelectedIconKey = ResolveIconKeyFromPath(d.Icon),
+            }).ToList();
+
+            foreach (var link in _editableLinks)
+            {
+                if (link.SelectedIconKey == "__custom__")
+                    link.CustomIconUrl = link.Icon;
+            }
+
             RebuildAvailableCategories();
         }
         catch
         {
-            _links = new List<Dictionary<string, object>>();
+            _editableLinks = new List<EditableLink>();
         }
+    }
+
+    private IEnumerable<KeyValuePair<string, List<EditableLink>>> GetGroupedLinks()
+    {
+        if (_editableLinks == null) return Enumerable.Empty<KeyValuePair<string, List<EditableLink>>>();
+
+        return _editableLinks
+            .GroupBy(l => l.Category ?? "")
+            .OrderBy(g => g.Key == "" ? 0 : 1)
+            .ThenBy(g => g.Key)
+            .Select(g => new KeyValuePair<string, List<EditableLink>>(g.Key, g.ToList()));
+    }
+
+    private string? ResolveIconKeyFromPath(string? iconPath)
+    {
+        if (string.IsNullOrEmpty(iconPath)) return null;
+        foreach (var kvp in _platformIcons)
+        {
+            if (iconPath.EndsWith($"{kvp.Key}.svg", StringComparison.OrdinalIgnoreCase))
+                return kvp.Key;
+        }
+        return "__custom__";
+    }
+
+    private void ToggleEditLink(EditableLink link)
+    {
+        if (link.IsEditing)
+        {
+            link.IsEditing = false;
+            link.IconGridOpen = false;
+        }
+        else
+        {
+            link.OrigName = link.Name;
+            link.OrigUrl = link.Url;
+            link.OrigIcon = link.Icon;
+            link.OrigDescription = link.Description;
+            link.OrigCategory = link.Category;
+            link.OrigAutoBoost = link.AutoBoost;
+            link.OrigHidden = link.Hidden;
+            link.IsEditing = true;
+        }
+    }
+
+    private void CancelEditLink(EditableLink link)
+    {
+        link.Name = link.OrigName ?? link.Name;
+        link.Url = link.OrigUrl ?? link.Url;
+        link.Icon = link.OrigIcon;
+        link.Description = link.OrigDescription;
+        link.Category = link.OrigCategory;
+        link.AutoBoost = link.OrigAutoBoost;
+        link.Hidden = link.OrigHidden;
+        link.SelectedIconKey = ResolveIconKeyFromPath(link.Icon);
+        if (link.SelectedIconKey == "__custom__")
+            link.CustomIconUrl = link.Icon;
+        link.IsEditing = false;
+        link.IconGridOpen = false;
+    }
+
+    private async Task SaveLinkInline(EditableLink link)
+    {
+        if (_currentUserDb == null) return;
+        _linkMessage = null;
+        _linkIsError = false;
+
+        try
+        {
+            var effectiveCategory = link.Category == "__custom__"
+                ? link.CustomCategory?.Trim()
+                : link.Category;
+
+            await _currentUserDb.UpdateLinkAsync(
+                link.Id,
+                link.Name,
+                link.Url,
+                link.Icon,
+                link.Description,
+                link.AutoBoost,
+                string.IsNullOrWhiteSpace(effectiveCategory) ? null : effectiveCategory,
+                link.Hidden,
+                link.IsActivityPub,
+                link.ActorAPUri
+            );
+
+            if (link.Category == "__custom__" && !string.IsNullOrWhiteSpace(link.CustomCategory))
+            {
+                link.Category = link.CustomCategory.Trim();
+                link.CustomCategory = null;
+            }
+
+            link.IsEditing = false;
+            link.IconGridOpen = false;
+            await RegenerateStaticProfileAsync();
+            _linkMessage = "Link saved!";
+            RebuildAvailableCategories();
+        }
+        catch (Exception ex)
+        {
+            _linkMessage = $"Error saving link: {ex.Message}";
+            _linkIsError = true;
+        }
+    }
+
+    private void ToggleLinkIconGrid(EditableLink link)
+    {
+        link.IconGridOpen = !link.IconGridOpen;
+    }
+
+    private void SelectLinkIcon(EditableLink link, string? key)
+    {
+        link.SelectedIconKey = key;
+        if (key == null)
+        {
+            link.Icon = null;
+            link.CustomIconUrl = null;
+        }
+        else if (key == "__custom__")
+        {
+            link.Icon = link.CustomIconUrl;
+        }
+        else if (_platformIcons.TryGetValue(key, out var icon))
+        {
+            link.Icon = icon.Path;
+            link.CustomIconUrl = null;
+        }
+        link.IconGridOpen = false;
+    }
+
+    private void ApplyCustomIcon(EditableLink link)
+    {
+        if (link.SelectedIconKey == "__custom__")
+        {
+            link.Icon = link.CustomIconUrl;
+        }
+    }
+
+    // ===== Toggle AutoBoost / Hidden for existing links =====
+
+    private async Task ToggleAutoBoost(EditableLink link)
+    {
+        if (_currentUserDb == null || string.IsNullOrEmpty(_currentUserSlug)) return;
+        _linkMessage = null;
+        _linkIsError = false;
+
+        var newValue = !link.AutoBoost;
+
+        if (newValue)
+        {
+            // Turning ON → follow the actor
+            try
+            {
+                var (pubKey, privKey) = await _currentUserDb.GetActorKeysAsync();
+                if (string.IsNullOrEmpty(privKey))
+                {
+                    _linkMessage = "Cannot enable AutoBoost: missing private key.";
+                    _linkIsError = true;
+                    return;
+                }
+
+                var domain = DomainDb.GetDomain() ?? "localhost";
+                var httpContext = HttpContextAccessor.HttpContext;
+                var scheme = httpContext?.Request.Scheme ?? "https";
+                var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
+                var actorId = $"{scheme}://{fullDomain}/{_currentUserSlug}";
+                var keyId = $"{actorId}#main-key";
+
+                var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
+                var remoteActor = await actorHelper.FetchActorInformationAsync(link.Url);
+
+                if (remoteActor?.Inbox == null)
+                {
+                    _linkMessage = "Cannot enable AutoBoost: could not resolve the actor or find their inbox.";
+                    _linkIsError = true;
+                    return;
+                }
+
+                // Store the actor's AP URI (their canonical id) for matching incoming Create activities
+                link.ActorAPUri = remoteActor.Id;
+
+                var (followSuccess, followError) = await FollowService.SendFollowRequestAsync(
+                    link.Url, remoteActor.Inbox, _currentUserDb, actorId);
+
+                if (!followSuccess)
+                {
+                    _linkMessage = $"Cannot enable AutoBoost: failed to follow the actor. {followError}";
+                    _linkIsError = true;
+                    return;
+                }
+
+                await DomainDb.AddFollowingAsync(_currentUserSlug, link.ActorAPUri ?? link.Url);
+            }
+            catch (Exception ex)
+            {
+                _linkMessage = $"Cannot enable AutoBoost: {ex.Message}";
+                _linkIsError = true;
+                return;
+            }
+        }
+        else
+        {
+            // Turning OFF → unfollow the actor
+            try
+            {
+                var (pubKey, privKey) = await _currentUserDb.GetActorKeysAsync();
+                if (!string.IsNullOrEmpty(privKey) && !string.IsNullOrEmpty(link.Url))
+                {
+                    var domain = DomainDb.GetDomain() ?? "localhost";
+                    var httpContext = HttpContextAccessor.HttpContext;
+                    var scheme = httpContext?.Request.Scheme ?? "https";
+                    var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
+                    var actorId = $"{scheme}://{fullDomain}/{_currentUserSlug}";
+                    var keyId = $"{actorId}#main-key";
+
+                    var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
+                    var remoteActor = await actorHelper.FetchActorInformationAsync(link.Url);
+
+                    if (remoteActor?.Inbox != null)
+                    {
+                        await FollowService.SendUnfollowAsync(link.Url, remoteActor.Inbox, _currentUserDb, actorId);
+                    }
+
+                    await DomainDb.RemoveFollowingAsync(_currentUserSlug, link.ActorAPUri ?? link.Url);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Error unfollowing actor during AutoBoost toggle off");
+            }
+        }
+
+        // Update in-memory and persist to DB
+        link.AutoBoost = newValue;
+        try
+        {
+            var effectiveCategory = link.Category == "__custom__"
+                ? link.CustomCategory?.Trim()
+                : link.Category;
+
+            await _currentUserDb.UpdateLinkAsync(
+                link.Id, link.Name, link.Url, link.Icon, link.Description,
+                link.AutoBoost,
+                string.IsNullOrWhiteSpace(effectiveCategory) ? null : effectiveCategory,
+                link.Hidden,
+                link.IsActivityPub,
+                link.ActorAPUri);
+
+            await RegenerateStaticProfileAsync();
+            _linkMessage = newValue ? "AutoBoost enabled – follow request sent." : "AutoBoost disabled – unfollowed.";
+        }
+        catch (Exception ex)
+        {
+            _linkMessage = $"Error updating link: {ex.Message}";
+            _linkIsError = true;
+        }
+    }
+
+    private async Task ToggleHidden(EditableLink link)
+    {
+        if (_currentUserDb == null) return;
+        _linkMessage = null;
+        _linkIsError = false;
+
+        link.Hidden = !link.Hidden;
+
+        try
+        {
+            var effectiveCategory = link.Category == "__custom__"
+                ? link.CustomCategory?.Trim()
+                : link.Category;
+
+            await _currentUserDb.UpdateLinkAsync(
+                link.Id, link.Name, link.Url, link.Icon, link.Description,
+                link.AutoBoost,
+                string.IsNullOrWhiteSpace(effectiveCategory) ? null : effectiveCategory,
+                link.Hidden,
+                link.IsActivityPub,
+                link.ActorAPUri);
+
+            await RegenerateStaticProfileAsync();
+            _linkMessage = link.Hidden ? "Link hidden." : "Link visible.";
+        }
+        catch (Exception ex)
+        {
+            link.Hidden = !link.Hidden; // revert on failure
+            _linkMessage = $"Error updating link: {ex.Message}";
+            _linkIsError = true;
+        }
+    }
+
+    // ===== New Link =====
+
+    private void StartAddingLink()
+    {
+        _addingNewLink = true;
+        _newLinkName = null;
+        _newLinkUrl = null;
+        _selectedIconKey = null;
+        _customIconUrl = null;
+        _newLinkDescription = null;
+        _newLinkCategory = null;
+        _customCategory = null;
+        _newLinkAutoBoost = false;
+        _newLinkHidden = false;
+        _newLinkIconGridOpen = false;
+        _linkMessage = null;
+    }
+
+    private void CancelAddingLink()
+    {
+        _addingNewLink = false;
+    }
+
+    private void ToggleNewLinkIconGrid()
+    {
+        _newLinkIconGridOpen = !_newLinkIconGridOpen;
+    }
+
+    private string? ResolveNewLinkIcon()
+    {
+        if (_selectedIconKey == "__custom__") return _customIconUrl;
+        if (!string.IsNullOrEmpty(_selectedIconKey) && _platformIcons.TryGetValue(_selectedIconKey, out var icon))
+            return icon.Path;
+        return null;
+    }
+
+    private void SelectIcon(string? key)
+    {
+        _selectedIconKey = key;
+        _newLinkIconGridOpen = false;
+        if (key != "__custom__")
+            _customIconUrl = null;
     }
 
     private async Task AddLink()
@@ -707,31 +1400,20 @@
                 return;
             }
 
-            // Resolve the effective icon from the picker
-            string? effectiveIcon = null;
-            if (_selectedIconKey == "__custom__")
-                effectiveIcon = _customIconUrl?.Trim();
-            else if (!string.IsNullOrEmpty(_selectedIconKey) && _platformIcons.ContainsKey(_selectedIconKey))
-                effectiveIcon = _platformIcons[_selectedIconKey].Path;
+            string? effectiveIcon = ResolveNewLinkIcon();
 
-            // Resolve the effective category (custom text takes precedence over sentinel)
             var effectiveCategory = _newLinkCategory == "__custom__"
                 ? _customCategory?.Trim()
                 : _newLinkCategory;
 
-            // If AutoBoost is enabled, attempt to follow the actor first
-            if (_newLinkAutoBoost)
+            // Probe the URL for ActivityPub actor
+            bool isActivityPub = false;
+            string? actorAPUri = null;
+            try
             {
-                try
+                var (pubKey, privKey) = await _currentUserDb.GetActorKeysAsync();
+                if (!string.IsNullOrEmpty(privKey))
                 {
-                    var (pubKey, privKey) = await _currentUserDb.GetActorKeysAsync();
-                    if (string.IsNullOrEmpty(privKey))
-                    {
-                        _linkMessage = "Cannot enable AutoBoost: missing private key. Please initialize your profile keys first.";
-                        _linkIsError = true;
-                        return;
-                    }
-
                     var domain = DomainDb.GetDomain() ?? "localhost";
                     var httpContext = HttpContextAccessor.HttpContext;
                     var scheme = httpContext?.Request.Scheme ?? "https";
@@ -742,60 +1424,56 @@
                     var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
                     var remoteActor = await actorHelper.FetchActorInformationAsync(_newLinkUrl.Trim());
 
-                    if (remoteActor?.Inbox == null)
+                    if (remoteActor?.Inbox != null)
                     {
-                        _linkMessage = "Cannot enable AutoBoost: could not resolve the actor or find their inbox. The URL may not be a valid ActivityPub actor.";
-                        _linkIsError = true;
-                        return;
+                        isActivityPub = true;
+                        actorAPUri = remoteActor.Id;
+/*
+I don't know if this is the best UX
+                        // Auto-populate name and description from actor if not already provided
+                        if (string.IsNullOrWhiteSpace(_newLinkDescription))
+                        {
+                            var rawDesc = remoteActor.Summary ?? remoteActor.Name;
+                            if (!string.IsNullOrEmpty(rawDesc))
+                            {
+                                // Strip HTML tags and decode entities
+                                rawDesc = System.Text.RegularExpressions.Regex.Replace(rawDesc, "<[^>]+>", "");
+                                rawDesc = System.Net.WebUtility.HtmlDecode(rawDesc).Trim();
+                            }
+                            _newLinkDescription = rawDesc;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(_newLinkName) || _newLinkName.Trim() == _newLinkUrl.Trim())
+                        {
+                            _newLinkName = remoteActor.Name ?? remoteActor.PreferredUsername ?? _newLinkName;
+                        }*/
                     }
-
-                    var (followSuccess, followError) = await FollowService.SendFollowRequestAsync(
-                        _newLinkUrl.Trim(), remoteActor.Inbox, _currentUserDb, actorId);
-
-                    if (!followSuccess)
-                    {
-                        _linkMessage = $"Cannot enable AutoBoost: failed to follow the actor. {followError}";
-                        _linkIsError = true;
-                        return;
-                    }
-
-                    // Record the follow in the domain-level index for shared inbox fan-out
-                    await DomainDb.AddFollowingAsync(_currentUserSlug!, _newLinkUrl.Trim());
                 }
-                catch (Exception ex)
-                {
-                    _linkMessage = $"Cannot enable AutoBoost: {ex.Message}";
-                    _linkIsError = true;
-                    return;
-                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogInformation("ActivityPub probe failed for {Url}: {Message}", _newLinkUrl, ex.Message);
+                // Not an AP actor — that's fine, continue adding as a normal link
             }
 
             await _currentUserDb.UpsertLinkAsync(
-                _newLinkName.Trim(), 
+                _newLinkName!.Trim(), 
                 _newLinkUrl.Trim(), 
                 effectiveIcon, 
                 _newLinkDescription?.Trim(),
-                _newLinkAutoBoost, 
+                autoBoost: false, 
                 category: string.IsNullOrWhiteSpace(effectiveCategory) ? null : effectiveCategory,
-                hidden: _newLinkHidden
+                hidden: _newLinkHidden,
+                isActivityPub: isActivityPub,
+                actorAPUri: actorAPUri
             );
 
-            _linkMessage = _newLinkAutoBoost 
-                ? "Link added successfully! Follow request sent to the actor."
-                : "Link added successfully!";
-            _newLinkName = null;
-            _newLinkUrl = null;
-            _newLinkIcon = null;
-            _selectedIconKey = null;
-            _customIconUrl = null;
-            _iconDropdownOpen = false;
-            _newLinkDescription = null;
-            _newLinkCategory = null;
-            _customCategory = null;
-            _newLinkAutoBoost = false;
-            _newLinkHidden = false;
-            RebuildAvailableCategories();
+            _linkMessage = isActivityPub 
+                ? "Link added! ActivityPub actor detected — you can enable AutoBoost."
+                : "Link added!";
+            _addingNewLink = false;
             await LoadLinks();
+            await RegenerateStaticProfileAsync();
         }
         catch (Exception ex)
         {
@@ -808,20 +1486,7 @@
         }
     }
 
-    private void ToggleIconDropdown()
-    {
-        _iconDropdownOpen = !_iconDropdownOpen;
-    }
-
-    private void SelectIcon(string? key)
-    {
-        _selectedIconKey = key;
-        _iconDropdownOpen = false;
-        if (key != "__custom__")
-            _customIconUrl = null;
-    }
-
-    private async Task DeleteLink(int linkId)
+    private async Task DeleteLinkById(int linkId)
     {
         if (_currentUserDb == null) return;
         _linkMessage = null;
@@ -830,20 +1495,19 @@
 
         try
         {
-            // If the link had AutoBoost, clean up the domain-level Following index
-            var link = _links?.FirstOrDefault(l => Convert.ToInt32(l["Id"]) == linkId);
-            if (link != null && Convert.ToInt32(link["AutoBoost"]) == 1 && !string.IsNullOrEmpty(_currentUserSlug))
+            var link = _editableLinks?.FirstOrDefault(l => l.Id == linkId);
+            if (link != null && link.AutoBoost && !string.IsNullOrEmpty(_currentUserSlug))
             {
-                var actorUrl = link["Url"]?.ToString();
-                if (!string.IsNullOrEmpty(actorUrl))
+                if (!string.IsNullOrEmpty(link.Url))
                 {
-                    await DomainDb.RemoveFollowingAsync(_currentUserSlug, actorUrl);
+                    await DomainDb.RemoveFollowingAsync(_currentUserSlug, link.ActorAPUri ?? link.Url);
                 }
             }
 
             await _currentUserDb.DeleteLinkAsync(linkId);
             _linkMessage = "Link deleted.";
             await LoadLinks();
+            await RegenerateStaticProfileAsync();
         }
         catch (Exception ex)
         {
@@ -856,27 +1520,45 @@
         }
     }
 
+    // ===== Badge Issuers =====
+
     private async Task LoadBadgeIssuers()
     {
         if (_currentUserDb == null) return;
         try
         {
             var issuers = await _currentUserDb.GetBadgeIssuersAsync();
-            _badgeIssuers = issuers.Cast<Dictionary<string, object>>().ToList();
+            _badgeIssuers = issuers;
         }
         catch
         {
-            _badgeIssuers = new List<Dictionary<string, object>>();
+            _badgeIssuers = new List<BadgeIssuer>();
         }
     }
 
-    /// <summary>
-    /// Merges the default categories with any custom categories found in existing links.
-    /// </summary>
+    // ===== Followers =====
+
+    private async Task LoadFollowers()
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            _followers = await _currentUserDb.GetFollowersAsync();
+            _followerCount = _followers.Count;
+        }
+        catch
+        {
+            _followers = new List<Follower>();
+            _followerCount = 0;
+        }
+    }
+
+    // ===== Helpers =====
+
     private void RebuildAvailableCategories()
     {
-        var custom = (_links ?? new())
-            .Select(l => l.TryGetValue("Category", out var v) ? v?.ToString() : null)
+        var custom = (_editableLinks ?? new())
+            .Select(l => l.Category)
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Select(c => c!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -887,9 +1569,74 @@
         _availableCategories.AddRange(custom);
     }
 
+    // ===== Danger Zone =====
+
+    private void CancelDeleteAccount()
+    {
+        _deleteAccountConfirming = false;
+        _deleteAccountConfirmText = null;
+        _deleteAccountMessage = null;
+        _deleteAccountIsError = false;
+    }
+
+    private async Task DeleteMyAccount()
+    {
+        if (_deleteAccountConfirmText != _currentUserSlug || string.IsNullOrEmpty(_currentUserSlug))
+            return;
+
+        _deleteAccountMessage = null;
+        _deleteAccountIsError = false;
+        _isProcessing = true;
+
+        try
+        {
+            var success = await DomainDb.HardDeleteUserAsync(_currentUserSlug);
+            if (success)
+            {
+                Navigation.NavigateTo("/logout", forceLoad: true);
+            }
+            else
+            {
+                _deleteAccountMessage = "Failed to delete account. Please try again.";
+                _deleteAccountIsError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _deleteAccountMessage = $"Error deleting account: {ex.Message}";
+            _deleteAccountIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
     private string TruncateUrl(string? url)
     {
         if (string.IsNullOrEmpty(url)) return "-";
         return url.Length > 50 ? url.Substring(0, 47) + "..." : url;
+    }
+
+    /// <summary>
+    /// Regenerates the static profile HTML for the current user.
+    /// Called after any profile or link change so that crawlers (e.g. Mastodon
+    /// rel="me" verification) see up-to-date content without executing JS.
+    /// </summary>
+    private async Task RegenerateStaticProfileAsync()
+    {
+        if (_currentUserDb == null || string.IsNullOrEmpty(_currentUserSlug)) return;
+        try
+        {
+            var httpContext = HttpContextAccessor.HttpContext;
+            var scheme = httpContext?.Request.Scheme ?? "https";
+            var fullDomain = httpContext?.Request.Host.ToString() ?? _currentDomain ?? "localhost";
+            var baseDomain = $"{scheme}://{fullDomain}";
+            await ProfileHtml.GenerateAsync(_currentUserDb, _currentUserSlug, baseDomain);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to regenerate static profile for {User}", _currentUserSlug);
+        }
     }
 }

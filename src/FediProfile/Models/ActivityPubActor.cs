@@ -67,6 +67,17 @@ public class ActivityPubActor
     [JsonPropertyName("attachment")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<LinkAttachment>? Attachment { get; set; }
+
+    [JsonPropertyName("_fediprofile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FediProfileExtension? FediProfile { get; set; }
+}
+
+public class FediProfileExtension
+{
+    [JsonPropertyName("theme")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Theme { get; set; }
 }
 
 public class PublicKeyDefinition
