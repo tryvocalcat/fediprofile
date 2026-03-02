@@ -1,0 +1,260 @@
+:root {
+  color-scheme: dark;
+  --bg: #000005;
+  --ink: #e0e6ff;
+  --accent: #7b8fff;
+  --accent-hover: #a4b4ff;
+  --card: rgba(10, 10, 30, 0.8);
+  --card-hover: rgba(20, 20, 50, 0.85);
+  --border: rgba(100, 120, 255, 0.15);
+  --shadow: rgba(80, 100, 255, 0.1);
+  --link-hover: rgba(123, 143, 255, 0.08);
+}
+
+/* ── full-screen hyperspace starfield (GPU-composited) ── */
+body {
+  background: #000005;
+  overflow: hidden;
+  position: relative;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+
+/* Layer 1 — fast white streaking stars */
+body::before {
+  background:
+    radial-gradient(1.5px 1.5px at  5%  8%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 12% 22%, #dde 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 20% 45%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 28% 67%, #ccf 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 35% 15%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 42% 88%, #eef 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 35%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 58% 72%, #ddf 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 65% 52%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 72% 10%, #ccf 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 80% 92%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 88% 38%, #eef 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 95% 60%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 18% 55%, #ddf 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 45% 95%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at 68% 82%, #ccf 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 85% 25%, #fff 50%, transparent 100%),
+    radial-gradient(1px   1px   at  3% 42%, #eef 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 62% 5%,  #fff 50%, transparent 100%);
+  background-size: 50% 50%;
+  opacity: 0.9;
+  animation: hyperDrift1 20s linear infinite;
+}
+
+/* Layer 2 — bigger blue/white stars, slightly slower */
+body::after {
+  background:
+    radial-gradient(2.5px 2.5px at 10% 15%, #a4b4ff 40%, transparent 100%),
+    radial-gradient(3px   3px   at 25% 50%, #c4d0ff 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 40% 80%, #8b9eff 40%, transparent 100%),
+    radial-gradient(3px   3px   at 55% 25%, #bbc8ff 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 70% 65%, #a4b4ff 40%, transparent 100%),
+    radial-gradient(3px   3px   at 85% 40%, #c4d0ff 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 15% 90%, #8b9eff 40%, transparent 100%),
+    radial-gradient(3px   3px   at 48% 55%, #bbc8ff 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 60% 10%, #a4b4ff 40%, transparent 100%),
+    radial-gradient(3px   3px   at 33% 35%, #dde4ff 40%, transparent 100%);
+  background-size: 50% 50%;
+  opacity: 0.7;
+  animation: hyperDrift2 35s linear infinite;
+}
+
+/* GPU-friendly: animate transform (compositor-only, no repaints) */
+@keyframes hyperDrift1 {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, -50%, 0); }
+}
+
+@keyframes hyperDrift2 {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, -50%, 0); }
+}
+
+/* Respect user's reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
+  }
+}
+
+/* Card floats above the starfield */
+.card {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  padding: 48px;
+  border-radius: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 0 40px rgba(80, 100, 255, 0.08),
+    0 0 80px rgba(80, 100, 255, 0.04);
+  backdrop-filter: blur(16px);
+  animation: cardAppear 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+h1 {
+  font-size: 2.8rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.02em;
+  color: transparent;
+  background: linear-gradient(135deg, #7b8fff 0%, #c4d0ff 50%, #a4b4ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: none;
+}
+
+.subtitle {
+  color: #7a84b0;
+  text-align: center;
+}
+
+h2 {
+  color: #7b8fff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+}
+
+h2::before,
+h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+.link-card {
+  background: rgba(15, 15, 40, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: all 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 3px 3px 0 rgba(80, 100, 255, 0.1);
+}
+
+.link-card:hover {
+  background: rgba(25, 25, 60, 0.7);
+  border-color: var(--accent);
+  transform: translate(-2px, -2px);
+  box-shadow:
+    5px 5px 0 var(--accent),
+    0 0 20px rgba(123, 143, 255, 0.15);
+}
+
+.link-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, #7b8fff, #a4b4ff);
+  transform: scaleY(0);
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom;
+}
+
+.link-card:hover::before {
+  transform: scaleY(1);
+}
+
+.link-icon {
+  border-radius: 10px;
+}
+
+.link-content strong {
+  color: var(--ink);
+}
+
+.link-content p {
+  color: #7a84b0;
+}
+
+.boost-badge {
+  background: linear-gradient(135deg, #7b8fff 0%, #a4b4ff 100%);
+  color: #05050f;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(123, 143, 255, 0.3);
+}
+
+.info-section {
+  border-top: 1px solid var(--border);
+}
+
+.info-section summary {
+  color: #7a84b0;
+  transition: color 200ms;
+}
+
+.info-section summary:hover {
+  color: var(--accent);
+}
+
+.info-section ul {
+  color: #7a84b0;
+}
+
+.info-section code {
+  background: rgba(123, 143, 255, 0.12);
+  color: var(--accent);
+}
+
+@keyframes cardAppear {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 32px 24px;
+  }
+  h1 {
+    font-size: 2.2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 24px 20px;
+  }
+  h1 {
+    font-size: 1.8rem;
+  }
+  .link-card {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .link-icon {
+    width: 36px;
+    height: 36px;
+  }
+}

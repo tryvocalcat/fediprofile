@@ -198,6 +198,9 @@ public class DomainScopedDb : LocalDbService
             // Ensure the Following index table exists
             EnsureFollowingTable();
 
+            // Ensure Jobs and JobLogs tables exist
+            EnsureJobsTables();
+
             connection.Close();
         }
         catch (Exception ex)
@@ -770,6 +773,59 @@ public class DomainScopedDb : LocalDbService
         catch (Exception ex)
         {
             Console.WriteLine($"[Warning] Error ensuring Following table: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Ensures the Jobs and JobLogs tables exist.
+    /// Called during startup/migration.
+    /// </summary>
+    public void EnsureJobsTables()
+    {
+        try
+        {
+            using var connection = GetConnection();
+            connection.Open();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"
+                CREATE TABLE IF NOT EXISTS Jobs (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    JobType TEXT NOT NULL,
+                    Status TEXT NOT NULL DEFAULT 'pending',
+                    Payload TEXT NULL,
+                    ActorUri TEXT NULL,
+                    MaxRetries INTEGER NOT NULL DEFAULT 3,
+                    CurrentRetry INTEGER NOT NULL DEFAULT 0,
+                    LastError TEXT NULL,
+                    Priority INTEGER NOT NULL DEFAULT 0,
+                    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    ScheduledFor DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    StartedAt DATETIME NULL,
+                    CompletedAt DATETIME NULL,
+                    ProcessedAt DATETIME NULL,
+                    CreatedBy TEXT NULL,
+                    Notes TEXT NULL
+                );
+                CREATE INDEX IF NOT EXISTS IX_Jobs_Status_Created ON Jobs(Status, CreatedAt);
+                CREATE INDEX IF NOT EXISTS IX_Jobs_Status_Scheduled ON Jobs(Status, ScheduledFor);
+                CREATE INDEX IF NOT EXISTS IX_Jobs_ActorUri ON Jobs(ActorUri);
+                CREATE INDEX IF NOT EXISTS IX_Jobs_Type_Actor ON Jobs(JobType, ActorUri);
+
+                CREATE TABLE IF NOT EXISTS JobLogs (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    JobId INTEGER NOT NULL,
+                    Message TEXT NOT NULL,
+                    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (JobId) REFERENCES Jobs(Id)
+                );
+                CREATE INDEX IF NOT EXISTS IX_JobLogs_JobId ON JobLogs(JobId);
+            ";
+            cmd.ExecuteNonQuery();
+            connection.Close();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Warning] Error ensuring Jobs tables: {ex.Message}");
         }
     }
 

@@ -1,0 +1,711 @@
+@page "/admin/root"
+@using Microsoft.AspNetCore.Components
+@using System.Security.Claims
+@using System.Text.Json
+@attribute [Authorize]
+@layout FediProfile.Components.Layouts.MainLayout
+@rendermode InteractiveServer
+
+@inject DomainScopedDb DomainDb
+@inject LocalDbFactory DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ILogger<AdminRoot> Logger
+@inject NavigationManager Navigation
+
+<section class="admin-shell">
+    <header class="admin-header">
+        <div>
+            <h1 class="admin-title">Root Administration</h1>
+            <p class="admin-subtitle">Domain-level management for root users.</p>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+            <a class="button button-ghost" href="/admin/">Back to Admin</a>
+            <a class="button button-ghost" href="/logout">Logout</a>
+        </div>
+    </header>
+
+    @if (!_isAuthorized || !_isRootUser)
+    {
+        <div class="admin-section">
+            <article class="card">
+                <div class="alert alert-error">
+                    You do not have permission to access this page. Only the root user can manage domain settings.
+                </div>
+            </article>
+        </div>
+    }
+    else
+    {
+        <!-- Tabs -->
+        <div class="admin-tabs">
+            <button class="admin-tab @(_activeTab == "users" ? "admin-tab-active" : "")"
+                    @onclick='() => SetTab("users")'>Users</button>
+            <button class="admin-tab @(_activeTab == "jobs" ? "admin-tab-active" : "")"
+                    @onclick='() => SetTab("jobs")'>Job Queue</button>
+        </div>
+
+        <!-- Users Tab -->
+        @if (_activeTab == "users")
+        {
+            <div class="admin-section">
+                <article class="card">
+                    <h2>User Management</h2>
+                    <p class="muted">Register new users into the system</p>
+
+                    @if (!string.IsNullOrEmpty(_message))
+                    {
+                        <div class="alert @(_isError ? "alert-error" : "alert-success")">
+                            @_message
+                        </div>
+                    }
+
+                    <form @onsubmit="CreateUser" class="admin-form">
+                        <div class="form-group">
+                            <label for="userSlug">User Slug (username)</label>
+                            <input type="text" id="userSlug" @bind="_newUserSlug" required
+                                   placeholder="e.g., john-doe" pattern="[a-zA-Z0-9_-]+"
+                                   class="form-control" />
+                            <small>Only letters, numbers, hyphens, and underscores allowed</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="displayName">Display Name (optional)</label>
+                            <input type="text" id="displayName" @bind="_newDisplayName"
+                                   placeholder="e.g., John Doe" class="form-control" />
+                        </div>
+
+                        <button type="submit" class="button button-primary" disabled="@_isProcessing">
+                            @(_isProcessing ? "Creating..." : "Create User")
+                        </button>
+                    </form>
+
+                    <div class="admin-section">
+                        <h3>Registered Users</h3>
+                        @if (_users == null)
+                        {
+                            <p>Loading users...</p>
+                        }
+                        else if (!_users.Any())
+                        {
+                            <p>No users registered yet.</p>
+                        }
+                        else
+                        {
+                            <table class="user-table">
+                                <thead>
+                                    <tr>
+                                        <th>Slug</th>
+                                        <th>Display Name</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var user in _users)
+                                    {
+                                        <tr>
+                                            <td><strong>@user.Slug</strong></td>
+                                            <td>@(user.DisplayName ?? "-")</td>
+                                            <td>@user.CreatedUtc</td>
+                                            <td>
+                                                <a href="/@user.Slug" target="_blank" class="button button-small">View</a>
+                                                @if (user.Slug != "root")
+                                                {
+                                                    <button @onclick="() => CreateUserDatabase(user.Slug)"
+                                                            class="button button-small button-secondary"
+                                                            disabled="@_isProcessing">
+                                                        Init DB
+                                                    </button>
+                                                    <button @onclick="() => DeleteUser(user.Slug)"
+                                                            class="button button-small button-danger"
+                                                            disabled="@_isProcessing">
+                                                        Delete
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </article>
+            </div>
+        }
+
+        <!-- Jobs Tab -->
+        @if (_activeTab == "jobs")
+        {
+            <div class="admin-section">
+                <article class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                        <div>
+                            <h2 style="margin:0">Job Queue</h2>
+                            <p class="muted" style="margin:0.25rem 0 0">Background ActivityPub job processing</p>
+                        </div>
+                        <button class="button button-ghost button-small" @onclick="LoadJobs">
+                            Refresh
+                        </button>
+                    </div>
+
+                    @if (_jobs == null)
+                    {
+                        <p>Loading jobs...</p>
+                    }
+                    else if (!_jobs.Any())
+                    {
+                        <p class="muted">No jobs in the queue yet.</p>
+                    }
+                    else
+                    {
+                        <!-- Status filter -->
+                        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">
+                            <button class="button button-small @(_jobFilter == null ? "button-primary" : "button-ghost")"
+                                    @onclick="() => _jobFilter = null">All (@_jobs.Count)</button>
+                            @foreach (var grp in _jobs.GroupBy(j => j.Status).OrderBy(g => g.Key))
+                            {
+                                <button class="button button-small @(_jobFilter == grp.Key ? "button-primary" : "button-ghost")"
+                                        @onclick="@(() => _jobFilter = grp.Key)">@grp.Key (@grp.Count())</button>
+                            }
+                        </div>
+
+                        <div class="jobs-table-wrap">
+                            <table class="user-table jobs-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Type</th>
+                                        <th>Status</th>
+                                        <th>Actor</th>
+                                        <th>Retries</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var job in FilteredJobs)
+                                    {
+                                        <tr class="@GetJobRowClass(job)" @onclick="() => SelectJob(job)" style="cursor:pointer">
+                                            <td>@job.Id</td>
+                                            <td><span class="job-type-badge">@job.JobType</span></td>
+                                            <td><span class="job-status job-status-@job.Status">@job.Status</span></td>
+                                            <td class="job-actor-cell" title="@job.ActorUri">@TruncateActor(job.ActorUri)</td>
+                                            <td>@job.CurrentRetry/@job.MaxRetries</td>
+                                            <td class="job-date-cell">@job.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                            <td>
+                                                <button class="button button-small button-ghost" @onclick="() => SelectJob(job)" @onclick:stopPropagation="true">
+                                                    Details
+                                                </button>
+                                                @if (job.Status == "failed")
+                                                {
+                                                    <button class="button button-small button-secondary" @onclick="() => RetryJob(job.Id)" @onclick:stopPropagation="true"
+                                                            disabled="@_isProcessing">
+                                                        Retry
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </article>
+
+                <!-- Job Detail Panel -->
+                @if (_selectedJob != null)
+                {
+                    <article class="card admin-card-spaced">
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <h3 style="margin:0">Job #@_selectedJob.Id — @_selectedJob.JobType</h3>
+                            <button class="button button-ghost button-small" @onclick="() => _selectedJob = null">Close</button>
+                        </div>
+
+                        <div class="job-detail-grid">
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Status</span>
+                                <span class="job-status job-status-@_selectedJob.Status">@_selectedJob.Status</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Actor URI</span>
+                                <span>@(_selectedJob.ActorUri ?? "—")</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Created</span>
+                                <span>@_selectedJob.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Scheduled For</span>
+                                <span>@_selectedJob.ScheduledFor.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Started</span>
+                                <span>@(_selectedJob.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Completed</span>
+                                <span>@(_selectedJob.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Retries</span>
+                                <span>@_selectedJob.CurrentRetry / @_selectedJob.MaxRetries</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Created By</span>
+                                <span>@(_selectedJob.CreatedBy ?? "—")</span>
+                            </div>
+                            <div class="job-detail-row">
+                                <span class="job-detail-label">Notes</span>
+                                <span>@(_selectedJob.Notes ?? "—")</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(_selectedJob.LastError))
+                            {
+                                <div class="job-detail-row">
+                                    <span class="job-detail-label">Last Error</span>
+                                    <span class="job-error-text">@_selectedJob.LastError</span>
+                                </div>
+                            }
+                        </div>
+
+                        @if (_selectedJob.Status == "failed")
+                        {
+                            <div style="margin-top:1rem">
+                                <button class="button button-secondary" @onclick="() => RetryJob(_selectedJob.Id)" disabled="@_isProcessing">
+                                    Retry This Job
+                                </button>
+                            </div>
+                        }
+
+                        <!-- Payload -->
+                        <div style="margin-top:1.5rem">
+                            <h4 style="margin-bottom:0.5rem">Payload</h4>
+                            @if (string.IsNullOrEmpty(_selectedJob.Payload))
+                            {
+                                <p class="muted">No payload.</p>
+                            }
+                            else
+                            {
+                                <pre class="job-payload-pre">@FormatJson(_selectedJob.Payload)</pre>
+                            }
+                        </div>
+
+                        <!-- Logs -->
+                        <div style="margin-top:1.5rem">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+                                <h4 style="margin:0">Logs</h4>
+                                <button class="button button-ghost button-small" @onclick="LoadSelectedJobLogs">Refresh</button>
+                            </div>
+                            @if (_selectedJobLogs == null)
+                            {
+                                <p>Loading logs...</p>
+                            }
+                            else if (!_selectedJobLogs.Any())
+                            {
+                                <p class="muted">No log entries.</p>
+                            }
+                            else
+                            {
+                                <div class="job-logs-list">
+                                    @foreach (var log in _selectedJobLogs)
+                                    {
+                                        <div class="job-log-entry @(log.Message.StartsWith("FAILED") || log.Message.StartsWith("RETRY") ? "job-log-error" : "")">
+                                            <span class="job-log-time">@log.CreatedAt.ToString("HH:mm:ss")</span>
+                                            <span class="job-log-msg">@log.Message</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    }
+</section>
+
+<style>
+    /* Tabs */
+    .admin-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--border, #e0e0e0);
+        margin-bottom: 1.5rem;
+    }
+    .admin-tab {
+        padding: 0.6rem 1.4rem;
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--text-muted, #888);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .admin-tab:hover { color: var(--text, #222); }
+    .admin-tab-active {
+        color: var(--primary, #6366f1);
+        border-bottom-color: var(--primary, #6366f1);
+    }
+
+    /* Jobs table */
+    .jobs-table-wrap { overflow-x: auto; }
+    .jobs-table td, .jobs-table th { white-space: nowrap; font-size: 0.88rem; }
+    .job-type-badge {
+        background: var(--bg-secondary, #f0f0f0);
+        padding: 0.15rem 0.55rem;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.82rem;
+    }
+    .job-status {
+        display: inline-block;
+        padding: 0.15rem 0.6rem;
+        border-radius: 10px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .job-status-pending { background: #fef3c7; color: #92400e; }
+    .job-status-processing { background: #dbeafe; color: #1e40af; }
+    .job-status-completed { background: #d1fae5; color: #065f46; }
+    .job-status-failed { background: #fee2e2; color: #991b1b; }
+    .job-actor-cell {
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .job-date-cell { font-size: 0.82rem; color: var(--text-muted, #888); }
+    tr.job-row-failed { background: #fff5f5; }
+
+    /* Job detail */
+    .job-detail-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.35rem 1rem;
+        margin-top: 1rem;
+        font-size: 0.9rem;
+    }
+    .job-detail-row { display: contents; }
+    .job-detail-label {
+        font-weight: 600;
+        color: var(--text-muted, #888);
+        white-space: nowrap;
+    }
+    .job-error-text { color: #dc3545; word-break: break-word; }
+
+    /* Payload */
+    .job-payload-pre {
+        background: var(--bg-secondary, #f5f5f5);
+        border: 1px solid var(--border, #e0e0e0);
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        font-size: 0.8rem;
+        overflow-x: auto;
+        max-height: 320px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    /* Logs */
+    .job-logs-list {
+        border: 1px solid var(--border, #e0e0e0);
+        border-radius: 6px;
+        max-height: 280px;
+        overflow-y: auto;
+    }
+    .job-log-entry {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.84rem;
+        border-bottom: 1px solid var(--border-light, #f0f0f0);
+    }
+    .job-log-entry:last-child { border-bottom: none; }
+    .job-log-error { background: #fff5f5; }
+    .job-log-time {
+        font-family: monospace;
+        color: var(--text-muted, #888);
+        white-space: nowrap;
+        font-size: 0.8rem;
+    }
+    .job-log-msg { word-break: break-word; }
+</style>
+
+@code {
+    private bool _isAuthorized;
+    private bool _isRootUser;
+    private string? _currentUserSlug;
+    private string _activeTab = "users";
+    private bool _isProcessing;
+
+    // Users tab
+    private string? _newUserSlug;
+    private string? _newDisplayName;
+    private string? _message;
+    private bool _isError;
+    private List<(int Id, string Slug, string? DisplayName, string CreatedUtc)>? _users;
+
+    // Jobs tab
+    private List<SimpleJob>? _jobs;
+    private string? _jobFilter;
+    private SimpleJob? _selectedJob;
+    private List<SimpleJobLog>? _selectedJobLogs;
+
+    private IEnumerable<SimpleJob> FilteredJobs =>
+        _jobFilter == null ? (_jobs ?? Enumerable.Empty<SimpleJob>())
+                           : (_jobs ?? Enumerable.Empty<SimpleJob>()).Where(j => j.Status == _jobFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
+        var mastodonHost = state.User.FindFirst("urn:mastodon:hostname")?.Value;
+
+        _isAuthorized = false;
+        _isRootUser = false;
+
+        if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonHost))
+        {
+            var dbUser = await DomainDb.GetUserByMastodonAsync(mastodonUser, mastodonHost);
+            if (dbUser.HasValue)
+            {
+                _currentUserSlug = dbUser.Value.Slug;
+                _isAuthorized = true;
+                _isRootUser = _currentUserSlug.Equals("root", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        if (_isRootUser)
+        {
+            await LoadUsers();
+            LoadJobs();
+        }
+    }
+
+    private void SetTab(string tab)
+    {
+        _activeTab = tab;
+        if (tab == "jobs") LoadJobs();
+    }
+
+    // ===== Users =====
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            _users = await DomainDb.GetAllUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error loading users: {ex.Message}";
+            _isError = true;
+        }
+    }
+
+    private async Task CreateUser()
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_newUserSlug))
+            {
+                _message = "User slug is required";
+                _isError = true;
+                return;
+            }
+
+            if (!System.Text.RegularExpressions.Regex.IsMatch(_newUserSlug, @"^[a-zA-Z0-9_-]+$"))
+            {
+                _message = "Invalid slug format. Only letters, numbers, hyphens, and underscores allowed.";
+                _isError = true;
+                return;
+            }
+
+            var (id, slug) = await DomainDb.CreateOrGetUserAsync(_newUserSlug.Trim().ToLowerInvariant(), _newDisplayName?.Trim());
+            _message = $"User '{slug}' created successfully!";
+            _isError = false;
+            _newUserSlug = null;
+            _newDisplayName = null;
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error creating user: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task CreateUserDatabase(string userSlug)
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            var userDb = new UserScopedDb(DomainDb.GetDomain() ?? "localhost", userSlug, autoCreate: true);
+            await userDb.GetSettingsAsync();
+
+            var (existingPubKey, _) = await userDb.GetActorKeysAsync();
+            if (string.IsNullOrEmpty(existingPubKey))
+            {
+                var keyPair = await CryptoService.GenerateKeyPairAsync();
+                await userDb.SetActorKeysAsync(keyPair.PublicKeyPem, keyPair.PrivateKeyPem);
+            }
+
+            _message = $"Database for user '{userSlug}' initialized successfully!";
+            _isError = false;
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error creating database: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task DeleteUser(string userSlug)
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            var success = await DomainDb.DeleteUserAsync(userSlug);
+            if (success)
+            {
+                _message = $"User '{userSlug}' has been deleted.";
+                _isError = false;
+                await LoadUsers();
+            }
+            else
+            {
+                _message = $"User '{userSlug}' not found.";
+                _isError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error deleting user: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    // ===== Jobs =====
+
+    private void LoadJobs()
+    {
+        try
+        {
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            var domainDb = DbFactory.GetInstance(domain);
+            var jobQueue = new JobQueueService(domainDb);
+            _jobs = jobQueue.GetAllJobs(200);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading jobs");
+            _jobs = new List<SimpleJob>();
+        }
+    }
+
+    private void SelectJob(SimpleJob job)
+    {
+        _selectedJob = job;
+        LoadSelectedJobLogs();
+    }
+
+    private void LoadSelectedJobLogs()
+    {
+        if (_selectedJob == null) return;
+        try
+        {
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            var domainDb = DbFactory.GetInstance(domain);
+            var jobQueue = new JobQueueService(domainDb);
+            _selectedJobLogs = jobQueue.GetJobLogs(_selectedJob.Id);
+            // Refresh the job itself too
+            _selectedJob = jobQueue.GetJobById(_selectedJob.Id) ?? _selectedJob;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading job logs for job {JobId}", _selectedJob.Id);
+            _selectedJobLogs = new List<SimpleJobLog>();
+        }
+    }
+
+    private async Task RetryJob(long jobId)
+    {
+        _isProcessing = true;
+        try
+        {
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            var domainDb = DbFactory.GetInstance(domain);
+            var jobQueue = new JobQueueService(domainDb);
+            await jobQueue.RetryJobAsync(jobId);
+            LoadJobs();
+            if (_selectedJob?.Id == jobId)
+            {
+                _selectedJob = jobQueue.GetJobById(jobId);
+                LoadSelectedJobLogs();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error retrying job {JobId}", jobId);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    // ===== Helpers =====
+
+    private static string TruncateActor(string? actorUri)
+    {
+        if (string.IsNullOrEmpty(actorUri)) return "—";
+        if (Uri.TryCreate(actorUri, UriKind.Absolute, out var uri))
+        {
+            // Show host + path for readability
+            var display = $"{uri.Host}{uri.AbsolutePath}";
+            return display.Length > 40 ? display[..37] + "..." : display;
+        }
+        return actorUri.Length > 40 ? actorUri[..37] + "..." : actorUri;
+    }
+
+    private static string GetJobRowClass(SimpleJob job) =>
+        job.Status == "failed" ? "job-row-failed" : "";
+
+    private static string FormatJson(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return json;
+        }
+    }
+}

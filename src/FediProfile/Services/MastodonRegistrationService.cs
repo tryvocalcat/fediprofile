@@ -22,7 +22,7 @@ namespace FediProfile.Services
             _clientName = clientName;
             _website = website;
             _redirectUris = redirectUris ?? throw new ArgumentNullException(nameof(redirectUris));
-            _scopes = scopes ?? new[] { "profile", "read", "read:accounts", "read:statuses" };
+            _scopes = scopes ?? new[] { "read:accounts" };
         }
 
         public async Task<JsonDocument> RegisterApplicationAsync(string instanceUrl)
