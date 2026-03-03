@@ -20,10 +20,12 @@ public static class Themes
     /// </summary>
     public static readonly IReadOnlyList<ThemeOption> All = new List<ThemeOption>
     {
-        new("theme-classic.css",  "Classic"),
-        new("theme-midnight.css", "Midnight"),
-        new("theme-ocean.css",    "Ocean"),
-        new("theme-sunset.css",   "Sunset"),
+        new("theme-classic.css",    "Classic"),
+        new("theme-midnight.css",   "Midnight"),
+        new("theme-ocean.css",      "Ocean"),
+        new("theme-sunset.css",     "Sunset"),
+        new("theme-hyperspace.css", "Hyperspace"),
+        new("theme-stars.css",      "Stars"),
     };
 
     /// <summary>

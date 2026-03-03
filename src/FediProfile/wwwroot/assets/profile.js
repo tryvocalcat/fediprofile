@@ -143,4 +143,34 @@ document.addEventListener('DOMContentLoaded', () => {
   loadProfile();
   populateFediHandle();
   initCopyButton();
+  initShareButton();
 });
+
+// Share profile via Web Share API or clipboard fallback
+function initShareButton() {
+  const btn = document.getElementById('share-profile');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const url = window.location.href;
+    const name = document.getElementById('profile-name')?.textContent || 'FediProfile';
+    const shareData = {
+      title: name,
+      text: 'Check out ' + name + "'s profile",
+      url: url
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(url);
+        const original = btn.innerHTML;
+        btn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+        setTimeout(() => { btn.innerHTML = original; }, 2000);
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Share failed:', err);
+      }
+    }
+  });
+}

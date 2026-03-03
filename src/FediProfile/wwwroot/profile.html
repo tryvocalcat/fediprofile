@@ -26,9 +26,15 @@
         <p>Loading your profile...</p>
       </div>
 
-      <div class="info-section">
-        <p class="fedi-handle">Follow me in the fediverse: <strong id="fedi-address"></strong> <button id="copy-fedi" class="copy-btn" title="Copy to clipboard">📋</button></p>
-        <p class="fedi-note">This is a read-only profile &mdash; it doesn&rsquo;t post or reply. It boosts and relays content from linked accounts.</p>
+      <div class="info-section" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <p class="fedi-handle">Follow me in the fediverse: <strong id="fedi-address"></strong> <button id="copy-fedi" class="copy-btn" title="Copy to clipboard">📋</button></p>
+          <p class="fedi-note">This is a read-only profile &mdash; it doesn&rsquo;t post or reply. It boosts and relays content from linked accounts.</p>
+        </div>
+        <button id="share-profile" class="share-btn" title="Share this profile">
+          <svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          Share
+        </button>
       </div>
 
       <div class="info-section">

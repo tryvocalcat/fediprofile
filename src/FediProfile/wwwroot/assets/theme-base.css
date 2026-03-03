@@ -237,3 +237,35 @@ h2 {
 .copy-btn:hover {
   background: var(--link-hover);
 }
+
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 200ms ease;
+  flex-shrink: 0;
+}
+
+.share-btn:hover {
+  background: var(--card-hover);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.share-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
