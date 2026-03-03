@@ -1,0 +1,366 @@
+/* ══════════════════════════════════════════════════════════
+   Theme: Stars — inspired by elena.social
+   A calm night-sky with twinkling stationary stars,
+   centered link cards with subtle borders, and soft glow effects.
+   ══════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0d17;
+  --ink: #e0e4f0;
+  --accent: #7ea0c4;
+  --accent-hover: #a8c8e8;
+  --card: rgba(14, 17, 30, 0.85);
+  --card-hover: rgba(22, 26, 44, 0.9);
+  --border: rgba(140, 165, 210, 0.15);
+  --shadow: rgba(0, 0, 0, 0.4);
+  --link-hover: rgba(126, 160, 196, 0.08);
+  --star-glow: rgba(180, 200, 255, 0.6);
+}
+
+/* ── Night sky background ── */
+body {
+  background: #0b0d17;
+  overflow-x: hidden;
+  position: relative;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ── Stars layers (stationary, twinkling) ── */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Layer 1 — small faint stars, slow twinkle */
+body::before {
+  background:
+    radial-gradient(1px 1px at  4%  7%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 11% 21%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 19% 44%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 27% 66%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 34% 14%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 41% 87%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 49% 34%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 57% 71%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 64% 51%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 71%  9%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 79% 91%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 87% 37%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 94% 59%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 17% 54%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 44% 94%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 67% 81%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 84% 24%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at  2% 41%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 52% 76%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 73% 47%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 38% 63%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at  8% 88%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 91% 16%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 23% 32%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 60% 4%,  #fff 50%, transparent 100%);
+  opacity: 0.8;
+  animation: twinkle1 6s ease-in-out infinite alternate;
+}
+
+/* Layer 2 — larger brighter stars, offset twinkle */
+body::after {
+  background:
+    radial-gradient(2px 2px at  9% 14%, var(--star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 24% 49%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 39% 79%, var(--star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 54% 24%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 69% 64%, var(--star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 84% 39%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 14% 89%, var(--star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 47% 54%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 76% 18%, var(--star-glow) 40%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 32% 6%,  #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 58% 92%, var(--star-glow) 40%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 90% 72%, #fff 40%, transparent 100%);
+  opacity: 0.65;
+  animation: twinkle2 8s ease-in-out infinite alternate;
+}
+
+/* ── Twinkle keyframes (gentle opacity pulse) ── */
+@keyframes twinkle1 {
+  0%   { opacity: 0.6; }
+  50%  { opacity: 0.9; }
+  100% { opacity: 0.7; }
+}
+
+@keyframes twinkle2 {
+  0%   { opacity: 0.5; }
+  50%  { opacity: 0.8; }
+  100% { opacity: 0.55; }
+}
+
+/* Respect user's reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
+    opacity: 0.7;
+  }
+  .card {
+    animation: none !important;
+  }
+  .link-card::after {
+    animation: none !important;
+  }
+}
+
+/* ── Card ── */
+.card {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  padding: 48px;
+  border-radius: 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 0 40px rgba(100, 140, 200, 0.06),
+    0 0 80px rgba(100, 140, 200, 0.03);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: cardFadeIn 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Heading: soft white, no gradient ─ matches elena.social style ── */
+h1 {
+  font-size: 2.6rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.01em;
+  color: #fff;
+  text-shadow: 0 0 30px rgba(180, 200, 255, 0.15);
+}
+
+.subtitle {
+  color: #8b95b0;
+  text-align: center;
+  font-size: 1rem;
+}
+
+/* ── Category headers with fading lines ── */
+h2 {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+h2::before,
+h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+/* ── Link cards: elena.social style — centered, rounded, subtle ── */
+.link-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px 24px;
+  background: rgba(12, 15, 28, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-decoration: none;
+  color: var(--ink);
+  transition: all 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 2px 2px 0 rgba(100, 140, 200, 0.06);
+}
+
+.link-card:hover {
+  background: rgba(20, 24, 44, 0.75);
+  border-color: rgba(140, 165, 210, 0.35);
+  transform: translate(-2px, -2px);
+  box-shadow:
+    4px 4px 0 rgba(126, 160, 196, 0.15),
+    0 0 20px rgba(126, 160, 196, 0.08);
+}
+
+/* Subtle left-edge glow on hover */
+.link-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, var(--accent), var(--accent-hover));
+  transform: scaleY(0);
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom;
+}
+
+.link-card:hover::before {
+  transform: scaleY(1);
+}
+
+/* Occasional shimmer across link cards */
+.link-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgba(180, 200, 255, 0.04) 45%,
+    rgba(180, 200, 255, 0.06) 50%,
+    rgba(180, 200, 255, 0.04) 55%,
+    transparent 60%
+  );
+  animation: shimmer 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0%, 100% { transform: translateX(-100%) rotate(10deg); }
+  50%      { transform: translateX(100%) rotate(10deg); }
+}
+
+.link-icon {
+  border-radius: 10px;
+}
+
+.link-content strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.link-content p {
+  color: #7a84a0;
+}
+
+/* ── Boost badge ── */
+.boost-badge {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color: #0b0d17;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(126, 160, 196, 0.25);
+}
+
+/* ── Info section ── */
+.info-section {
+  border-top: 1px solid var(--border);
+}
+
+.info-section summary {
+  color: #7a84a0;
+  transition: color 200ms;
+}
+
+.info-section summary:hover {
+  color: var(--accent);
+}
+
+.info-section ul {
+  color: #7a84a0;
+}
+
+.info-section code {
+  background: rgba(126, 160, 196, 0.1);
+  color: var(--accent);
+}
+
+/* ── Share button (elena.social inspired) ── */
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(12, 15, 28, 0.6);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+}
+
+.share-btn:hover {
+  background: rgba(20, 24, 44, 0.75);
+  border-color: rgba(140, 165, 210, 0.35);
+  color: var(--accent-hover);
+  box-shadow: 0 0 12px rgba(126, 160, 196, 0.12);
+}
+
+.share-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Card entrance ── */
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Profile avatar glow ring ── */
+.profile-avatar {
+  box-shadow: 0 0 24px rgba(126, 160, 196, 0.2),
+              0 0 48px rgba(126, 160, 196, 0.08);
+  border: 2px solid rgba(140, 165, 210, 0.25);
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .card {
+    padding: 32px 24px;
+  }
+  h1 {
+    font-size: 2.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 24px 20px;
+  }
+  h1 {
+    font-size: 1.8rem;
+  }
+  .link-card {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .link-icon {
+    width: 36px;
+    height: 36px;
+  }
+}
