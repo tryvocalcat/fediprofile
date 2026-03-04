@@ -12,6 +12,12 @@ public static class MastodonOAuthExtensions
     private static readonly Dictionary<string, (string clientId, string clientSecret)> _mastodonAppCache = new();
     private static readonly SemaphoreSlim _registrationSemaphore = new(1, 1);
 
+    /// <summary>
+    /// Look up cached Mastodon app credentials by hostname (used by callback middleware).
+    /// </summary>
+    public static bool TryGetCachedCredentials(string hostname, out (string clientId, string clientSecret) credentials)
+        => _mastodonAppCache.TryGetValue(hostname, out credentials);
+
     public static AuthenticationBuilder AddDynamicMastodon(
         this AuthenticationBuilder builder,
         Action<OAuthOptions> configureOptions,
@@ -43,10 +49,7 @@ public static class MastodonOAuthExtensions
 
                     var (clientId, clientSecret) = await GetOrRegisterMastodonAppAsync(hostname, context.HttpContext.RequestServices);
 
-                    context.Properties.Items["mastodon_client_id"] = clientId;
-                    context.Properties.Items["mastodon_client_secret"] = clientSecret;
-                    context.Properties.Items["mastodon_hostname"] = hostname;
-
+                    // Only mastodon_server stays in state; credentials are looked up from cache on callback
                     var authUrl = $"https://{hostname}/oauth/authorize";
                     var request = context.HttpContext.Request;
                     var fullRedirectUri = $"{request.Scheme}://{request.Host}{context.Options.CallbackPath}";
@@ -74,10 +77,7 @@ public static class MastodonOAuthExtensions
                     var userInfoEndpoint = $"https://{hostname}/api/v1/accounts/verify_credentials";
                     
                     var domain = context.HttpContext.Request.Host.Host;
-                    var isMainAdmin = context.Properties.Items.ContainsKey("is_main_admin") && 
-                                      context.Properties.Items["is_main_admin"] == "true";
                     
-                    // Get database based on context (main admin or user-scoped)
                     var userContextAccessor = context.HttpContext.RequestServices.GetService<UserContextAccessor>();
                     var userSlug = userContextAccessor?.GetUserSlug();
                     var factory = context.HttpContext.RequestServices.GetService<LocalDbFactory>();
@@ -122,15 +122,9 @@ public static class MastodonOAuthExtensions
                     {
                         commonClaims.Add(new Claim(ClaimTypes.Role, "admin"));
 
-                        // Add user slug claim only if not main admin
-                        if (isMainAdmin)
-                        {
-                            commonClaims.Add(new Claim("urn:fedi:admin_type", "main"));
-                        }
-                        else if (!string.IsNullOrEmpty(userSlug))
+                        if (!string.IsNullOrEmpty(userSlug))
                         {
                             commonClaims.Add(new Claim("urn:fedi:user_slug", userSlug));
-                            commonClaims.Add(new Claim("urn:fedi:admin_type", "user"));
                         }
                     }
 
@@ -140,20 +134,10 @@ public static class MastodonOAuthExtensions
                 OnRemoteFailure = context =>
                 {
                     context.HandleResponse();
-                    var isMainAdmin = context.Properties.Items.ContainsKey("is_main_admin") && 
-                                      context.Properties.Items["is_main_admin"] == "true";
-                    
-                    if (isMainAdmin)
-                    {
-                        context.Response.Redirect("/admin/denied");
-                    }
-                    else
-                    {
-                        var userContextAccessor = context.HttpContext.RequestServices.GetService<UserContextAccessor>();
-                        var userSlug = userContextAccessor?.GetUserSlug();
-                        var deniedPath = !string.IsNullOrEmpty(userSlug) ? $"/{userSlug}/admin/denied" : "/denied";
-                        context.Response.Redirect(deniedPath);
-                    }
+                    var userContextAccessor = context.HttpContext.RequestServices.GetService<UserContextAccessor>();
+                    var userSlug = userContextAccessor?.GetUserSlug();
+                    var deniedPath = !string.IsNullOrEmpty(userSlug) ? $"/{userSlug}/admin/denied" : "/admin/denied";
+                    context.Response.Redirect(deniedPath);
                     return Task.FromResult(0);
                 }
             };
@@ -185,6 +169,8 @@ public static class MastodonOAuthExtensions
             var clientId = appDoc.RootElement.GetProperty("client_id").GetString();
             var clientSecret = appDoc.RootElement.GetProperty("client_secret").GetString();
 
+            Console.WriteLine($"Registered Mastodon app for {hostname}: client_id={clientId}");
+
             if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
             {
                 throw new InvalidOperationException($"Failed to register Mastodon app for {hostname}: missing credentials");
@@ -194,6 +180,10 @@ public static class MastodonOAuthExtensions
             _mastodonAppCache[hostname] = credentials;
 
             return credentials;
+        } catch (Exception e)
+        {
+            Console.Error.WriteLine($"Error registering Mastodon app for {hostname}: {e.Message}");
+            throw;
         }
         finally
         {

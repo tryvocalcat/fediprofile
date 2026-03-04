@@ -120,7 +120,7 @@ function populateFediHandle() {
   if (el) {
     const username = window.location.pathname.replace(/^\/|\/$/, '');
     const domain = window.location.host;
-    el.textContent = username + '@' + domain;
+    el.textContent = '@' + username + '@' + domain;
   }
 }
 

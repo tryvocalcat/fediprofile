@@ -1,32 +1,82 @@
 /* ══════════════════════════════════════════════════════════
-   Theme: Stars — inspired by elena.social
-   A calm night-sky with twinkling stationary stars,
-   centered link cards with subtle borders, and soft glow effects.
+   Theme: Stars
+   ══════════════════════════════════════════════════════════
+
+   A dark parallax starfield theme adapted from the LinkStack "Galaxy" theme
+   by JulianPrieber & LinkStack Team, used on elena.social.
+
+   ── LICENSE & ATTRIBUTION ──────────────────────────────────
+
+   This theme is a derivative work. Original sources and their licenses:
+
+   • Galaxy theme for LinkStack
+     Author: JulianPrieber & LinkStack Team
+     Source: https://github.com/linkstackorg/galaxy
+     License: GPLv3 — https://www.gnu.org/licenses/gpl-3.0.html
+
+   • Skeleton CSS (used as a base by Galaxy)
+     Author: Dave Gamache
+     Source: https://github.com/dhg/Skeleton
+     License: MIT — https://opensource.org/licenses/MIT
+
+   • Linktree clone (layout patterns used by Galaxy)
+     Author: johnggli
+     Source: https://github.com/johnggli/linktree
+     License: MIT — https://github.com/johnggli/linktree/blob/master/LICENSE.md
+
+   Because the Galaxy theme is GPLv3-licensed, this derivative file is also
+   distributed under the terms of the GNU General Public License v3.0.
+   You may redistribute and/or modify it under those terms.
+   A copy of the GPLv3 is available at https://www.gnu.org/licenses/gpl-3.0.html
+
+   Adaptations for FediProfile's markup (`.card`, `.link-card`, `.profile-avatar`,
+   etc.) by the FediProfile project.
+
    ══════════════════════════════════════════════════════════ */
 
 :root {
   color-scheme: dark;
-  --bg: #0b0d17;
-  --ink: #e0e4f0;
-  --accent: #7ea0c4;
-  --accent-hover: #a8c8e8;
-  --card: rgba(14, 17, 30, 0.85);
-  --card-hover: rgba(22, 26, 44, 0.9);
-  --border: rgba(140, 165, 210, 0.15);
-  --shadow: rgba(0, 0, 0, 0.4);
-  --link-hover: rgba(126, 160, 196, 0.08);
+
+  /* Galaxy palette — radial gradient from deep navy to near-black */
+  --bgColor: #223344;
+  --bgColor2: #090a0f;
+  --accentColor: #FFF;
+
+  /* FediProfile semantic tokens mapped to Galaxy palette */
+  --bg: #090a0f;
+  --ink: #FFFFFF;
+  --accent: #FFFFFF;
+  --accent-hover: #c8d8ff;
+  --card: rgba(14, 18, 32, 0.65);
+  --card-hover: rgba(20, 26, 44, 0.8);
+  --border: rgba(255, 255, 255, 0.15);
+  --shadow: rgba(0, 0, 0, 0.5);
+  --link-hover: rgba(255, 255, 255, 0.06);
   --star-glow: rgba(180, 200, 255, 0.6);
+
+  /* Galaxy animation delay token */
+  --delay: 0.3s;
 }
 
-/* ── Night sky background ── */
+/* ── Galaxy radial-gradient background ─────────────────── */
 body {
-  background: #0b0d17;
+  background: radial-gradient(ellipse at bottom, var(--bgColor) 0%, var(--bgColor2) 100%);
+  background-repeat: no-repeat;
+  background-size: cover;
   overflow-x: hidden;
   position: relative;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Karla', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Galaxy-style page entrance: fade + slide up */
+  opacity: 0;
+  animation: bodyFadeIn 1s ease-out var(--delay) forwards;
 }
 
-/* ── Stars layers (stationary, twinkling) ── */
+@keyframes bodyFadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Stars layer 1 — tiny (1px) stars, slow twinkle ───── */
 body::before,
 body::after {
   content: '';
@@ -38,7 +88,6 @@ body::after {
   z-index: 0;
 }
 
-/* Layer 1 — small faint stars, slow twinkle */
 body::before {
   background:
     radial-gradient(1px 1px at  4%  7%, #fff 50%, transparent 100%),
@@ -65,12 +114,12 @@ body::before {
     radial-gradient(1px 1px at  8% 88%, #c8d4ff 50%, transparent 100%),
     radial-gradient(1px 1px at 91% 16%, #fff 50%, transparent 100%),
     radial-gradient(1px 1px at 23% 32%, #e8ecff 50%, transparent 100%),
-    radial-gradient(1px 1px at 60% 4%,  #fff 50%, transparent 100%);
+    radial-gradient(1px 1px at 60%  4%, #fff 50%, transparent 100%);
   opacity: 0.8;
   animation: twinkle1 6s ease-in-out infinite alternate;
 }
 
-/* Layer 2 — larger brighter stars, offset twinkle */
+/* ── Stars layer 2 — larger (2-2.5 px) stars ──────────── */
 body::after {
   background:
     radial-gradient(2px 2px at  9% 14%, var(--star-glow) 40%, transparent 100%),
@@ -82,14 +131,14 @@ body::after {
     radial-gradient(2px 2px at 14% 89%, var(--star-glow) 40%, transparent 100%),
     radial-gradient(2.5px 2.5px at 47% 54%, #fff 40%, transparent 100%),
     radial-gradient(2px 2px at 76% 18%, var(--star-glow) 40%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 32% 6%,  #fff 40%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 32%  6%, #fff 40%, transparent 100%),
     radial-gradient(2px 2px at 58% 92%, var(--star-glow) 40%, transparent 100%),
     radial-gradient(1.5px 1.5px at 90% 72%, #fff 40%, transparent 100%);
   opacity: 0.65;
   animation: twinkle2 8s ease-in-out infinite alternate;
 }
 
-/* ── Twinkle keyframes (gentle opacity pulse) ── */
+/* ── Twinkle keyframes ─────────────────────────────────── */
 @keyframes twinkle1 {
   0%   { opacity: 0.6; }
   50%  { opacity: 0.9; }
@@ -102,8 +151,12 @@ body::after {
   100% { opacity: 0.55; }
 }
 
-/* Respect user's reduced-motion preference */
+/* ── Reduced motion ────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
+  body {
+    animation: none;
+    opacity: 1;
+  }
   body::before,
   body::after {
     animation: none;
@@ -112,34 +165,39 @@ body::after {
   .card {
     animation: none !important;
   }
+  .link-card {
+    animation: none !important;
+  }
   .link-card::after {
     animation: none !important;
   }
 }
 
-/* ── Card ── */
+/* ── Card — no panel, content floats on the starfield ──── */
 .card {
   position: relative;
   z-index: 1;
-  max-width: 720px;
-  padding: 48px;
-  border-radius: 24px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  box-shadow:
-    0 0 40px rgba(100, 140, 200, 0.06),
-    0 0 80px rgba(100, 140, 200, 0.03);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  max-width: 600px;            /* Galaxy uses 600 px */
+  width: 100%;
+  padding: 50px 0 0;           /* Galaxy spacing top */
+  margin: 0 auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  text-align: center;
   animation: cardFadeIn 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--delay);
 }
 
-/* ── Heading: soft white, no gradient ─ matches elena.social style ── */
+/* ── Heading — clean white, Galaxy style ───────────────── */
 h1 {
   font-size: 2.6rem;
-  font-weight: 700;
+  font-weight: 400;            /* Galaxy uses 400 */
   text-align: center;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: #fff;
   text-shadow: 0 0 30px rgba(180, 200, 255, 0.15);
 }
@@ -150,72 +208,94 @@ h1 {
   font-size: 1rem;
 }
 
-/* ── Category headers with fading lines ── */
+/* ── Category headers — Galaxy style: bold, centered ───── */
 h2 {
   color: var(--accent);
   display: flex;
   align-items: center;
-  gap: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.8rem;
-  font-weight: 600;
+  justify-content: center;
+  gap: 16px;
+  text-transform: none;         /* Galaxy doesn't uppercase */
+  letter-spacing: 0;
+  font-size: 1.25rem;           /* Larger like Galaxy */
+  font-weight: 700;
+  margin-top: 40px;
+  margin-bottom: 20px;
 }
 
 h2::before,
 h2::after {
   content: '';
   flex: 1;
+  max-width: 120px;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--border), transparent);
 }
 
-/* ── Link cards: elena.social style — centered, rounded, subtle ── */
+/* ── Link cards — Galaxy button style ──────────────────── */
+/*
+   Galaxy buttons: transparent bg, white 2px border, white text,
+   fill white on hover with inverted text. Rounded 10px.
+   We adapt this to FediProfile's .link-card layout.
+*/
 .link-card {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 16px 24px;
-  background: rgba(12, 15, 28, 0.6);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  text-align: center;
+  gap: 12px;
+  padding: 8px 24px;
+  background: transparent;
+  border: 3px solid var(--accentColor);
+  border-radius: 10px;
   text-decoration: none;
   color: var(--ink);
   transition: all 280ms cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
-  box-shadow: 2px 2px 0 rgba(100, 140, 200, 0.06);
+  /* Galaxy popUp entrance — staggered via CSS var */
+  animation: popUp 1s both;
+  animation-delay: calc(var(--delay) / 10);
+  -webkit-tap-highlight-color: transparent;
 }
 
-.link-card:hover {
-  background: rgba(20, 24, 44, 0.75);
-  border-color: rgba(140, 165, 210, 0.35);
-  transform: translate(-2px, -2px);
-  box-shadow:
-    4px 4px 0 rgba(126, 160, 196, 0.15),
-    0 0 20px rgba(126, 160, 196, 0.08);
+@media (hover: hover) {
+  .link-card:hover {
+    background: var(--accentColor);
+    color: var(--bgColor);
+    border-color: var(--accentColor);
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.10);
+  }
+  .link-card:hover .link-content strong {
+    color: var(--bgColor);
+  }
+  .link-card:hover .link-content p {
+    color: var(--bgColor);
+  }
+  .link-card:hover .link-icon {
+    filter: invert(100%) grayscale(100%);
+    -webkit-filter: invert(100%) grayscale(100%);
+  }
 }
 
-/* Subtle left-edge glow on hover */
-.link-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 100%;
-  background: linear-gradient(180deg, var(--accent), var(--accent-hover));
-  transform: scaleY(0);
-  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
-  transform-origin: bottom;
+.link-card:active {
+  background: var(--accentColor);
+  color: var(--bgColor);
 }
 
-.link-card:hover::before {
-  transform: scaleY(1);
+/* Galaxy popUp keyframe */
+@keyframes popUp {
+  from {
+    opacity: 0;
+    transform: scale3d(0.3, 0.3, 0.3);
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
-/* Occasional shimmer across link cards */
+/* Subtle shimmer sweep across link cards */
 .link-card::after {
   content: '';
   position: absolute;
@@ -240,34 +320,58 @@ h2::after {
   50%      { transform: translateX(100%) rotate(10deg); }
 }
 
+/* ── Icons — small inline next to text, Galaxy style ───── */
 .link-icon {
-  border-radius: 10px;
+  width: 20px;
+  height: 20px;
+  border-radius: 0;
+  object-fit: contain;
+  flex-shrink: 0;
+  vertical-align: middle;
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
+  transition: filter 280ms ease;
+}
+
+/* Override base theme flex:1 so icon+text center as a group */
+.link-content {
+  flex: 0 1 auto;
+  text-align: center;
+}
+
+.profile-container, #profile-container {
+  padding-top: 20px;
 }
 
 .link-content strong {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 1rem;
+  transition: color 280ms ease;
 }
 
 .link-content p {
-  color: #7a84a0;
+  color: #8b95b0;
+  transition: color 280ms ease;
+  font-size: 0.85rem;
 }
 
-/* ── Boost badge ── */
+/* ── Boost badge ───────────────────────────────────────── */
 .boost-badge {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
-  color: #0b0d17;
+  background: var(--accentColor);
+  color: var(--bgColor2);
   font-weight: 700;
-  box-shadow: 0 2px 10px rgba(126, 160, 196, 0.25);
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.15);
 }
 
-/* ── Info section ── */
+/* ── Info section — centered like Galaxy ────────────────── */
 .info-section {
   border-top: 1px solid var(--border);
+  text-align: center;
 }
 
 .info-section summary {
-  color: #7a84a0;
+  color: #8b95b0;
   transition: color 200ms;
 }
 
@@ -276,37 +380,40 @@ h2::after {
 }
 
 .info-section ul {
-  color: #7a84a0;
+  color: #8b95b0;
 }
 
 .info-section code {
-  background: rgba(126, 160, 196, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--accent);
 }
 
-/* ── Share button (elena.social inspired) ── */
+/* ── Share button — Galaxy style, pinned top-right ─────── */
 .share-btn {
+  position: fixed;
+  top: 30px;
+  right: 0px;
+  z-index: 10;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
+  margin: 0;
   padding: 10px 20px;
-  border: 1px solid var(--border);
+  border: 2px solid var(--accentColor);
   border-radius: 10px;
-  background: rgba(12, 15, 28, 0.6);
-  color: var(--accent);
+  background: transparent;
+  color: var(--accentColor);
   cursor: pointer;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 700;
   transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
-  backdrop-filter: blur(8px);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .share-btn:hover {
-  background: rgba(20, 24, 44, 0.75);
-  border-color: rgba(140, 165, 210, 0.35);
-  color: var(--accent-hover);
-  box-shadow: 0 0 12px rgba(126, 160, 196, 0.12);
+  background: var(--accentColor);
+  color: var(--bgColor);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.12);
 }
 
 .share-btn svg {
@@ -319,7 +426,7 @@ h2::after {
   stroke-linejoin: round;
 }
 
-/* ── Card entrance ── */
+/* ── Card entrance animation ───────────────────────────── */
 @keyframes cardFadeIn {
   from {
     opacity: 0;
@@ -331,17 +438,44 @@ h2::after {
   }
 }
 
-/* ── Profile avatar glow ring ── */
+/* ── Profile avatar — round with glow, Galaxy style ────── */
 .profile-avatar {
-  box-shadow: 0 0 24px rgba(126, 160, 196, 0.2),
-              0 0 48px rgba(126, 160, 196, 0.08);
-  border: 2px solid rgba(140, 165, 210, 0.25);
+  border-radius: 50%;
+  box-shadow: 0 0 24px rgba(180, 200, 255, 0.15),
+              0 0 48px rgba(180, 200, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.2);
 }
 
-/* ── Responsive ── */
+/* ── Custom scrollbar — Galaxy style ───────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #171a1d #31363b;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #31363b;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #171a1d;
+  border-radius: 30px;
+  border: 3px none #ffffff;
+}
+
+/* ── Fedi handle / footer text — centered ──────────────── */
+.fedi-handle,
+.fedi-note {
+  text-align: center;
+}
+
+/* ── Responsive ────────────────────────────────────────── */
 @media (max-width: 768px) {
   .card {
-    padding: 32px 24px;
+    padding: 24px 10px 0;
   }
   h1 {
     font-size: 2.1rem;
@@ -350,17 +484,17 @@ h2::after {
 
 @media (max-width: 480px) {
   .card {
-    padding: 24px 20px;
+    padding: 20px 10px 0;
   }
   h1 {
     font-size: 1.8rem;
   }
   .link-card {
     padding: 14px 16px;
-    gap: 12px;
+    gap: 10px;
   }
   .link-icon {
-    width: 36px;
-    height: 36px;
+    width: 18px;
+    height: 18px;
   }
 }

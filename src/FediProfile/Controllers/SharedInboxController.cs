@@ -6,32 +6,23 @@ using FediProfile.Services;
 namespace FediProfile.Controllers;
 
 /// <summary>
-/// Shared inbox endpoint (/sharedInbox) that receives activities once
-/// and fans them out to all relevant local users via the domain-level
-/// Following index table, avoiding per-user database iteration.
+/// Shared inbox endpoint (/sharedInbox) that receives ActivityPub activities
+/// and enqueues them into the domain-level Jobs table for background processing
+/// by the JobExecutor / JobProcessor pipeline.
 /// </summary>
 [ApiController]
 [Route("sharedInbox")]
 public class SharedInboxController : ControllerBase
 {
     private readonly ILogger<SharedInboxController> _logger;
-    private readonly FollowService _followService;
-    private readonly AnnounceService _announceService;
     private readonly LocalDbFactory _factory;
-    private readonly ActorService _actorService;
 
     public SharedInboxController(
         ILogger<SharedInboxController> logger,
-        FollowService followService,
-        AnnounceService announceService,
-        LocalDbFactory factory,
-        ActorService actorService)
+        LocalDbFactory factory)
     {
         _logger = logger;
-        _followService = followService;
-        _announceService = announceService;
         _factory = factory;
-        _actorService = actorService;
     }
 
     [HttpPost]
@@ -44,12 +35,11 @@ public class SharedInboxController : ControllerBase
         }
 
         var domain = HttpContext.Request.Host.Host;
-        var scheme = HttpContext.Request.Scheme;
-        var fullDomain = HttpContext.Request.Host.ToString();
 
         try
         {
-            var inboxMsg = JsonSerializer.Deserialize<InboxMessage>(message.Value.GetRawText());
+            var rawJson = message.Value.GetRawText();
+            var inboxMsg = JsonSerializer.Deserialize<InboxMessage>(rawJson);
 
             if (inboxMsg == null)
             {
@@ -59,70 +49,22 @@ public class SharedInboxController : ControllerBase
 
             _logger.LogInformation("Shared inbox received Activity: {Type} from {Actor}", inboxMsg.Type, inboxMsg.Actor);
 
+            var domainDb = _factory.GetInstance(domain);
+            var jobQueue = new JobQueueService(domainDb);
+
+            string? jobType = null;
+
             if (inboxMsg.IsFollow())
             {
-                // Follow activities are user-addressed; extract the target user from the object
-                var targetActorId = inboxMsg.Object?.ToString();
-                if (targetActorId != null)
-                {
-                    // Try to parse the target user slug from the actor ID (e.g., https://domain/userSlug)
-                    var userSlug = ExtractUserSlugFromActorId(targetActorId, fullDomain);
-                    if (userSlug != null)
-                    {
-                        var db = _factory.GetInstance(domain, userSlug);
-                        var actorId = $"{scheme}://{fullDomain}/{userSlug}";
-                        await _followService.HandleFollowAsync(inboxMsg, db, actorId);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Shared inbox: could not extract user slug from target actor ID {targetActorId}");
-                        _logger.LogWarning("Shared inbox: could not determine target user for Follow from {Actor}", inboxMsg.Actor);
-                    }
-                }
+                jobType = "follow";
             }
             else if (inboxMsg.IsUndo() && inboxMsg.GetFollowActor() != null)
             {
-                // Undo Follow — extract target from the inner Follow object
-                var followObject = inboxMsg.GetFollowObject();
-                if (followObject != null)
-                {
-                    var userSlug = ExtractUserSlugFromActorId(followObject, fullDomain);
-                    if (userSlug != null)
-                    {
-                        var db = _factory.GetInstance(domain, userSlug);
-                        await _followService.HandleUnfollowAsync(inboxMsg, db);
-                    }
-                }
+                jobType = "undo_follow";
             }
             else if (inboxMsg.IsCreate())
             {
-                Console.WriteLine($"Raw message object: {message.Value.GetRawText()}");
-                
-                // Fan-out: look up which local users follow this actor
-                var mainDb = _factory.GetInstance(domain);
-                var localFollowers = await mainDb.GetFollowersOfActorAsync(inboxMsg.Actor ?? "");
-
-                if (localFollowers.Count == 0)
-                {
-                    _logger.LogInformation("Shared inbox: no local followers for actor {Actor}, ignoring Create", inboxMsg.Actor);
-                    return Ok();
-                }
-
-                _logger.LogInformation("Shared inbox: fan-out Create from {Actor} to {Count} local user(s)", inboxMsg.Actor, localFollowers.Count);
-
-                foreach (var userSlug in localFollowers)
-                {
-                    try
-                    {
-                        var userDb = _factory.GetInstance(domain, userSlug);
-                        var actorId = $"{scheme}://{fullDomain}/{userSlug}";
-                        await _announceService.SendAnnounceAsync(inboxMsg, userDb, actorId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Shared inbox: error processing Create for user {UserSlug}", userSlug);
-                    }
-                }
+                jobType = "create";
             }
             else if (inboxMsg.IsAnnounce())
             {
@@ -133,6 +75,20 @@ public class SharedInboxController : ControllerBase
                 _logger.LogInformation("Shared inbox: ignoring activity type {Type}", inboxMsg.Type);
             }
 
+            if (jobType != null)
+            {
+                // Enqueue the raw InboxMessage JSON as the job payload
+                var jobId = await jobQueue.AddJobAsync(
+                    jobType: jobType,
+                    payload: rawJson,
+                    actorUri: inboxMsg.Actor,
+                    createdBy: "SharedInboxController",
+                    notes: $"{inboxMsg.Type} from {inboxMsg.Actor}");
+
+                _logger.LogInformation("Shared inbox: enqueued {JobType} job {JobId} from {Actor}",
+                    jobType, jobId, inboxMsg.Actor);
+            }
+
             return Ok();
         }
         catch (Exception ex)
@@ -140,33 +96,5 @@ public class SharedInboxController : ControllerBase
             _logger.LogError(ex, "Error processing shared inbox message");
             return StatusCode(500, "Error processing message");
         }
-    }
-
-    /// <summary>
-    /// Extracts the user slug from an actor ID URL.
-    /// For example, "https://example.com/maho" → "maho"
-    /// </summary>
-    private static string? ExtractUserSlugFromActorId(string actorId, string expectedDomain)
-    {
-        try
-        {
-            if (Uri.TryCreate(actorId, UriKind.Absolute, out var uri))
-            {
-                // Verify this actor belongs to our domain
-                if (!uri.Host.Equals(expectedDomain.Split(':')[0], StringComparison.OrdinalIgnoreCase))
-                    return null;
-
-                // The slug is the first path segment: /userSlug
-                var segments = uri.AbsolutePath.Trim('/').Split('/');
-                if (segments.Length >= 1 && !string.IsNullOrEmpty(segments[0]))
-                    return segments[0];
-            }
-        }
-        catch
-        {
-            // Invalid URI
-        }
-
-        return null;
     }
 }

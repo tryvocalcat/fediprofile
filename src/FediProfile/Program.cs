@@ -54,6 +54,10 @@ builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<AnnounceService>();
 builder.Services.AddSingleton<ProfileHtmlService>();
 
+// Register job processing services
+builder.Services.AddScoped<JobProcessor>();
+builder.Services.AddHostedService<JobExecutor>();
+
 // Add Mastodon registration service
 builder.Services.AddScoped<MastodonRegistrationService>(provider =>
 {
@@ -88,8 +92,7 @@ var auth = builder.Services.AddAuthentication(CookieAuthenticationDefaults.Authe
 
 auth.AddDynamicMastodon(o =>
 {
-    o.Scope.Add("read:accounts");
-    o.Scope.Add("profile");
+    o.Scope.Add("read");
     o.SaveTokens = true;
 }, localDbFactory);
 
@@ -322,7 +325,7 @@ app.MapGet("/{userSlug}/followers", async (HttpRequest request, UserScopedDb db)
     var emptyCollection = new ActivityPubCollection
     {
         Id = $"{scheme}://{domain}/{userSlug}/followers",
-        Type = "Collection",
+        Type = "OrderedCollection",
         TotalItems = 0,
         OrderedItems = Array.Empty<string>()
     };
@@ -338,7 +341,7 @@ app.MapGet("/{userSlug}/followers", async (HttpRequest request, UserScopedDb db)
             {
                 WriteIndented = false,
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            });
+            }, contentType: "application/activity+json");
         }
         
         var followerUris = followers.Select(f => f.FollowerUri).ToList();
@@ -346,7 +349,7 @@ app.MapGet("/{userSlug}/followers", async (HttpRequest request, UserScopedDb db)
         var collection = new ActivityPubCollection
         {
             Id = $"{scheme}://{domain}/{userSlug}/followers",
-            Type = "Collection",
+            Type = "OrderedCollection",
             TotalItems = followers.Count,
             OrderedItems = followerUris
         };
@@ -355,7 +358,7 @@ app.MapGet("/{userSlug}/followers", async (HttpRequest request, UserScopedDb db)
         {
             WriteIndented = false,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        });
+        }, contentType: "application/activity+json");
     } catch (Exception ex)
     {
         Console.WriteLine($"Error in followers endpoint: {ex.Message}");
@@ -364,13 +367,14 @@ app.MapGet("/{userSlug}/followers", async (HttpRequest request, UserScopedDb db)
         {
             WriteIndented = false,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        });
+        }, contentType: "application/activity+json");
     }
    
 });
 
 // ActivityPub following collection: /{user}/following
-app.MapGet("/{userSlug}/following", async (HttpRequest request) =>
+// Returns the ActorAPUri of all links with AutoBoost enabled (the actors we are boosting)
+app.MapGet("/{userSlug}/following", async (HttpRequest request, UserScopedDb db) =>
 {
     var accept = request.Headers.Accept.ToString();
 
@@ -383,19 +387,25 @@ app.MapGet("/{userSlug}/following", async (HttpRequest request) =>
     var scheme = request.Scheme;
     var userSlug = (string)request.RouteValues["userSlug"];
 
+    var autoBoostLinks = await db.GetAutoBoostLinksAsync();
+    var followingUris = autoBoostLinks
+        .Where(l => !string.IsNullOrEmpty(l.ActorAPUri))
+        .Select(l => l.ActorAPUri!)
+        .ToList();
+
     var collection = new ActivityPubCollection
     {
         Id = $"{scheme}://{domain}/{userSlug}/following",
-        Type = "Collection",
-        TotalItems = 0,
-        OrderedItems = Array.Empty<string>()
+        Type = "OrderedCollection",
+        TotalItems = followingUris.Count,
+        OrderedItems = followingUris
     };
 
     return Results.Json(collection, new System.Text.Json.JsonSerializerOptions
     {
         WriteIndented = false,
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    });
+    }, contentType: "application/activity+json");
 });
 
 // ActivityPub outbox: /{user}/outbox
@@ -424,7 +434,7 @@ app.MapGet("/{userSlug}/outbox", async (HttpRequest request) =>
     {
         WriteIndented = false,
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    });
+    }, contentType: "application/activity+json");
 });
 
 // Add middleware to handle dynamic Mastodon OAuth endpoints
@@ -444,18 +454,15 @@ app.Use(async (context, next) =>
                 var stateValue = context.Request.Query["state"];
                 var properties = oauthOptions.StateDataFormat.Unprotect(stateValue);
 
-                if (properties != null && properties.Items.TryGetValue("mastodon_hostname", out var hostname))
+                if (properties != null && properties.Items.TryGetValue("mastodon_server", out var hostname))
                 {
                     oauthOptions.TokenEndpoint = $"https://{hostname}/oauth/token";
                     oauthOptions.UserInformationEndpoint = $"https://{hostname}/api/v1/accounts/verify_credentials";
 
-                    if (properties.Items.TryGetValue("mastodon_client_id", out var clientId))
+                    if (MastodonOAuthExtensions.TryGetCachedCredentials(hostname, out var creds))
                     {
-                        oauthOptions.ClientId = clientId;
-                    }
-                    if (properties.Items.TryGetValue("mastodon_client_secret", out var clientSecret))
-                    {
-                        oauthOptions.ClientSecret = clientSecret;
+                        oauthOptions.ClientId = creds.clientId;
+                        oauthOptions.ClientSecret = creds.clientSecret;
                     }
                 }
             }
