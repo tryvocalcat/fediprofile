@@ -206,6 +206,7 @@ public class UserScopedDb : LocalDbService
                     Following INTEGER NOT NULL DEFAULT 0,
                     Hidden INTEGER NOT NULL DEFAULT 0,
                     ActorAPUri TEXT,
+                    SortOrder INTEGER NOT NULL DEFAULT 0,
                     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             ";
@@ -370,6 +371,13 @@ public class UserScopedDb : LocalDbService
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
+            if (!columns.Contains("SortOrder"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Links ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
             connection.Close();
         }
         catch (Exception ex)
@@ -382,15 +390,24 @@ public class UserScopedDb : LocalDbService
 
     public async Task<int> UpsertLinkAsync(string name, string url, string? icon = null, string? description = null, 
         bool autoBoost = false, string? category = null, string? type = null, bool hidden = false, bool isActivityPub = false,
-        string? actorAPUri = null)
+        string? actorAPUri = null, int sortOrder = 0)
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
 
+        // If sortOrder is 0, auto-assign next position
+        if (sortOrder == 0)
+        {
+            using var maxCmd = connection.CreateCommand();
+            maxCmd.CommandText = "SELECT COALESCE(MAX(SortOrder), 0) + 1 FROM Links";
+            var maxResult = await maxCmd.ExecuteScalarAsync();
+            sortOrder = maxResult != null ? Convert.ToInt32(maxResult) : 1;
+        }
+
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            INSERT INTO Links (Name, Url, Icon, Description, AutoBoost, IsActivityPub, Category, Type, Hidden, ActorAPUri)
-            VALUES (@Name, @Url, @Icon, @Description, @AutoBoost, @IsActivityPub, @Category, @Type, @Hidden, @ActorAPUri)
+            INSERT INTO Links (Name, Url, Icon, Description, AutoBoost, IsActivityPub, Category, Type, Hidden, ActorAPUri, SortOrder)
+            VALUES (@Name, @Url, @Icon, @Description, @AutoBoost, @IsActivityPub, @Category, @Type, @Hidden, @ActorAPUri, @SortOrder)
             ON CONFLICT(Url) DO UPDATE SET 
                 Name = @Name,
                 Icon = @Icon,
@@ -400,7 +417,8 @@ public class UserScopedDb : LocalDbService
                 Category = @Category,
                 Type = @Type,
                 Hidden = @Hidden,
-                ActorAPUri = @ActorAPUri;
+                ActorAPUri = @ActorAPUri,
+                SortOrder = @SortOrder;
             SELECT last_insert_rowid();
         ";
 
@@ -414,6 +432,7 @@ public class UserScopedDb : LocalDbService
         command.Parameters.AddWithValue("@Type", type ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Hidden", hidden ? 1 : 0);
         command.Parameters.AddWithValue("@ActorAPUri", actorAPUri ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@SortOrder", sortOrder);
 
         // log console.writeline the actual SQL
         Console.WriteLine($"Executing SQL:\n{command.CommandText}\nWith parameters: Name={name}, Url={url}, Icon={icon}, Description={description}, AutoBoost={autoBoost}, IsActivityPub={isActivityPub}, Category={category}, Type={type}, Hidden={hidden}");
@@ -432,12 +451,12 @@ public class UserScopedDb : LocalDbService
         using var command = connection.CreateCommand();
         if (hidden.HasValue)
         {
-            command.CommandText = "SELECT Id, Name, Icon, Url, Description, AutoBoost, IsActivityPub, Category, Type, Following, Hidden, CreatedUtc, ActorAPUri FROM Links WHERE Hidden = @Hidden ORDER BY Category DESC, CreatedUtc DESC";
+            command.CommandText = "SELECT Id, Name, Icon, Url, Description, AutoBoost, IsActivityPub, Category, Type, Following, Hidden, CreatedUtc, ActorAPUri, SortOrder FROM Links WHERE Hidden = @Hidden ORDER BY SortOrder ASC, CreatedUtc DESC";
             command.Parameters.AddWithValue("@Hidden", hidden.Value ? 1 : 0);
         }
         else
         {
-            command.CommandText = "SELECT Id, Name, Icon, Url, Description, AutoBoost, IsActivityPub, Category, Type, Following, Hidden, CreatedUtc, ActorAPUri FROM Links ORDER BY Category DESC, CreatedUtc DESC";
+            command.CommandText = "SELECT Id, Name, Icon, Url, Description, AutoBoost, IsActivityPub, Category, Type, Following, Hidden, CreatedUtc, ActorAPUri, SortOrder FROM Links ORDER BY SortOrder ASC, CreatedUtc DESC";
         }
 
         using var reader = await command.ExecuteReaderAsync();
@@ -466,7 +485,7 @@ public class UserScopedDb : LocalDbService
 
     public async Task UpdateLinkAsync(int id, string name, string url, string? icon = null, string? description = null,
         bool autoBoost = false, string? category = null, bool hidden = false, bool isActivityPub = false,
-        string? actorAPUri = null)
+        string? actorAPUri = null, int? sortOrder = null)
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
@@ -482,7 +501,8 @@ public class UserScopedDb : LocalDbService
                 IsActivityPub = @IsActivityPub,
                 Category = @Category,
                 Hidden = @Hidden,
-                ActorAPUri = @ActorAPUri
+                ActorAPUri = @ActorAPUri,
+                SortOrder = CASE WHEN @SortOrder >= 0 THEN @SortOrder ELSE SortOrder END
             WHERE Id = @Id;
         ";
 
@@ -496,6 +516,7 @@ public class UserScopedDb : LocalDbService
         command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Hidden", hidden ? 1 : 0);
         command.Parameters.AddWithValue("@ActorAPUri", actorAPUri ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@SortOrder", sortOrder ?? -1);
 
         await command.ExecuteNonQueryAsync();
     }
@@ -510,6 +531,32 @@ public class UserScopedDb : LocalDbService
         command.Parameters.AddWithValue("@Id", id);
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task UpdateLinkSortOrdersAsync(IEnumerable<(int Id, int SortOrder)> sortOrders)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            foreach (var (id, sortOrder) in sortOrders)
+            {
+                using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = "UPDATE Links SET SortOrder = @SortOrder WHERE Id = @Id";
+                command.Parameters.AddWithValue("@SortOrder", sortOrder);
+                command.Parameters.AddWithValue("@Id", id);
+                await command.ExecuteNonQueryAsync();
+            }
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     public async Task<List<Link>> GetAutoBoostLinksAsync()

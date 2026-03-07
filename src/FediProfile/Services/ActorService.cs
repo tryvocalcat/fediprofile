@@ -1,27 +1,54 @@
+using System.Text;
+using System.Text.Json;
 using FediProfile.Models;
 
 namespace FediProfile.Services;
 
 public class ActorService
 {
+    private static readonly JsonSerializerOptions _actorJsonOptions = new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private readonly IWebHostEnvironment _env;
+    private readonly ILogger<ActorService> _logger;
+
+    public ActorService(IWebHostEnvironment env, ILogger<ActorService> logger)
+    {
+        _env = env;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Returns the shared JsonSerializerOptions for actor JSON serialization.
+    /// </summary>
+    public static JsonSerializerOptions ActorJsonOptions => _actorJsonOptions;
+
     public async Task<ActivityPubActor> BuildActorAsync(UserScopedDb db, HttpRequest request, string? userSlug = null)
     {
-        // Get username and other settings from database
-        var username = await db.GetActorUsernameAsync();
         var domain = request.Host.Host;
-        
         if (request.Host.Port.HasValue && request.Host.Port != 80 && request.Host.Port != 443)
         {
             domain = $"{domain}:{request.Host.Port}";
         }
-
         var scheme = request.Scheme;
-        
-        // Use userSlug for the actor ID if available, otherwise fall back to route value or "profile"
         var slug = userSlug ?? request.RouteValues["userSlug"]?.ToString() ?? "profile";
         var baseDomain = $"{scheme}://{domain}";
+        return await BuildActorCoreAsync(db, slug, baseDomain);
+    }
+
+    /// <summary>
+    /// Builds the ActivityPub actor object without requiring an HttpRequest.
+    /// Used both for live requests and for static file generation.
+    /// </summary>
+    public async Task<ActivityPubActor> BuildActorCoreAsync(UserScopedDb db, string slug, string baseDomain)
+    {
+        // Get username and other settings from database
+        var username = await db.GetActorUsernameAsync();
         var baseId = $"{baseDomain}/{slug}";
-        var bio = await db.GetActorBioAsync();
+        var bio = await db.GetActorBioAsync();  
         var avatarUrl = await db.GetActorAvatarUrlAsync();
         if (!string.IsNullOrEmpty(avatarUrl) && avatarUrl.StartsWith("/"))
             avatarUrl = $"{baseDomain}{avatarUrl}";
@@ -110,5 +137,45 @@ public class ActorService
                 Theme = theme
             }
         };
+    }
+
+    /// <summary>
+    /// (Re)generates the static actor JSON file for the given user.
+    /// Stored at wwwroot/profiles/{userSlug}.json.
+    /// Called when the user saves their profile or changes links,
+    /// mirroring the ProfileHtmlService pattern.
+    /// </summary>
+    public async Task GenerateActorJsonAsync(UserScopedDb userDb, string userSlug, string baseDomain)
+    {
+        try
+        {
+            var actor = await BuildActorCoreAsync(userDb, userSlug, baseDomain);
+            var json = JsonSerializer.Serialize(actor, _actorJsonOptions);
+
+            var profilesDir = Path.Combine(_env.WebRootPath, "profiles");
+            Directory.CreateDirectory(profilesDir);
+
+            var outputPath = Path.Combine(profilesDir, $"{userSlug}.json");
+            await File.WriteAllTextAsync(outputPath, json, new UTF8Encoding(false));
+
+            _logger.LogInformation("Generated static actor JSON for {UserSlug} at {Path}", userSlug, outputPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate static actor JSON for {UserSlug}", userSlug);
+        }
+    }
+
+    /// <summary>
+    /// Deletes the static actor JSON for the given user (e.g. on account deletion).
+    /// </summary>
+    public void DeleteActorJson(string userSlug)
+    {
+        var path = Path.Combine(_env.WebRootPath, "profiles", $"{userSlug}.json");
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+            _logger.LogInformation("Deleted static actor JSON for {UserSlug}", userSlug);
+        }
     }
 }

@@ -42,6 +42,8 @@
                     @onclick='() => SetTab("users")'>Users</button>
             <button class="admin-tab @(_activeTab == "jobs" ? "admin-tab-active" : "")"
                     @onclick='() => SetTab("jobs")'>Job Queue</button>
+            <button class="admin-tab @(_activeTab == "sql" ? "admin-tab-active" : "")"
+                    @onclick='() => SetTab("sql")'>SQL</button>
         </div>
 
         <!-- Users Tab -->
@@ -128,6 +130,61 @@
                                 </tbody>
                             </table>
                         }
+
+                        <div style="margin-top:1.5rem;border-top:1px solid var(--border, #e0e0e0);padding-top:1rem">
+                            <h3>Maintenance</h3>
+                            <p class="muted">Backfill verified URIs for all users by fetching their Mastodon ActivityPub actor.</p>
+                            <button class="button button-secondary" @onclick="BackfillVerifiedUris" disabled="@_isProcessing">
+                                @(_isProcessing ? "Running..." : "Backfill Verified URIs")
+                            </button>
+                            @if (_backfillResults != null)
+                            {
+                                <div style="margin-top:1rem">
+                                    @foreach (var r in _backfillResults)
+                                    {
+                                        <div class="alert @(r.Success ? "alert-success" : "alert-error")" style="margin-bottom:0.25rem;padding:0.4rem 0.75rem;font-size:0.85rem">
+                                            <strong>@r.UserSlug</strong>: @r.Message
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            <div style="margin-top:1.5rem;border-top:1px solid var(--border, #e0e0e0);padding-top:1rem">
+                                <p class="muted">Fix links where users entered a handle (e.g. <code>@@user.bsky.social</code>) instead of a full URL for Bluesky, Matrix, or Telegram.</p>
+                                <button class="button button-secondary" @onclick="FixHandleUrls" disabled="@_isProcessing">
+                                    @(_isProcessing ? "Running..." : "Fix Handle URLs")
+                                </button>
+                                @if (_handleFixResults != null)
+                                {
+                                    <div style="margin-top:1rem">
+                                        @foreach (var r in _handleFixResults)
+                                        {
+                                            <div class="alert @(r.IsError ? "alert-error" : "alert-success")" style="margin-bottom:0.25rem;padding:0.4rem 0.75rem;font-size:0.85rem">
+                                                @r.Message
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+
+                            <div style="margin-top:1.5rem;border-top:1px solid var(--border, #e0e0e0);padding-top:1rem">
+                                <p class="muted">Scan all user databases for links whose URL does not start with <code>http</code>.</p>
+                                <button class="button button-secondary" @onclick="AuditNonHttpUrls" disabled="@_isProcessing">
+                                    @(_isProcessing ? "Scanning..." : "Audit Non-HTTP URLs")
+                                </button>
+                                @if (_auditResults != null)
+                                {
+                                    <div style="margin-top:1rem">
+                                        @foreach (var r in _auditResults)
+                                        {
+                                            <div class="alert @(r.IsError ? "alert-error" : "alert-warning")" style="margin-bottom:0.25rem;padding:0.4rem 0.75rem;font-size:0.85rem">
+                                                @r.Message
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
                     </div>
                 </article>
             </div>
@@ -320,6 +377,100 @@
                 }
             </div>
         }
+        <!-- SQL Tab -->
+        @if (_activeTab == "sql")
+        {
+            <div class="admin-section">
+                <article class="card">
+                    <h2>SQL Query</h2>
+                    <p class="muted">Execute SQL queries against any database in the data directory.</p>
+
+                    <div class="admin-form">
+                        <div class="form-group">
+                            <label for="dbSelect">Database</label>
+                            <select id="dbSelect" class="form-control" @bind="_selectedDb">
+                                <option value="">— Select a database —</option>
+                                @if (_availableDbs != null)
+                                {
+                                    @foreach (var db in _availableDbs)
+                                    {
+                                        <option value="@db">@Path.GetFileName(db)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sqlQuery">SQL</label>
+                            <textarea id="sqlQuery" class="form-control sql-textarea" @bind="_sqlQuery"
+                                      rows="6" placeholder="SELECT * FROM sqlite_master WHERE type='table';"></textarea>
+                        </div>
+
+                        <div style="display:flex;gap:0.5rem">
+                            <button class="button button-primary" @onclick="ExecuteSql" disabled="@_isSqlRunning">
+                                @(_isSqlRunning ? "Running..." : "Execute")
+                            </button>
+                            <button class="button button-secondary" @onclick="ExecuteSqlOnAllDbs" disabled="@_isSqlRunning"
+                                    title="Run this query against every database in the data directory">
+                                @(_isSqlRunning ? "Running..." : "Execute on All DBs")
+                            </button>
+                            <button class="button button-ghost" @onclick="ClearSqlResults">Clear</button>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_sqlError))
+                    {
+                        <div class="alert alert-error" style="margin-top:1rem">@_sqlError</div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_sqlSuccess))
+                    {
+                        <div class="alert alert-success" style="margin-top:1rem">@_sqlSuccess</div>
+                    }
+
+                    @if (_sqlAllDbResults != null && _sqlAllDbResults.Count > 0)
+                    {
+                        <div style="margin-top:1rem">
+                            <h3 style="margin-bottom:0.5rem">Results per database</h3>
+                            @foreach (var r in _sqlAllDbResults)
+                            {
+                                <div class="alert @(r.IsError ? "alert-error" : "alert-success")" style="margin-bottom:0.25rem;padding:0.4rem 0.75rem;font-size:0.85rem">
+                                    <strong>@r.DbName</strong>: @r.Message
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (_sqlColumns != null && _sqlColumns.Count > 0)
+                    {
+                        <div class="sql-results-wrap" style="margin-top:1rem">
+                            <table class="user-table sql-results-table">
+                                <thead>
+                                    <tr>
+                                        @foreach (var col in _sqlColumns)
+                                        {
+                                            <th>@col</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in _sqlRows!)
+                                    {
+                                        <tr>
+                                            @foreach (var col in _sqlColumns)
+                                            {
+                                                <td>@(row.ContainsKey(col) ? row[col]?.ToString() ?? "NULL" : "")</td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            <p class="muted" style="margin-top:0.5rem;font-size:0.82rem">@_sqlRows!.Count row(s) returned</p>
+                        </div>
+                    }
+                </article>
+            </div>
+        }
     }
 </section>
 
@@ -432,6 +583,24 @@
         font-size: 0.8rem;
     }
     .job-log-msg { word-break: break-word; }
+
+    /* SQL tab */
+    .sql-textarea {
+        font-family: monospace;
+        font-size: 0.88rem;
+        resize: vertical;
+        min-height: 100px;
+    }
+    .sql-results-wrap {
+        overflow-x: auto;
+    }
+    .sql-results-table td, .sql-results-table th {
+        white-space: nowrap;
+        font-size: 0.84rem;
+        max-width: 350px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 </style>
 
 @code {
@@ -489,6 +658,7 @@
     {
         _activeTab = tab;
         if (tab == "jobs") LoadJobs();
+        if (tab == "sql") LoadAvailableDbs();
     }
 
     // ===== Users =====
@@ -610,6 +780,264 @@
         }
     }
 
+    // ===== Backfill =====
+
+    private List<(string UserSlug, bool Success, string Message)>? _backfillResults;
+
+    private async Task BackfillVerifiedUris()
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+        _backfillResults = null;
+        StateHasChanged();
+
+        try
+        {
+            _backfillResults = await DomainDb.BackfillVerifiedUrisAsync();
+            var ok = _backfillResults.Count(r => r.Success);
+            var fail = _backfillResults.Count(r => !r.Success);
+            _message = $"Backfill complete: {ok} succeeded, {fail} failed out of {_backfillResults.Count} user(s).";
+            _isError = fail > 0;
+        }
+        catch (Exception ex)
+        {
+            _message = $"Backfill error: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    // ===== Fix Handle URLs =====
+
+    private static readonly Dictionary<string, (string HandlePrefix, string UrlTemplate, string PlatformName)> _urlFixRules = new()
+    {
+        ["/assets/icons/bluesky.svg"]  = ("@", "https://bsky.app/profile/{0}", "Bluesky"),
+        ["/assets/icons/matrix.svg"]   = ("@", "https://matrix.to/#/{0}",      "Matrix"),
+        ["/assets/icons/telegram.svg"] = ("@", "https://t.me/{0}",             "Telegram"),
+    };
+
+    // Also match by link name (case-insensitive) when icon doesn't match
+    private static readonly Dictionary<string, (string HandlePrefix, string UrlTemplate, string PlatformName)> _nameFixRules = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Bluesky"]  = ("@", "https://bsky.app/profile/{0}", "Bluesky"),
+        ["Matrix"]   = ("@", "https://matrix.to/#/{0}",      "Matrix"),
+        ["Telegram"] = ("@", "https://t.me/{0}",             "Telegram"),
+    };
+
+    private static bool IsWebfingerHandle(string input)
+    {
+        if (!input.StartsWith("@")) return false;
+        var withoutLeadingAt = input.Substring(1);
+        var atIdx = withoutLeadingAt.IndexOf('@');
+        return atIdx > 0 && atIdx < withoutLeadingAt.Length - 1 && withoutLeadingAt.Substring(atIdx + 1).Contains('.');
+    }
+
+    private static async Task<(string? ProfileUrl, string? ActorUri)> ResolveWebfingerAsync(string handle)
+    {
+        var withoutLeadingAt = handle.TrimStart('@');
+        var atIdx = withoutLeadingAt.IndexOf('@');
+        if (atIdx <= 0) return (null, null);
+        var domain = withoutLeadingAt.Substring(atIdx + 1);
+
+        var webfingerUrl = $"https://{domain}/.well-known/webfinger?resource=acct:{withoutLeadingAt}";
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        http.DefaultRequestHeaders.Add("Accept", "application/jrd+json, application/json");
+        var resp = await http.GetAsync(webfingerUrl);
+        resp.EnsureSuccessStatusCode();
+
+        var json = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        string? profileUrl = null;
+        string? actorUri = null;
+
+        if (doc.RootElement.TryGetProperty("links", out var links))
+        {
+            foreach (var link in links.EnumerateArray())
+            {
+                var rel = link.TryGetProperty("rel", out var r) ? r.GetString() : null;
+                var type = link.TryGetProperty("type", out var t) ? t.GetString() : null;
+                var href = link.TryGetProperty("href", out var h) ? h.GetString() : null;
+                if (string.IsNullOrEmpty(href)) continue;
+
+                if (rel == "self" && type != null && type.Contains("activity"))
+                    actorUri = href;
+                else if (rel == "http://webfinger.net/rel/profile-page")
+                    profileUrl = href;
+            }
+        }
+
+        return (profileUrl ?? actorUri, actorUri);
+    }
+
+    private List<(string Message, bool IsError)>? _handleFixResults;
+
+    private async Task FixHandleUrls()
+    {
+        _isProcessing = true;
+        _handleFixResults = new();
+        StateHasChanged();
+
+        try
+        {
+            var users = await DomainDb.GetAllUsersAsync();
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            int totalFixed = 0;
+
+            foreach (var user in users)
+            {
+                try
+                {
+                    var userDb = new UserScopedDb(domain, user.Slug, autoCreate: false);
+                    var links = await userDb.GetLinksAsync();
+                    int userFixed = 0;
+
+                    foreach (var link in links)
+                    {
+                        if (string.IsNullOrWhiteSpace(link.Url)) continue;
+                        var url = link.Url.Trim();
+
+                        // Skip already-valid URLs
+                        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                            url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        // Check for @user@domain webfinger handles first
+                        if (IsWebfingerHandle(url))
+                        {
+                            try
+                            {
+                                var (wfProfileUrl, wfActorUri) = await ResolveWebfingerAsync(url);
+                                if (!string.IsNullOrEmpty(wfProfileUrl))
+                                {
+                                    bool isAP = !string.IsNullOrEmpty(wfActorUri);
+                                    await userDb.UpdateLinkAsync(
+                                        link.Id, link.Name, wfProfileUrl, link.Icon, link.Description,
+                                        link.AutoBoost, link.Category, link.Hidden, isAP || link.IsActivityPub,
+                                        wfActorUri ?? link.ActorAPUri);
+
+                                    var apNote = isAP ? " (ActivityPub ✓)" : "";
+                                    _handleFixResults.Add(($"{user.Slug}: Resolved WebFinger \"{link.Name}\" — {url} → {wfProfileUrl}{apNote}", false));
+                                    userFixed++;
+                                    continue;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _handleFixResults.Add(($"{user.Slug}: WebFinger failed for \"{link.Name}\" ({url}) — {ex.Message}", true));
+                                continue;
+                            }
+                        }
+
+                        // Check if the icon or name matches a known platform
+                        (string HandlePrefix, string UrlTemplate, string PlatformName)? matchedRule = null;
+                        if (!string.IsNullOrEmpty(link.Icon) && _urlFixRules.TryGetValue(link.Icon, out var iconRule))
+                            matchedRule = iconRule;
+                        else if (!string.IsNullOrEmpty(link.Name) && _nameFixRules.TryGetValue(link.Name.Trim(), out var nameRule))
+                            matchedRule = nameRule;
+
+                        if (matchedRule is { } rule)
+                        {
+                            if (url.StartsWith(rule.HandlePrefix))
+                            {
+                                var handle = url.TrimStart('@', '#');
+                                var corrected = string.Format(rule.UrlTemplate, handle);
+
+                                await userDb.UpdateLinkAsync(
+                                    link.Id, link.Name, corrected, link.Icon, link.Description,
+                                    link.AutoBoost, link.Category, link.Hidden, link.IsActivityPub, link.ActorAPUri);
+
+                                _handleFixResults.Add(($"{user.Slug}: Fixed {rule.PlatformName} link \"{link.Name}\" — {url} → {corrected}", false));
+                                userFixed++;
+                            }
+                        }
+                    }
+
+                    totalFixed += userFixed;
+                }
+                catch (Exception ex)
+                {
+                    _handleFixResults.Add(($"{user.Slug}: Error — {ex.Message}", true));
+                }
+            }
+
+            if (totalFixed == 0)
+                _handleFixResults.Insert(0, ("No handle-style URLs found. All links look good!", false));
+            else
+                _handleFixResults.Insert(0, ($"Done! Fixed {totalFixed} link(s) across all users.", false));
+        }
+        catch (Exception ex)
+        {
+            _handleFixResults = new() { ($"Error: {ex.Message}", true) };
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    // ===== Audit Non-HTTP URLs =====
+
+    private List<(string Message, bool IsError)>? _auditResults;
+
+    private async Task AuditNonHttpUrls()
+    {
+        _isProcessing = true;
+        _auditResults = new();
+        StateHasChanged();
+
+        try
+        {
+            var users = await DomainDb.GetAllUsersAsync();
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            int totalBad = 0;
+
+            foreach (var user in users)
+            {
+                try
+                {
+                    var userDb = new UserScopedDb(domain, user.Slug, autoCreate: false);
+                    var links = await userDb.GetLinksAsync();
+
+                    foreach (var link in links)
+                    {
+                        if (string.IsNullOrWhiteSpace(link.Url)) continue;
+                        var url = link.Url.Trim();
+
+                        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _auditResults.Add(($"{user.Slug}: \"{link.Name}\" → {url}", false));
+                            totalBad++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _auditResults.Add(($"{user.Slug}: Error — {ex.Message}", true));
+                }
+            }
+
+            if (totalBad == 0)
+                _auditResults.Insert(0, ("All links start with http:// or https://. Nothing to report!", false));
+            else
+                _auditResults.Insert(0, ($"Found {totalBad} link(s) without a valid URL prefix.", true));
+        }
+        catch (Exception ex)
+        {
+            _auditResults = new() { ($"Error: {ex.Message}", true) };
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
     // ===== Jobs =====
 
     private void LoadJobs()
@@ -676,6 +1104,215 @@
         finally
         {
             _isProcessing = false;
+        }
+    }
+
+    // ===== SQL =====
+
+    private List<string>? _availableDbs;
+    private string? _selectedDb;
+    private string? _sqlQuery;
+    private bool _isSqlRunning;
+    private string? _sqlError;
+    private string? _sqlSuccess;
+    private List<string>? _sqlColumns;
+    private List<Dictionary<string, object?>>? _sqlRows;
+
+    private void LoadAvailableDbs()
+    {
+        try
+        {
+            var dbDir = Environment.GetEnvironmentVariable("DB_DATA");
+            if (string.IsNullOrEmpty(dbDir))
+                dbDir = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
+
+            if (Directory.Exists(dbDir))
+            {
+                _availableDbs = Directory.GetFiles(dbDir, "*.db")
+                    .OrderBy(f => f)
+                    .ToList();
+            }
+            else
+            {
+                _availableDbs = new List<string>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error listing databases");
+            _availableDbs = new List<string>();
+        }
+    }
+
+    private async Task ExecuteSql()
+    {
+        _sqlError = null;
+        _sqlSuccess = null;
+        _sqlColumns = null;
+        _sqlRows = null;
+
+        if (string.IsNullOrWhiteSpace(_selectedDb))
+        {
+            _sqlError = "Please select a database first.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_sqlQuery))
+        {
+            _sqlError = "Please enter a SQL query.";
+            return;
+        }
+
+        _isSqlRunning = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                var connStr = $"Data Source={_selectedDb};Version=3;";
+                using var conn = new System.Data.SQLite.SQLiteConnection(connStr);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _sqlQuery;
+
+                var trimmed = _sqlQuery.TrimStart();
+                var isSelect = trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                             || trimmed.StartsWith("PRAGMA", StringComparison.OrdinalIgnoreCase)
+                             || trimmed.StartsWith("EXPLAIN", StringComparison.OrdinalIgnoreCase);
+
+                if (isSelect)
+                {
+                    using var reader = cmd.ExecuteReader();
+                    var columns = new List<string>();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                        columns.Add(reader.GetName(i));
+
+                    var rows = new List<Dictionary<string, object?>>();
+                    while (reader.Read())
+                    {
+                        var row = new Dictionary<string, object?>();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                            row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        rows.Add(row);
+                    }
+
+                    _sqlColumns = columns;
+                    _sqlRows = rows;
+                }
+                else
+                {
+                    var affected = cmd.ExecuteNonQuery();
+                    _sqlSuccess = $"Query executed successfully. {affected} row(s) affected.";
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _sqlError = ex.Message;
+        }
+        finally
+        {
+            _isSqlRunning = false;
+        }
+    }
+
+    private void ClearSqlResults()
+    {
+        _sqlError = null;
+        _sqlSuccess = null;
+        _sqlColumns = null;
+        _sqlRows = null;
+        _sqlAllDbResults = null;
+    }
+
+    // ===== Execute SQL on All DBs =====
+
+    private List<(string DbName, string Message, bool IsError)>? _sqlAllDbResults;
+
+    private async Task ExecuteSqlOnAllDbs()
+    {
+        _sqlError = null;
+        _sqlSuccess = null;
+        _sqlColumns = null;
+        _sqlRows = null;
+        _sqlAllDbResults = null;
+
+        if (string.IsNullOrWhiteSpace(_sqlQuery))
+        {
+            _sqlError = "Please enter a SQL query.";
+            return;
+        }
+
+        // Ensure db list is loaded
+        if (_availableDbs == null || _availableDbs.Count == 0)
+            LoadAvailableDbs();
+
+        if (_availableDbs == null || _availableDbs.Count == 0)
+        {
+            _sqlError = "No databases found in the data directory.";
+            return;
+        }
+
+        _isSqlRunning = true;
+        StateHasChanged();
+
+        var results = new List<(string DbName, string Message, bool IsError)>();
+        var query = _sqlQuery;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var dbPath in _availableDbs)
+                {
+                    var dbName = Path.GetFileName(dbPath);
+                    try
+                    {
+                        var connStr = $"Data Source={dbPath};Version=3;";
+                        using var conn = new System.Data.SQLite.SQLiteConnection(connStr);
+                        conn.Open();
+
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = query;
+
+                        var trimmed = query.TrimStart();
+                        var isSelect = trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                                     || trimmed.StartsWith("PRAGMA", StringComparison.OrdinalIgnoreCase)
+                                     || trimmed.StartsWith("EXPLAIN", StringComparison.OrdinalIgnoreCase);
+
+                        if (isSelect)
+                        {
+                            using var reader = cmd.ExecuteReader();
+                            int count = 0;
+                            while (reader.Read()) count++;
+                            results.Add((dbName, $"{count} row(s) returned", false));
+                        }
+                        else
+                        {
+                            var affected = cmd.ExecuteNonQuery();
+                            results.Add((dbName, $"{affected} row(s) affected", false));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        results.Add((dbName, ex.Message, true));
+                    }
+                }
+            });
+
+            _sqlAllDbResults = results;
+            var ok = results.Count(r => !r.IsError);
+            var fail = results.Count(r => r.IsError);
+            _sqlSuccess = $"Executed on {results.Count} database(s): {ok} succeeded, {fail} failed.";
+        }
+        catch (Exception ex)
+        {
+            _sqlError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _isSqlRunning = false;
         }
     }
 

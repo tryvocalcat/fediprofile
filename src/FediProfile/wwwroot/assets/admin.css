@@ -1124,6 +1124,47 @@ input[type="checkbox"] {
   background: var(--admin-danger-bg);
 }
 
+/* Sort controls */
+.pe-link-sort-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: 0.35rem;
+  flex-shrink: 0;
+}
+
+.pe-sort-btn {
+  background: var(--admin-surface-hover, #f0f0f0);
+  border: 1px solid var(--admin-border, #ddd);
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 0.05rem 0.35rem;
+  line-height: 1.1;
+  color: var(--admin-ink-muted, #666);
+  transition: background 0.15s, color 0.15s;
+}
+
+.pe-sort-btn:first-child {
+  border-radius: 4px 4px 0 0;
+}
+
+.pe-sort-btn:last-child {
+  border-radius: 0 0 4px 4px;
+  border-top: none;
+}
+
+.pe-sort-btn:hover:not(:disabled) {
+  background: var(--admin-primary, #6366f1);
+  color: #fff;
+  border-color: var(--admin-primary, #6366f1);
+}
+
+.pe-sort-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+  pointer-events: none;
+}
+
 /* Icon grid */
 .pe-icon-grid {
   display: grid;

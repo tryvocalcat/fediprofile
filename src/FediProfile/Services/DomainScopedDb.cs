@@ -540,6 +540,39 @@ public class DomainScopedDb : LocalDbService
                         using var doc = JsonDocument.Parse(jsonContent);
                         var root = doc.RootElement;
 
+                        // --- Store verified URIs from actor "id" and "url" ---
+                        try
+                        {
+                            var verifiedUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                            // The local actor URI is always verified
+                            verifiedUris.Add(actorId);
+
+                            if (root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
+                            {
+                                var idUri = idEl.GetString();
+                                if (!string.IsNullOrWhiteSpace(idUri))
+                                    verifiedUris.Add(idUri);
+                            }
+
+                            if (root.TryGetProperty("url", out var urlEl2) && urlEl2.ValueKind == JsonValueKind.String)
+                            {
+                                var urlUri = urlEl2.GetString();
+                                if (!string.IsNullOrWhiteSpace(urlUri))
+                                    verifiedUris.Add(urlUri);
+                            }
+
+                            foreach (var uri in verifiedUris)
+                            {
+                                await AddVerifiedUriAsync(userSlug, uri);
+                                Console.WriteLine($"[Information] Added verified URI for user '{userSlug}': {uri}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Warning] Failed to store verified URIs for '{userSlug}': {ex.Message}");
+                        }
+
                         // --- Parse avatar from "icon" ---
                         try
                         {
@@ -877,5 +910,217 @@ public class DomainScopedDb : LocalDbService
         while (await reader.ReadAsync())
             result.Add(reader.GetString(0));
         return result;
+    }
+
+    /// <summary>
+    /// Adds a verified URI for a user. Duplicates are silently ignored.
+    /// </summary>
+    public async Task AddVerifiedUriAsync(string userSlug, string uri)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO VerifiedUris (UserSlug, Uri)
+            VALUES (@userSlug, @uri);
+        ";
+        cmd.Parameters.AddWithValue("@userSlug", userSlug);
+        cmd.Parameters.AddWithValue("@uri", uri);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Backfills verified URIs for all existing users by fetching their Mastodon ActivityPub actor.
+    /// Returns a summary of results per user.
+    /// </summary>
+    public async Task<List<(string UserSlug, bool Success, string Message)>> BackfillVerifiedUrisAsync()
+    {
+        var results = new List<(string UserSlug, bool Success, string Message)>();
+
+        // Get all active users with Mastodon info
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = @"
+            SELECT Slug, MastodonUser, MastodonServer
+            FROM Users
+            WHERE DeletedUtc IS NULL AND MastodonUser IS NOT NULL AND MastodonServer IS NOT NULL
+        ";
+
+        var users = new List<(string Slug, string MastodonUser, string MastodonServer)>();
+        using (var reader = await cmd.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                users.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2)
+                ));
+            }
+        }
+        connection.Close();
+
+        foreach (var (slug, mastodonUser, mastodonServer) in users)
+        {
+            try
+            {
+                var userDb = new UserScopedDb(_domain, slug, autoCreate: false);
+                var (pubKey, privKey) = await userDb.GetActorKeysAsync();
+                if (string.IsNullOrEmpty(privKey))
+                {
+                    results.Add((slug, false, "No actor keys found"));
+                    continue;
+                }
+
+                var actorId = $"https://{_domain}/{slug}";
+                var keyId = $"{actorId}#main-key";
+                var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId);
+
+                var mastodonUrl = $"https://{mastodonServer}/@{mastodonUser}";
+                var jsonContent = await actorHelper.SendGetSignedRequest(new Uri(mastodonUrl));
+
+                if (string.IsNullOrWhiteSpace(jsonContent))
+                {
+                    results.Add((slug, false, "Empty AP response"));
+                    continue;
+                }
+
+                using var doc = JsonDocument.Parse(jsonContent);
+                var root = doc.RootElement;
+
+                var verifiedUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // The local actor URI is always verified
+                verifiedUris.Add(actorId);
+
+                if (root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
+                {
+                    var idUri = idEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(idUri))
+                        verifiedUris.Add(idUri);
+                }
+
+                if (root.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
+                {
+                    var urlUri = urlEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(urlUri))
+                        verifiedUris.Add(urlUri);
+                }
+
+                foreach (var uri in verifiedUris)
+                {
+                    await AddVerifiedUriAsync(slug, uri);
+                }
+
+                results.Add((slug, true, $"Added {verifiedUris.Count} URI(s): {string.Join(", ", verifiedUris)}"));
+            }
+            catch (Exception ex)
+            {
+                results.Add((slug, false, ex.Message));
+            }
+        }
+
+        return results;
+    }
+
+    // ===== VERIFIED URIS READ =====
+
+    /// <summary>
+    /// Gets all verified URIs for a user.
+    /// </summary>
+    public async Task<List<(int Id, string Uri, string VerifiedUtc)>> GetVerifiedUrisAsync(string userSlug)
+    {
+        var uris = new List<(int, string, string)>();
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Id, Uri, VerifiedUtc FROM VerifiedUris WHERE UserSlug = @userSlug ORDER BY VerifiedUtc DESC";
+        cmd.Parameters.AddWithValue("@userSlug", userSlug);
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            uris.Add((reader.GetInt32(0), reader.GetString(1), reader.GetString(2)));
+        }
+        return uris;
+    }
+
+    /// <summary>
+    /// Removes a verified URI by Id.
+    /// </summary>
+    public async Task RemoveVerifiedUriAsync(int id)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM VerifiedUris WHERE Id = @id";
+        cmd.Parameters.AddWithValue("@id", id);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    // ===== BADGE ISSUERS (DOMAIN-LEVEL, GLOBAL) =====
+
+    /// <summary>
+    /// Upserts a global badge issuer. Returns the issuer Id.
+    /// </summary>
+    public async Task<int> UpsertBadgeIssuerAsync(string name, string actorUrl,
+        string? avatar = null, string? bio = null, string? domain = null)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = @"
+            INSERT INTO BadgeIssuers (Name, ActorUrl, Avatar, Bio, Domain)
+            VALUES (@Name, @ActorUrl, @Avatar, @Bio, @Domain)
+            ON CONFLICT(ActorUrl) DO UPDATE SET
+                Name = @Name,
+                Avatar = @Avatar,
+                Bio = @Bio,
+                Domain = @Domain;
+            SELECT Id FROM BadgeIssuers WHERE ActorUrl = @ActorUrl;
+        ";
+        cmd.Parameters.AddWithValue("@Name", name);
+        cmd.Parameters.AddWithValue("@ActorUrl", actorUrl);
+        cmd.Parameters.AddWithValue("@Avatar", avatar ?? (object)DBNull.Value);
+        cmd.Parameters.AddWithValue("@Bio", bio ?? (object)DBNull.Value);
+        cmd.Parameters.AddWithValue("@Domain", domain ?? (object)DBNull.Value);
+
+        var result = await cmd.ExecuteScalarAsync();
+        return result != null ? Convert.ToInt32(result) : 0;
+    }
+
+    /// <summary>
+    /// Creates or gets a global badge issuer. Returns the issuer Id.
+    /// </summary>
+    public async Task<int> CreateOrGetBadgeIssuerAsync(string name, string actorUrl, string? avatar = null)
+    {
+        return await UpsertBadgeIssuerAsync(name, actorUrl, avatar);
+    }
+
+    /// <summary>
+    /// Gets all global badge issuers.
+    /// </summary>
+    public async Task<List<BadgeIssuer>> GetBadgeIssuersAsync()
+    {
+        var issuers = new List<BadgeIssuer>();
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Id, Name, ActorUrl, Avatar, Bio, Domain, CreatedUtc FROM BadgeIssuers ORDER BY CreatedUtc DESC";
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            issuers.Add(new BadgeIssuer
+            {
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                ActorUrl = reader.GetString(2),
+                Avatar = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Bio = reader.IsDBNull(4) ? null : reader.GetString(4),
+                CreatedUtc = reader.GetString(6)
+            });
+        }
+        return issuers;
     }
 }

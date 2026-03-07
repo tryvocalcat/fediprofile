@@ -20,6 +20,12 @@
     <main class="card">
       <img id="profile-avatar" class="profile-avatar" alt="" style="display:none" />
       <h1 id="profile-name">Loading...</h1>
+      <div class="fedi-handle-hero">
+        <span data-fedi-address></span>
+        <button class="copy-fedi-btn" title="Copy to clipboard">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
       <p class="subtitle" id="profile-bio"></p>
       
       <div id="profile-container" class="profile-container">
@@ -28,7 +34,7 @@
 
       <div class="info-section" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div>
-          <p class="fedi-handle">Follow me in the fediverse: <strong id="fedi-address"></strong> <button id="copy-fedi" class="copy-btn" title="Copy to clipboard">📋</button></p>
+          <p class="fedi-handle">Follow me in the fediverse: <strong data-fedi-address></strong> <button class="copy-fedi-btn" title="Copy to clipboard"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
           <p class="fedi-note">This is a read-only profile &mdash; it doesn&rsquo;t post or reply. It boosts and relays content from linked accounts.</p>
         </div>
         <button id="share-profile" class="share-btn" title="Share this profile">

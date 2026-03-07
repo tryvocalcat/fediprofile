@@ -8,7 +8,6 @@ using Microsoft.Extensions.Options;
 using FediProfile.Core;
 using FediProfile.Models;
 using FediProfile.Services;
-using Microsoft.Extensions.Caching.Memory;
 using FediProfile.Components;
 using FediProfile.Identity;
 
@@ -169,35 +168,35 @@ app.MapGet("/{userSlug}", async (HttpRequest request, string userSlug, LocalDbFa
    
     if (ActivityPubHelper.IsActivityPubRequest(accept))
     {
-        var cache = request.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
-        var cacheKey = $"actorjson:{domain}/{userSlug}";
-
-        if (!cache.TryGetValue(cacheKey, out string? jsonString) || true)
+        // Serve pre-generated static actor JSON if available.
+        // The file is regenerated when the user saves their profile/links (same pattern as profiles/{userSlug}.html).
+        var actorJsonPath = Path.Combine(env.WebRootPath, "profiles", $"{userSlug}.json");
+        if (File.Exists(actorJsonPath))
         {
-             // Check if user database file exists
-            // Note: User databases are created during user registration with InitializeNewUserAsync
-            var userDb = factory.GetInstance(domain, userSlug, autoCreate: false);
-            if (!File.Exists(userDb.DbPath))
-            {
-                return NotFoundPage(env);
-            }
-
-            var actor = await actorService.BuildActorAsync(userDb, request);
-            jsonString = JsonSerializer.Serialize(actor, new System.Text.Json.JsonSerializerOptions
-            {
-                WriteIndented = false,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            });
-
-            cache.Set(cacheKey, jsonString, TimeSpan.FromHours(1));
-            Console.WriteLine($"Built and cached actor JSON for {cacheKey}");
-        }
-        else
-        {
-            Console.WriteLine($"Serving cached actor JSON for {cacheKey}");
+            var jsonString = await File.ReadAllTextAsync(actorJsonPath);
+            return Results.Content(jsonString, "application/activity+json");
         }
 
-        return Results.Content(jsonString!, "application/activity+json");
+        // Fallback: build on-the-fly (first request before profile is saved, or file was deleted)
+        var userDb = factory.GetInstance(domain, userSlug, autoCreate: false);
+        if (!File.Exists(userDb.DbPath))
+        {
+            return NotFoundPage(env);
+        }
+
+        var actor = await actorService.BuildActorAsync(userDb, request);
+        var actorJson = JsonSerializer.Serialize(actor, ActorService.ActorJsonOptions);
+
+        // Write the file so subsequent requests are served from disk
+        try
+        {
+            var profilesDir = Path.Combine(env.WebRootPath, "profiles");
+            Directory.CreateDirectory(profilesDir);
+            await File.WriteAllTextAsync(actorJsonPath, actorJson);
+        }
+        catch { /* best-effort cache write */ }
+
+        return Results.Content(actorJson, "application/activity+json");
     }
 
     // Serve pre-generated static profile if available (includes rel="me" links,
@@ -299,13 +298,6 @@ app.MapGet("/{userSlug}/badges", async (UserScopedDb db) =>
 {
     var badges = await db.GetReceivedBadgesAsync();
     return Results.Json(badges);
-});
-
-// User-scoped badge issuers endpoint: /{user}/badge-issuers
-app.MapGet("/{userSlug}/badge-issuers", async (UserScopedDb db) =>
-{
-    var issuers = await db.GetBadgeIssuersAsync();
-    return Results.Json(issuers);
 });
 
 // ActivityPub followers collection: /{user}/followers

@@ -229,7 +229,7 @@ public class JobProcessor
                 {
                     var userDb = _factory.GetInstance(domain, userSlug);
                     var actorId = $"{scheme}://{fullDomain}/{userSlug}";
-                    await announceService.SendAnnounceAsync(inboxMsg, userDb, actorId);
+                    await announceService.SendAnnounceAsync(inboxMsg, userDb, actorId, jobQueue, job.Id);
                     await jobQueue.AddJobLogAsync(job.Id, $"Announced to user {userSlug}");
                 }
                 catch (Exception ex)

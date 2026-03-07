@@ -14,5 +14,6 @@ public class Link
     public bool Following { get; set; }
     public bool Hidden { get; set; }
     public string? ActorAPUri { get; set; }
+    public int SortOrder { get; set; }
     public string CreatedUtc { get; set; } = string.Empty;
 }

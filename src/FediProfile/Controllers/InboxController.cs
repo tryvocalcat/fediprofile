@@ -72,7 +72,8 @@ public class InboxController : ControllerBase
             }
             else if (inboxMsg.IsCreate())
             {
-                await _announceService.HandleCreateActivityAsync(inboxMsg, db, actorId);
+                var domainDb = new DomainScopedDb(domain);
+                await _announceService.HandleCreateActivityAsync(inboxMsg, db, actorId, domainDb);
             }
             else if (inboxMsg.IsAnnounce())
             {

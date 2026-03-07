@@ -92,3 +92,18 @@ CREATE TABLE IF NOT EXISTS VerifiedUris (
 );
 
 CREATE INDEX IF NOT EXISTS IX_VerifiedUris_UserSlug ON VerifiedUris(UserSlug);
+
+-- ==============================================================================
+-- BadgeIssuers table: Trusted ActivityPub actors that can issue badges to users
+-- Scoped per user via UserSlug. The Id is referenced by ReceivedBadges in user DBs.
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS BadgeIssuers (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    Name TEXT NOT NULL,
+    ActorUrl TEXT NOT NULL,
+    Avatar TEXT,
+    Bio TEXT,
+    Domain TEXT,
+    CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (ActorUrl)
+);

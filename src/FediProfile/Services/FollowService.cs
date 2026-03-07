@@ -223,7 +223,7 @@ public class AnnounceService
         _followService = followService;
     }
 
-    public async Task HandleCreateActivityAsync(InboxMessage message, UserScopedDb db, string actorId)
+    public async Task HandleCreateActivityAsync(InboxMessage message, UserScopedDb db, string actorId, DomainScopedDb? domainDb = null)
     {
         if (string.IsNullOrEmpty(message.Actor))
         {
@@ -236,7 +236,7 @@ public class AnnounceService
         _logger.LogInformation($"Handling Create from {message.Actor}");
 
         // First, check for badges in this Create activity
-        await ProcessBadgesAsync(message, db, actorId);
+        await ProcessBadgesAsync(message, db, actorId, domainDb);
 
         // Check if this actor is in our AutoBoost links
         var autoBoostLinks = await db.GetAutoBoostLinksAsync();
@@ -268,7 +268,7 @@ public class AnnounceService
         await SendAnnounceAsync(message, db, actorId);
     }
 
-    private async Task ProcessBadgesAsync(InboxMessage message, UserScopedDb db, string actorId)
+    private async Task ProcessBadgesAsync(InboxMessage message, UserScopedDb db, string actorId, DomainScopedDb? domainDb = null)
     {
         try
         {
@@ -314,7 +314,9 @@ public class AnnounceService
                 var issuerName = objectRoot.TryGetProperty("attributedTo", out var attrEl) ? attrEl.GetString() ?? message.Actor : message.Actor;
                 var issuerAvatar = objectRoot.TryGetProperty("icon", out var iconEl) ? iconEl.GetString() : null;
 
-                var issuerId = await db.CreateOrGetBadgeIssuerAsync(issuerName, issuerUrl, issuerAvatar);
+                var issuerId = domainDb != null
+                    ? await domainDb.CreateOrGetBadgeIssuerAsync(issuerName!, issuerUrl!, issuerAvatar)
+                    : await db.CreateOrGetBadgeIssuerAsync(issuerName!, issuerUrl!, issuerAvatar);
 
                 // Store the badge
                 var noteId = message.Id ?? $"{actorId}/note/{Guid.NewGuid()}";
@@ -412,7 +414,7 @@ public class AnnounceService
         return false;
     }
 
-    public async Task SendAnnounceAsync(InboxMessage createMessage, UserScopedDb db, string actorId)
+    public async Task SendAnnounceAsync(InboxMessage createMessage, UserScopedDb db, string actorId, JobQueueService? jobQueue = null, long? jobId = null)
     {
         try
         {
@@ -420,26 +422,49 @@ public class AnnounceService
             if (string.IsNullOrEmpty(privateKeyPem))
             {
                 _logger.LogWarning("Cannot announce: missing private key");
+                if (jobQueue != null && jobId != null)
+                    await jobQueue.AddJobLogAsync(jobId.Value, "Cannot announce: missing private key");
                 return;
             }
 
             var keyId = $"{actorId}#main-key";
 
+            // Extract the note ID from the inner object, falling back to the Create activity ID
+            string? noteId = null;
+            if (createMessage.Object is JsonElement objectElement)
+            {
+                if (objectElement.ValueKind == JsonValueKind.Object && objectElement.TryGetProperty("id", out var idElement))
+                {
+                    noteId = idElement.GetString();
+                }
+                else if (objectElement.ValueKind == JsonValueKind.String)
+                {
+                    noteId = objectElement.GetString();
+                }
+            }
+            noteId ??= createMessage.Id;
+
             var announce = new AnnounceActivity
             {
                 Context = "https://www.w3.org/ns/activitystreams",
                 Actor = actorId,
-                Object = createMessage.Id,
+                Object = noteId,
                 Id = $"{actorId}/announces/{Guid.NewGuid()}",
                 To = new[] { "https://www.w3.org/ns/activitystreams#Public" }
             };
+
+            if (jobQueue != null && jobId != null)
+                await jobQueue.AddJobLogAsync(jobId.Value, $"Announcing note {noteId} as {actorId}");
 
             var jsonContent = JsonSerializer.Serialize(announce, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
 
             // Deliver the Announce to all followers
             var followers = await db.GetFollowersAsync();
             var helper = new ActorHelper(privateKeyPem, keyId, _logger);
-            
+
+            if (jobQueue != null && jobId != null)
+                await jobQueue.AddJobLogAsync(jobId.Value, $"Delivering Announce to {followers.Count} follower(s): {jsonContent}");
+
             foreach (var follower in followers)
             {
                 var inbox = follower.Inbox;
@@ -449,19 +474,27 @@ public class AnnounceService
                     {
                         await helper.SendPostSignedRequest(jsonContent, new Uri(inbox));
                         _logger.LogInformation($"Sent Announce to follower inbox: {inbox}");
+                        if (jobQueue != null && jobId != null)
+                            await jobQueue.AddJobLogAsync(jobId.Value, $"Sent Announce to follower inbox: {inbox}");
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning($"Failed to deliver Announce to {inbox}: {ex.Message}");
+                        if (jobQueue != null && jobId != null)
+                            await jobQueue.AddJobLogAsync(jobId.Value, $"Failed to deliver Announce to {inbox}: {ex.Message}");
                     }
                 }
             }
             
             _logger.LogInformation($"Announced activity {createMessage.Id} to {followers.Count} followers");
+            if (jobQueue != null && jobId != null)
+                await jobQueue.AddJobLogAsync(jobId.Value, $"Announced activity {createMessage.Id} to {followers.Count} follower(s)");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error announcing create activity");
+            if (jobQueue != null && jobId != null)
+                await jobQueue.AddJobLogAsync(jobId.Value, $"Error announcing create activity: {ex.Message}");
         }
     }
 }

@@ -26,7 +26,9 @@ public static class Themes
         new("theme-sunset.css",       "Sunset"),
         new("theme-professional.css", "Professional"),
         new("theme-hyperspace.css",   "Hyperspace"),
-        new("theme-stars.css",      "Stars"),
+        new("theme-stars.css",        "Stars"),
+        new("theme-retropop.css",     "Retro Pop"),
+        new("theme-glass.css",        "Glass"),
     };
 
     /// <summary>

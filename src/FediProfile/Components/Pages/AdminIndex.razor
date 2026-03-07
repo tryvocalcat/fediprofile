@@ -17,7 +17,7 @@
 @inject IWebHostEnvironment WebEnv
 @inject NavigationManager Navigation
 @inject ProfileHtmlService ProfileHtml
-@inject Microsoft.Extensions.Caching.Memory.IMemoryCache MemoryCache
+@inject ActorService ActorService
 
 <section class="admin-shell">
     <header class="admin-header">
@@ -130,6 +130,16 @@
                             {
                                 <div class="pe-link-card @(link.IsEditing ? "pe-link-editing" : "")">
                                     <div class="pe-link-row">
+                                        <!-- Sort -->
+                                        <div class="pe-link-sort-actions" role="group" aria-label="Reorder @link.Name">
+                                            <button class="pe-link-action" @onclick="() => MoveLinkUp(link)" disabled="@IsFirstInGroup(link)" aria-label="Move @link.Name up">
+                                                ▲
+                                            </button>
+                                            <button class="pe-link-action" @onclick="() => MoveLinkDown(link)" disabled="@IsLastInGroup(link)" aria-label="Move @link.Name down">
+                                                ▼
+                                            </button>
+                                        </div>
+
                                         <!-- Icon -->
                                         <div class="pe-link-icon-btn" @onclick="() => ToggleLinkIconGrid(link)" title="Change icon">
                                             @if (!string.IsNullOrWhiteSpace(link.Icon))
@@ -175,10 +185,10 @@
                                         </label>
 
                                         <!-- Actions -->
-                                        <button class="pe-link-action" @onclick="() => ToggleEditLink(link)" title="@(link.IsEditing ? "Collapse" : "Edit")">
-                                            @(link.IsEditing ? "▲" : "✏️")
+                                        <button class="pe-link-action" @onclick="() => ToggleEditLink(link)" title="@(link.IsEditing ? "Close editor" : "Edit link")" aria-label="@(link.IsEditing ? "Close editor for " + link.Name : "Edit " + link.Name)">
+                                            @(link.IsEditing ? "✕" : "✏️")
                                         </button>
-                                        <button class="pe-link-action pe-link-delete" @onclick="() => DeleteLinkById(link.Id)" title="Delete">
+                                        <button class="pe-link-action pe-link-delete" @onclick="() => DeleteLinkById(link.Id)" title="Delete" aria-label="Delete @link.Name">
                                             🗑️
                                         </button>
                                     </div>
@@ -225,6 +235,13 @@
                                             <div class="form-group">
                                                 <label>URL</label>
                                                 <input type="text" @bind="link.Url" placeholder="https://example.com" class="form-control" />
+                                                @{ var _editHint = GetEditLinkUrlHint(link); }
+                                                @if (_editHint != null)
+                                                {
+                                                    <small class="alert alert-warning" style="display:block;margin-top:0.35rem;padding:0.4rem 0.6rem;font-size:0.82rem">
+                                                        @_editHint
+                                                    </small>
+                                                }
                                             </div>
                                             <div class="form-group">
                                                 <label>Description</label>
@@ -332,6 +349,13 @@
                                 <div class="form-group">
                                     <label>URL</label>
                                     <input type="text" @bind="_newLinkUrl" placeholder="https://example.com" class="form-control" />
+                                    @{ var _newLinkHint = GetNewLinkUrlHint(); }
+                                    @if (_newLinkHint != null)
+                                    {
+                                        <small class="alert alert-warning" style="display:block;margin-top:0.35rem;padding:0.4rem 0.6rem;font-size:0.82rem">
+                                            @_newLinkHint
+                                        </small>
+                                    }
                                 </div>
                                 <div class="form-group">
                                     <label>Description (optional)</label>
@@ -397,86 +421,9 @@
                 }
             </article>
 
-            <!-- Badge Issuers -->
-            <article class="card admin-card-spaced">
-                <h2>Badge Issuers</h2>
-                <p class="muted">Trusted actors that can issue you badges</p>
-
-                @if (_badgeIssuers == null)
-                {
-                    <p>Loading badge issuers...</p>
-                }
-                else if (!_badgeIssuers.Any())
-                {
-                    <p>No badge issuers configured.</p>
-                }
-                else
-                {
-                    <table class="user-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Actor URL</th>
-                                <th>Following</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var issuer in _badgeIssuers)
-                            {
-                                <tr>
-                                    <td>@issuer.Name</td>
-                                    <td><a href="@issuer.ActorUrl" target="_blank">@TruncateUrl(issuer.ActorUrl)</a></td>
-                                    <td>@(issuer.Following ? "Yes" : "No")</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                }
-            </article>
-
-            <!-- Danger Zone -->
-            <article class="card admin-card-spaced" style="border:2px solid #dc3545;">
-                <h2 style="color:#dc3545;">⚠️ Danger Zone</h2>
-                <p class="muted">Permanently delete your account and all associated data. This action cannot be undone.</p>
-
-                @if (!string.IsNullOrEmpty(_deleteAccountMessage))
-                {
-                    <div class="alert @(_deleteAccountIsError ? "alert-error" : "alert-success")">
-                        @_deleteAccountMessage
-                    </div>
-                }
-
-                @if (!_deleteAccountConfirming)
-                {
-                    <button class="button button-danger" @onclick="() => _deleteAccountConfirming = true" disabled="@_isProcessing">
-                        Delete My Account
-                    </button>
-                }
-                else
-                {
-                    <div class="alert alert-error" style="margin-bottom:1rem;">
-                        <strong>Are you sure?</strong> This will permanently delete your profile, all links, badges, and data.
-                        Type your username <strong>@_currentUserSlug</strong> below to confirm.
-                    </div>
-                    <div class="form-group">
-                        <input type="text" @bind="_deleteAccountConfirmText" placeholder="Type your username to confirm" class="form-control" />
-                    </div>
-                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                        <button class="button button-danger" 
-                                @onclick="DeleteMyAccount" 
-                                disabled="@(_isProcessing || _deleteAccountConfirmText != _currentUserSlug)">
-                            @(_isProcessing ? "Deleting..." : "Permanently Delete Account")
-                        </button>
-                        <button class="button button-ghost" @onclick="CancelDeleteAccount">
-                            Cancel
-                        </button>
-                    </div>
-                }
-            </article>
-
+            <!-- Followers -->
             @if (_followers != null)
             {
-                <!-- Followers -->
                 <article class="card admin-card-spaced">
                     <h2>Followers (@_followerCount)</h2>
                     <p class="muted">People following your profile via ActivityPub</p>
@@ -519,6 +466,132 @@
                     }
                 </article>
             }
+
+            <!-- Badge Configuration (collapsible) -->
+            <article class="card admin-card-spaced">
+                <div class="admin-collapsible-header" @onclick="() => _badgeSectionOpen = !_badgeSectionOpen" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <h2 style="margin:0">Badge Configuration</h2>
+                        <p class="muted" style="margin:0.25rem 0 0">Verified URIs and trusted badge issuers</p>
+                    </div>
+                    <span style="font-size:1.2rem">@(_badgeSectionOpen ? "▲" : "▼")</span>
+                </div>
+
+                @if (_badgeSectionOpen)
+                {
+                    <!-- Verified URIs -->
+                    <div style="margin-top:1rem">
+                        <h3>Verified URIs</h3>
+                        <p class="muted">URIs verified as belonging to you (from your Mastodon actor)</p>
+
+                        @if (_verifiedUris == null)
+                        {
+                            <p>Loading verified URIs...</p>
+                        }
+                        else if (!_verifiedUris.Any())
+                        {
+                            <p class="text-muted">No verified URIs yet.</p>
+                        }
+                        else
+                        {
+                            <table class="user-table">
+                                <thead>
+                                    <tr>
+                                        <th>URI</th>
+                                        <th>Verified</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var uri in _verifiedUris)
+                                    {
+                                        <tr>
+                                            <td><a href="@uri.Uri" target="_blank" rel="noopener">@TruncateUrl(uri.Uri)</a></td>
+                                            <td>@uri.VerifiedUtc</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+
+                    <!-- Badge Issuers -->
+                    <div style="margin-top:1.5rem">
+                        <h3>Badge Issuers</h3>
+                        <p class="muted">Trusted actors that can issue you badges</p>
+
+                        @if (_badgeIssuers == null)
+                        {
+                            <p>Loading badge issuers...</p>
+                        }
+                        else if (!_badgeIssuers.Any())
+                        {
+                            <p class="text-muted">No badge issuers configured.</p>
+                        }
+                        else
+                        {
+                            <table class="user-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Actor URL</th>
+                                        <th>Following</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var issuer in _badgeIssuers)
+                                    {
+                                        <tr>
+                                            <td>@issuer.Name</td>
+                                            <td><a href="@issuer.ActorUrl" target="_blank">@TruncateUrl(issuer.ActorUrl)</a></td>
+                                            <td>@(issuer.Following ? "Yes" : "No")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                }
+            </article>
+
+            <!-- Danger Zone -->
+            <article class="card admin-card-spaced" style="border:2px solid #dc3545;">
+                <h2 style="color:#dc3545;">⚠️ Danger Zone</h2>
+                <p class="muted">Permanently delete your account and all associated data. This action cannot be undone.</p>
+
+                @if (!string.IsNullOrEmpty(_deleteAccountMessage))
+                {
+                    <div class="alert @(_deleteAccountIsError ? "alert-error" : "alert-success")">
+                        @_deleteAccountMessage
+                    </div>
+                }
+
+                @if (!_deleteAccountConfirming)
+                {
+                    <button class="button button-danger" @onclick="() => _deleteAccountConfirming = true" disabled="@_isProcessing">
+                        Delete My Account
+                    </button>
+                }
+                else
+                {
+                    <div class="alert alert-error" style="margin-bottom:1rem;">
+                        <strong>Are you sure?</strong> This will permanently delete your profile, all links, badges, and data.
+                        Type your username <strong>@_currentUserSlug</strong> below to confirm.
+                    </div>
+                    <div class="form-group">
+                        <input type="text" @bind="_deleteAccountConfirmText" placeholder="Type your username to confirm" class="form-control" />
+                    </div>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                        <button class="button button-danger" 
+                                @onclick="DeleteMyAccount" 
+                                disabled="@(_isProcessing || _deleteAccountConfirmText != _currentUserSlug)">
+                            @(_isProcessing ? "Deleting..." : "Permanently Delete Account")
+                        </button>
+                        <button class="button button-ghost" @onclick="CancelDeleteAccount">
+                            Cancel
+                        </button>
+                    </div>
+                }
+            </article>
         </div>
     }
 </section>
@@ -554,6 +627,133 @@
     private bool _newLinkHidden;
     private bool _newLinkIconGridOpen;
     private bool _addingNewLink;
+
+    // URL format hints per platform icon
+    private static readonly Dictionary<string, (string HandlePrefix, string UrlTemplate, string PlatformName, string Example)> _urlHints = new()
+    {
+        ["bluesky"]  = ("@", "https://bsky.app/profile/{0}", "Bluesky",  "@user.bsky.social"),
+        ["matrix"]   = ("@", "https://matrix.to/#/{0}",      "Matrix",   "@user:matrix.org"),
+        ["telegram"] = ("@", "https://t.me/{0}",             "Telegram", "@username"),
+    };
+
+    /// <summary>
+    /// Checks whether a URL looks like a handle instead of a full URL for the chosen platform icon or link name.
+    /// Returns (correctedUrl, warningMessage). If no correction needed both are null.
+    /// </summary>
+    private static (string? CorrectedUrl, string? Warning) DetectUrlHint(string? iconKey, string? url, string? linkName = null)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return (null, null);
+        var trimmed = url.Trim();
+
+        // If it already looks like a URL, nothing to do
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return (null, null);
+
+        // Detect @user@domain.com webfinger format
+        if (IsWebfingerHandle(trimmed))
+            return (null, "This looks like a fediverse handle — it will be resolved via WebFinger and saved as the profile URL.");
+
+        // Try to find a matching rule: first by icon key, then by link name
+        (string HandlePrefix, string UrlTemplate, string PlatformName, string Example)? matched = null;
+
+        if (!string.IsNullOrEmpty(iconKey) && _urlHints.TryGetValue(iconKey, out var hintByIcon))
+        {
+            matched = hintByIcon;
+        }
+        else if (!string.IsNullOrWhiteSpace(linkName))
+        {
+            foreach (var kvp in _urlHints)
+            {
+                if (string.Equals(kvp.Value.PlatformName, linkName.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    matched = kvp.Value;
+                    break;
+                }
+            }
+        }
+
+        if (matched is { } hint)
+        {
+            if (trimmed.StartsWith(hint.HandlePrefix))
+            {
+                var handle = trimmed.TrimStart('@', '#');
+                var corrected = string.Format(hint.UrlTemplate, handle);
+                return (corrected, $"This looks like a {hint.PlatformName} handle — the URL will be saved as {corrected}");
+            }
+        }
+
+        // Generic warning when nothing matched and input looks like a handle
+        if (trimmed.StartsWith("@") || trimmed.StartsWith("#"))
+            return (null, "This doesn't look like a URL. Select a platform icon (e.g. Bluesky, Matrix) to auto-convert handles, or enter a full URL starting with https://.");
+
+        return (null, null);
+    }
+
+    /// <summary>Checks if the input matches the @user@domain.tld webfinger format.</summary>
+    private static bool IsWebfingerHandle(string input)
+    {
+        if (!input.StartsWith("@")) return false;
+        var withoutLeadingAt = input.Substring(1);
+        var atIdx = withoutLeadingAt.IndexOf('@');
+        return atIdx > 0 && atIdx < withoutLeadingAt.Length - 1 && withoutLeadingAt.Substring(atIdx + 1).Contains('.');
+    }
+
+    /// <summary>
+    /// Resolves a @user@domain.tld handle via WebFinger.
+    /// Returns (profileUrl, actorAPUri) or (null, null) on failure.
+    /// </summary>
+    private static async Task<(string? ProfileUrl, string? ActorUri)> ResolveWebfingerAsync(string handle)
+    {
+        var withoutLeadingAt = handle.TrimStart('@');
+        var atIdx = withoutLeadingAt.IndexOf('@');
+        if (atIdx <= 0) return (null, null);
+        var domain = withoutLeadingAt.Substring(atIdx + 1);
+
+        var webfingerUrl = $"https://{domain}/.well-known/webfinger?resource=acct:{withoutLeadingAt}";
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        http.DefaultRequestHeaders.Add("Accept", "application/jrd+json, application/json");
+        var resp = await http.GetAsync(webfingerUrl);
+        resp.EnsureSuccessStatusCode();
+
+        var json = await resp.Content.ReadAsStringAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        string? profileUrl = null;
+        string? actorUri = null;
+
+        if (doc.RootElement.TryGetProperty("links", out var links))
+        {
+            foreach (var link in links.EnumerateArray())
+            {
+                var rel = link.TryGetProperty("rel", out var r) ? r.GetString() : null;
+                var type = link.TryGetProperty("type", out var t) ? t.GetString() : null;
+                var href = link.TryGetProperty("href", out var h) ? h.GetString() : null;
+                if (string.IsNullOrEmpty(href)) continue;
+
+                if (rel == "self" && type != null && type.Contains("activity"))
+                    actorUri = href;
+                else if (rel == "http://webfinger.net/rel/profile-page")
+                    profileUrl = href;
+            }
+        }
+
+        // Use actor URI as profile URL fallback
+        return (profileUrl ?? actorUri, actorUri);
+    }
+
+    private string? GetNewLinkUrlHint()
+    {
+        var (_, warning) = DetectUrlHint(_selectedIconKey, _newLinkUrl, _newLinkName);
+        return warning;
+    }
+
+    private string? GetEditLinkUrlHint(EditableLink link)
+    {
+        var (_, warning) = DetectUrlHint(link.SelectedIconKey, link.Url, link.Name);
+        return warning;
+    }
     private string? _linkMessage;
     private bool _linkIsError;
 
@@ -574,6 +774,7 @@
         ["peertube"] = ("PeerTube", "/assets/icons/peertube.svg"),
         ["pixelfed"] = ("Pixelfed", "/assets/icons/pixelfed.svg"),
         ["rss"] = ("RSS", "/assets/icons/rss.svg"),
+        ["telegram"] = ("Telegram", "/assets/icons/telegram.svg"),
         ["threads"] = ("Threads", "/assets/icons/threads.svg"),
         ["youtube"] = ("YouTube", "/assets/icons/youtube.svg"),
     };
@@ -586,6 +787,12 @@
 
     // Badge issuers
     private List<BadgeIssuer>? _badgeIssuers;
+
+    // Verified URIs
+    private List<(int Id, string Uri, string VerifiedUtc)>? _verifiedUris;
+
+    // Collapsible sections
+    private bool _badgeSectionOpen;
 
     // Followers
     private List<Follower>? _followers;
@@ -626,6 +833,7 @@
         public string? OrigCategory { get; set; }
         public bool OrigAutoBoost { get; set; }
         public bool OrigHidden { get; set; }
+        public int SortOrder { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -675,6 +883,7 @@
             await LoadProfileSettings();
             await LoadLinks();
             await LoadBadgeIssuers();
+            await LoadVerifiedUris();
             await LoadFollowers();
         }
     }
@@ -749,13 +958,6 @@
                 uiTheme: _profileTheme
             );
             await RegenerateStaticProfileAsync();
-
-            // Invalidate cached ActivityPub actor JSON so federation picks up changes
-            if (_currentDomain != null && _currentUserSlug != null)
-            {
-                MemoryCache.Remove($"actorjson:{_currentDomain}/{_currentUserSlug}");
-            }
-
             _profileMessage = "Profile saved successfully!";
         }
         catch (Exception ex)
@@ -826,6 +1028,7 @@
                 IsActivityPub = d.IsActivityPub,
                 Hidden = d.Hidden,
                 ActorAPUri = d.ActorAPUri,
+                SortOrder = d.SortOrder,
                 SelectedIconKey = ResolveIconKeyFromPath(d.Icon),
             }).ToList();
 
@@ -851,7 +1054,7 @@
             .GroupBy(l => l.Category ?? "")
             .OrderBy(g => g.Key == "" ? 0 : 1)
             .ThenBy(g => g.Key)
-            .Select(g => new KeyValuePair<string, List<EditableLink>>(g.Key, g.ToList()));
+            .Select(g => new KeyValuePair<string, List<EditableLink>>(g.Key, g.OrderBy(l => l.SortOrder).ToList()));
     }
 
     private string? ResolveIconKeyFromPath(string? iconPath)
@@ -906,6 +1109,33 @@
         if (_currentUserDb == null) return;
         _linkMessage = null;
         _linkIsError = false;
+
+        // Auto-correct handle-style URLs for known platforms
+        var (correctedEdit, _) = DetectUrlHint(link.SelectedIconKey, link.Url, link.Name);
+        if (correctedEdit != null)
+            link.Url = correctedEdit;
+
+        // Resolve @user@domain webfinger handles
+        if (IsWebfingerHandle(link.Url?.Trim() ?? ""))
+        {
+            try
+            {
+                var (wfProfileUrl, wfActorUri) = await ResolveWebfingerAsync(link.Url!.Trim());
+                if (!string.IsNullOrEmpty(wfProfileUrl))
+                {
+                    link.Url = wfProfileUrl;
+                    if (!string.IsNullOrEmpty(wfActorUri))
+                    {
+                        link.IsActivityPub = true;
+                        link.ActorAPUri = wfActorUri;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogInformation("WebFinger resolve failed for {Handle}: {Message}", link.Url, ex.Message);
+            }
+        }
 
         try
         {
@@ -1131,6 +1361,107 @@
         }
     }
 
+    // ===== Link Sorting =====
+
+    /// <summary>
+    /// Ensures every link in the group has a unique, sequential SortOrder.
+    /// Called before any swap so that links loaded with SortOrder=0 get proper values.
+    /// </summary>
+    private void NormalizeSortOrders(List<EditableLink> group)
+    {
+        // Check if all values are already unique
+        var values = group.Select(l => l.SortOrder).ToList();
+        if (values.Distinct().Count() == values.Count && values.SequenceEqual(values.OrderBy(v => v)))
+            return;
+
+        // Reassign 1, 2, 3... preserving current relative order
+        for (int i = 0; i < group.Count; i++)
+        {
+            group[i].SortOrder = i + 1;
+        }
+    }
+
+    private bool IsFirstInGroup(EditableLink link)
+    {
+        if (_editableLinks == null) return true;
+        var group = _editableLinks
+            .Where(l => (l.Category ?? "") == (link.Category ?? ""))
+            .OrderBy(l => l.SortOrder)
+            .ToList();
+        return group.Count == 0 || group[0].Id == link.Id;
+    }
+
+    private bool IsLastInGroup(EditableLink link)
+    {
+        if (_editableLinks == null) return true;
+        var group = _editableLinks
+            .Where(l => (l.Category ?? "") == (link.Category ?? ""))
+            .OrderBy(l => l.SortOrder)
+            .ToList();
+        return group.Count == 0 || group[^1].Id == link.Id;
+    }
+
+    private async Task MoveLinkUp(EditableLink link)
+    {
+        if (_currentUserDb == null || _editableLinks == null) return;
+        var group = _editableLinks
+            .Where(l => (l.Category ?? "") == (link.Category ?? ""))
+            .OrderBy(l => l.SortOrder)
+            .ThenBy(l => l.Id)
+            .ToList();
+
+        NormalizeSortOrders(group);
+
+        var idx = group.FindIndex(l => l.Id == link.Id);
+        if (idx <= 0) return;
+
+        // Swap sort orders with the previous item
+        var prev = group[idx - 1];
+        (prev.SortOrder, link.SortOrder) = (link.SortOrder, prev.SortOrder);
+
+        await PersistSortOrdersAsync();
+    }
+
+    private async Task MoveLinkDown(EditableLink link)
+    {
+        if (_currentUserDb == null || _editableLinks == null) return;
+        var group = _editableLinks
+            .Where(l => (l.Category ?? "") == (link.Category ?? ""))
+            .OrderBy(l => l.SortOrder)
+            .ThenBy(l => l.Id)
+            .ToList();
+
+        NormalizeSortOrders(group);
+
+        var idx = group.FindIndex(l => l.Id == link.Id);
+        if (idx < 0 || idx >= group.Count - 1) return;
+
+        // Swap sort orders with the next item
+        var next = group[idx + 1];
+        (next.SortOrder, link.SortOrder) = (link.SortOrder, next.SortOrder);
+
+        await PersistSortOrdersAsync();
+    }
+
+    private async Task PersistSortOrdersAsync()
+    {
+        if (_currentUserDb == null || _editableLinks == null) return;
+        _linkMessage = null;
+        _linkIsError = false;
+
+        try
+        {
+            var sortOrders = _editableLinks.Select(l => (l.Id, l.SortOrder));
+            await _currentUserDb.UpdateLinkSortOrdersAsync(sortOrders);
+            await RegenerateStaticProfileAsync();
+        }
+        catch (Exception ex)
+        {
+            _linkMessage = $"Error updating sort order: {ex.Message}";
+            _linkIsError = true;
+        }
+    }
+
     // ===== New Link =====
 
     private void StartAddingLink()
@@ -1189,6 +1520,26 @@
                 _linkMessage = "Name and URL are required.";
                 _linkIsError = true;
                 return;
+            }
+
+            // Auto-correct handle-style URLs for known platforms
+            var (correctedNew, _) = DetectUrlHint(_selectedIconKey, _newLinkUrl, _newLinkName);
+            if (correctedNew != null)
+                _newLinkUrl = correctedNew;
+
+            // Resolve @user@domain webfinger handles
+            if (IsWebfingerHandle(_newLinkUrl?.Trim() ?? ""))
+            {
+                try
+                {
+                    var (wfProfileUrl, wfActorUri) = await ResolveWebfingerAsync(_newLinkUrl!.Trim());
+                    if (!string.IsNullOrEmpty(wfProfileUrl))
+                        _newLinkUrl = wfProfileUrl;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogInformation("WebFinger resolve failed for {Handle}: {Message}", _newLinkUrl, ex.Message);
+                }
             }
 
             string? effectiveIcon = ResolveNewLinkIcon();
@@ -1315,15 +1666,27 @@ I don't know if this is the best UX
 
     private async Task LoadBadgeIssuers()
     {
-        if (_currentUserDb == null) return;
+        if (string.IsNullOrEmpty(_currentUserSlug)) return;
         try
         {
-            var issuers = await _currentUserDb.GetBadgeIssuersAsync();
-            _badgeIssuers = issuers;
+            _badgeIssuers = await DomainDb.GetBadgeIssuersAsync();
         }
         catch
         {
             _badgeIssuers = new List<BadgeIssuer>();
+        }
+    }
+
+    private async Task LoadVerifiedUris()
+    {
+        if (string.IsNullOrEmpty(_currentUserSlug)) return;
+        try
+        {
+            _verifiedUris = await DomainDb.GetVerifiedUrisAsync(_currentUserSlug);
+        }
+        catch
+        {
+            _verifiedUris = new List<(int, string, string)>();
         }
     }
 
@@ -1424,6 +1787,7 @@ I don't know if this is the best UX
             var fullDomain = httpContext?.Request.Host.ToString() ?? _currentDomain ?? "localhost";
             var baseDomain = $"{scheme}://{fullDomain}";
             await ProfileHtml.GenerateAsync(_currentUserDb, _currentUserSlug, baseDomain);
+            await ActorService.GenerateActorJsonAsync(_currentUserDb, _currentUserSlug, baseDomain);
         }
         catch (Exception ex)
         {

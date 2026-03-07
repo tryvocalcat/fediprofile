@@ -11,5 +11,6 @@ public record LinkResponse(
     string? Category,
     string? Type,
     bool Hidden,
+    int SortOrder,
     DateTime CreatedUtc
 );

@@ -1,9 +1,21 @@
 @page "/login"
 @using Microsoft.AspNetCore.Components
+@using System.Security.Claims
 @layout FediProfile.Components.Layouts.MinimalLayout
 @rendermode InteractiveServer
 
 @inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+@if (_checking)
+{
+    <section class="login-shell">
+        <div class="login-card">
+            <p class="muted">Checking authentication...</p>
+        </div>
+    </section>
+    return;
+}
 
 <section class="login-shell">
     <div class="login-card">
@@ -25,6 +37,18 @@
 
 @code {
     private string? server;
+    private bool _checking = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            NavigationManager.NavigateTo("/login/check", true);
+            return;
+        }
+        _checking = false;
+    }
 
     private void StartLogin()
     {

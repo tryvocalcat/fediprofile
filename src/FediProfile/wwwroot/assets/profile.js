@@ -114,26 +114,33 @@ function applyTheme(themeName) {
   document.head.appendChild(link);
 }
 
-// Populate the fediverse handle
+// Populate all fediverse handle elements
 function populateFediHandle() {
-  const el = document.getElementById('fedi-address');
-  if (el) {
-    const username = window.location.pathname.replace(/^\/|\/$/, '');
-    const domain = window.location.host;
-    el.textContent = '@' + username + '@' + domain;
-  }
+  const username = window.location.pathname.replace(/^\/|\/$/g, '');
+  const domain = window.location.host;
+  const address = '@' + username + '@' + domain;
+  document.querySelectorAll('[data-fedi-address]').forEach(el => {
+    el.textContent = address;
+  });
 }
 
 // Copy fedi address to clipboard
 function initCopyButton() {
-  const btn = document.getElementById('copy-fedi');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    const address = document.getElementById('fedi-address')?.textContent;
-    if (!address) return;
-    navigator.clipboard.writeText(address).then(() => {
-      btn.textContent = '✅';
-      setTimeout(() => { btn.textContent = '📋'; }, 1500);
+  document.querySelectorAll('.copy-fedi-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const address = document.querySelector('[data-fedi-address]')?.textContent;
+      if (!address) return;
+      navigator.clipboard.writeText(address).then(() => {
+        btn.classList.add('copied');
+        const svg = btn.querySelector('svg');
+        const originalSvg = svg?.outerHTML;
+        if (svg) svg.outerHTML = '<svg viewBox="0 0 24 24" width="' + svg.getAttribute('width') + '" height="' + svg.getAttribute('height') + '" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          const check = btn.querySelector('svg');
+          if (check && originalSvg) check.outerHTML = originalSvg;
+        }, 1500);
+      });
     });
   });
 }
