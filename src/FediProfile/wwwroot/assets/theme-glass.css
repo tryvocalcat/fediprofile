@@ -1,0 +1,456 @@
+/* ══════════════════════════════════════════════════════════
+   Theme: Glass
+   ══════════════════════════════════════════════════════════
+   Ultra-clean glassmorphism. Frosted translucent cards on a
+   soft mesh-gradient background. Hairline separators, no
+   heavy borders, buttery smooth transitions, monochromatic
+   emerald accent.
+   ══════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light dark;
+  --bg: #e8f0f2;
+  --ink: #1c2b33;
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --card: rgba(255, 255, 255, 0.55);
+  --card-hover: rgba(255, 255, 255, 0.72);
+  --border: rgba(255, 255, 255, 0.45);
+  --shadow: rgba(16, 185, 129, 0.06);
+  --link-hover: rgba(16, 185, 129, 0.06);
+  --glass-blur: 20px;
+  --glass-border: rgba(255, 255, 255, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c1117;
+    --ink: #e2e8f0;
+    --accent: #34d399;
+    --accent-hover: #6ee7b7;
+    --card: rgba(20, 30, 40, 0.5);
+    --card-hover: rgba(30, 44, 58, 0.6);
+    --border: rgba(255, 255, 255, 0.07);
+    --shadow: rgba(52, 211, 153, 0.04);
+    --link-hover: rgba(52, 211, 153, 0.05);
+    --glass-blur: 24px;
+    --glass-border: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* ── Mesh-gradient background ──────────────────────────── */
+body {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(6, 182, 212, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(139, 92, 246, 0.06) 0%, transparent 60%),
+    var(--bg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.01em;
+  position: relative;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background:
+      radial-gradient(ellipse at 15% 10%, rgba(52, 211, 153, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 85% 90%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 40% 60%, rgba(139, 92, 246, 0.04) 0%, transparent 55%),
+      #0c1117;
+  }
+}
+
+/* Subtle animated glow orb */
+body::before {
+  content: '';
+  position: fixed;
+  width: 500px;
+  height: 500px;
+  top: -150px;
+  right: -100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  animation: orbFloat 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  width: 400px;
+  height: 400px;
+  bottom: -100px;
+  left: -80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  animation: orbFloat2 25s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-40px, 30px, 0); }
+}
+
+@keyframes orbFloat2 {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(30px, -25px, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
+  }
+  .card {
+    animation: none !important;
+  }
+}
+
+/* ── Card — frosted glass panel ────────────────────────── */
+.card {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+  width: 100%;
+  padding: 52px 48px;
+  border-radius: 28px;
+  background: var(--card);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: glassAppear 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes glassAppear {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    backdrop-filter: blur(var(--glass-blur));
+  }
+}
+
+/* ── Heading — clean, weighted, no gradient tricks ─────── */
+h1 {
+  font-size: 2.4rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.subtitle {
+  font-size: 0.95rem;
+  color: var(--accent);
+  text-align: center;
+  font-weight: 400;
+  margin: 0 0 36px;
+  opacity: 0.8;
+}
+
+/* ── Category headers — minimal underline ──────────────── */
+h2 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 36px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  opacity: 0.7;
+}
+
+/* Remove base theme's ::before/::after decorations */
+h2::before,
+h2::after {
+  content: none;
+}
+
+/* ── Links container ───────────────────────────────────── */
+.links-container {
+  display: grid;
+  gap: 20px;
+}
+
+.category {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Link cards — borderless glass tiles ───────────────── */
+.link-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: none;
+  border-radius: 16px;
+  text-decoration: none;
+  color: var(--ink);
+  position: relative;
+  overflow: hidden;
+  box-shadow: none;
+  transition:
+    background 400ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 400ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-color-scheme: light) {
+  .link-card {
+    background: rgba(255, 255, 255, 0.35);
+  }
+}
+
+.link-card:hover {
+  background: var(--card-hover);
+  box-shadow:
+    0 4px 20px rgba(16, 185, 129, 0.08),
+    0 1px 4px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+  border: none;
+}
+
+/* Accent line that slides in from the left */
+.link-card::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 0;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+  transition: height 350ms cubic-bezier(0.22, 1, 0.36, 1), top 350ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.link-card:hover::before {
+  height: 60%;
+  top: 20%;
+}
+
+.link-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex-shrink: 0;
+  opacity: 0.9;
+  transition: opacity 300ms ease;
+}
+
+.link-card:hover .link-icon {
+  opacity: 1;
+}
+
+.link-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-content strong {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+  word-break: break-word;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.link-content p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink);
+  opacity: 0.5;
+  line-height: 1.4;
+  word-break: break-word;
+  font-weight: 400;
+}
+
+/* ── Boost badge — pill with glass effect ──────────────── */
+.boost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  .boost-badge {
+    color: #0c1117;
+  }
+}
+
+/* ── Info section ──────────────────────────────────────── */
+.info-section {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.info-section summary {
+  font-size: 0.88rem;
+  color: var(--ink);
+  opacity: 0.45;
+  font-weight: 500;
+  transition: opacity 300ms ease;
+}
+
+.info-section summary:hover {
+  opacity: 0.75;
+}
+
+.info-section ul {
+  color: var(--ink);
+  opacity: 0.55;
+  font-size: 0.85rem;
+}
+
+.info-section li {
+  margin-bottom: 6px;
+}
+
+.info-section code {
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--accent);
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+
+/* ── Share button — translucent pill ───────────────────── */
+.share-btn {
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  background: var(--card);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.82rem;
+  padding: 8px 18px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  transition:
+    background 350ms ease,
+    box-shadow 350ms ease,
+    border-color 350ms ease;
+}
+
+.share-btn:hover {
+  background: var(--card-hover);
+  border-color: var(--accent);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.1);
+  color: var(--ink);
+}
+
+/* ── Fedi handle ───────────────────────────────────────── */
+.fedi-handle-hero {
+  color: var(--ink);
+  opacity: 0.5;
+}
+
+.copy-fedi-btn {
+  color: var(--ink);
+  opacity: 0.35;
+  transition: opacity 250ms ease;
+}
+
+.copy-fedi-btn:hover {
+  opacity: 0.7;
+}
+
+.copy-fedi-btn.copied {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* ── Scrollbar — thin, matches glass aesthetic ─────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.15) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(16, 185, 129, 0.15);
+  border-radius: 20px;
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .card {
+    padding: 36px 28px;
+    border-radius: 24px;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 28px 20px;
+    border-radius: 20px;
+  }
+
+  h1 {
+    font-size: 1.7rem;
+  }
+
+  .link-card {
+    padding: 12px 14px;
+    gap: 12px;
+    border-radius: 14px;
+  }
+
+  .link-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .link-content strong {
+    font-size: 0.9rem;
+  }
+
+  .link-content p {
+    font-size: 0.78rem;
+  }
+}

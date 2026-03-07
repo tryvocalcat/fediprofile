@@ -1,0 +1,449 @@
+/* ══════════════════════════════════════════════════════════
+   Theme: Retro Pop
+   ══════════════════════════════════════════════════════════
+   A loud, playful, Memphis-design-inspired theme with neon
+   colors, geometric patterns, wobbly hovers, chunky shapes,
+   and an animated rainbow gradient background.
+   ══════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+  --bg: #ffe100;
+  --ink: #1a1a2e;
+  --accent: #ff2d87;
+  --accent-hover: #7b2ff7;
+  --card: #ffffff;
+  --card-hover: #fff5fc;
+  --border: #1a1a2e;
+  --shadow: rgba(26, 26, 46, 0.15);
+  --link-hover: rgba(255, 45, 135, 0.08);
+  --pop-cyan: #00e5ff;
+  --pop-lime: #b8ff00;
+  --pop-pink: #ff2d87;
+  --pop-purple: #7b2ff7;
+  --pop-orange: #ff6d00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e;
+    --ink: #fff;
+    --accent: #ff2d87;
+    --accent-hover: #00e5ff;
+    --card: #2a2a4a;
+    --card-hover: #3a3a5a;
+    --border: #ff2d87;
+    --shadow: rgba(0, 0, 0, 0.3);
+    --link-hover: rgba(255, 45, 135, 0.1);
+  }
+}
+
+/* ── Animated gradient background ──────────────────────── */
+body {
+  background: linear-gradient(
+    135deg,
+    #ffe100 0%,
+    #ff6d00 16%,
+    #ff2d87 33%,
+    #7b2ff7 50%,
+    #00e5ff 66%,
+    #b8ff00 83%,
+    #ffe100 100%
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 18s ease infinite;
+  font-family: 'Fredoka', 'Nunito', 'Comic Neue', 'Baloo 2', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  position: relative;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: linear-gradient(
+      135deg,
+      #1a1a2e 0%,
+      #2d1b4e 16%,
+      #3e1252 33%,
+      #1a1a2e 50%,
+      #0d2137 66%,
+      #1a2e1a 83%,
+      #1a1a2e 100%
+    );
+    background-size: 400% 400%;
+    animation: gradientShift 18s ease infinite;
+  }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── Memphis-style floating shapes (CSS only) ──────────── */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  opacity: 0.15;
+}
+
+body::before {
+  width: 300px;
+  height: 300px;
+  top: -60px;
+  left: -80px;
+  background: var(--pop-cyan);
+  border: 8px dashed var(--pop-pink);
+  animation: floatShape1 12s ease-in-out infinite;
+}
+
+body::after {
+  width: 200px;
+  height: 200px;
+  bottom: -40px;
+  right: -40px;
+  background: var(--pop-lime);
+  border: 8px dashed var(--pop-purple);
+  border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+  animation: floatShape2 15s ease-in-out infinite;
+}
+
+@keyframes floatShape1 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  33% { transform: translate(30px, 20px) rotate(120deg); }
+  66% { transform: translate(-20px, 10px) rotate(240deg); }
+}
+
+@keyframes floatShape2 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate(-25px, -15px) rotate(180deg) scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  body::before,
+  body::after,
+  .card,
+  .link-card {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── Card — chunky, rounded, playful ──────────────────── */
+.card {
+  position: relative;
+  z-index: 1;
+  max-width: 680px;
+  width: 100%;
+  padding: 48px 40px;
+  border-radius: 32px;
+  background: var(--card);
+  border: 4px solid var(--border);
+  box-shadow:
+    8px 8px 0 var(--pop-pink),
+    16px 16px 0 var(--pop-cyan);
+  animation: cardBounceIn 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes cardBounceIn {
+  from {
+    opacity: 0;
+    transform: scale(0.7) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* ── Heading — big, bold, fun ──────────────────────────── */
+h1 {
+  font-size: 3rem;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  color: var(--ink);
+  text-shadow: 3px 3px 0 var(--pop-pink), 6px 6px 0 var(--pop-cyan);
+  transform: rotate(-1deg);
+}
+
+@media (prefers-color-scheme: dark) {
+  h1 {
+    color: #fff;
+  }
+}
+
+.subtitle {
+  font-size: 1.05rem;
+  color: var(--accent);
+  text-align: center;
+  font-weight: 600;
+  margin: 0 0 32px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Category headers — retro pill badge ───────────────── */
+h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-weight: 800;
+  color: #fff;
+  background: var(--pop-purple);
+  display: inline-block;
+  padding: 6px 20px;
+  border-radius: 100px;
+  margin: 32px auto 16px;
+  text-align: center;
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0 var(--pop-orange);
+  transform: rotate(1deg);
+}
+
+/* Remove the base theme's ::before/::after lines */
+h2::before,
+h2::after {
+  content: none;
+}
+
+/* ── Link cards — chunky retro buttons ─────────────────── */
+.link-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--card);
+  border: 3px solid var(--border);
+  border-radius: 20px;
+  text-decoration: none;
+  color: var(--ink);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 5px 5px 0 var(--pop-pink);
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 200ms ease;
+}
+
+.link-card:nth-child(odd) {
+  transform: rotate(-0.5deg);
+}
+
+.link-card:nth-child(even) {
+  transform: rotate(0.5deg);
+  box-shadow: 5px 5px 0 var(--pop-cyan);
+}
+
+.link-card:hover {
+  transform: rotate(0deg) scale(1.04) translateY(-4px);
+  box-shadow:
+    8px 8px 0 var(--pop-purple),
+    4px 4px 0 var(--pop-orange);
+  background: var(--card-hover);
+  border-color: var(--accent);
+}
+
+/* Zigzag top decoration on hover */
+.link-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--pop-pink) 0px,
+    var(--pop-pink) 8px,
+    var(--pop-cyan) 8px,
+    var(--pop-cyan) 16px,
+    var(--pop-lime) 16px,
+    var(--pop-lime) 24px,
+    var(--pop-orange) 24px,
+    var(--pop-orange) 32px
+  );
+  transform: scaleX(0);
+  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: left;
+}
+
+.link-card:hover::before {
+  transform: scaleX(1);
+}
+
+.link-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid var(--border);
+  background: var(--pop-lime);
+  padding: 2px;
+}
+
+.link-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-content strong {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+  word-break: break-word;
+  color: var(--ink);
+}
+
+.link-content p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--accent);
+  line-height: 1.4;
+  word-break: break-word;
+  font-weight: 500;
+}
+
+/* ── Boost badge — neon pill ───────────────────────────── */
+.boost-badge {
+  background: var(--pop-orange);
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  border: 2px solid var(--border);
+  box-shadow: 2px 2px 0 var(--pop-pink);
+}
+
+/* ── Info section ──────────────────────────────────────── */
+.info-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 3px dashed var(--border);
+}
+
+.info-section summary {
+  color: var(--accent);
+  font-weight: 600;
+  transition: color 200ms;
+}
+
+.info-section summary:hover {
+  color: var(--pop-purple);
+}
+
+.info-section ul {
+  color: var(--accent);
+}
+
+.info-section code {
+  background: var(--pop-lime);
+  color: var(--ink);
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-weight: 700;
+  border: 2px solid var(--border);
+}
+
+/* ── Share button — funky style ────────────────────────── */
+.share-btn {
+  border: 3px solid var(--border);
+  border-radius: 100px;
+  background: var(--pop-cyan);
+  color: var(--ink);
+  font-weight: 800;
+  box-shadow: 3px 3px 0 var(--pop-pink);
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 300ms ease,
+    background 200ms ease;
+}
+
+.share-btn:hover {
+  background: var(--pop-pink);
+  color: #fff;
+  box-shadow: 5px 5px 0 var(--pop-purple);
+  transform: rotate(-3deg) scale(1.05);
+}
+
+/* ── Fedi handle ───────────────────────────────────────── */
+.fedi-handle-hero {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.copy-fedi-btn {
+  color: var(--accent);
+}
+
+.copy-fedi-btn.copied {
+  color: var(--pop-lime);
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .card {
+    padding: 32px 24px;
+    border-radius: 24px;
+    box-shadow:
+      6px 6px 0 var(--pop-pink),
+      12px 12px 0 var(--pop-cyan);
+  }
+
+  h1 {
+    font-size: 2.2rem;
+    text-shadow: 2px 2px 0 var(--pop-pink), 4px 4px 0 var(--pop-cyan);
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 24px 16px;
+    border-radius: 20px;
+    box-shadow:
+      4px 4px 0 var(--pop-pink),
+      8px 8px 0 var(--pop-cyan);
+  }
+
+  h1 {
+    font-size: 1.8rem;
+    text-shadow: 2px 2px 0 var(--pop-pink);
+    transform: none;
+  }
+
+  .link-card {
+    padding: 14px 16px;
+    gap: 12px;
+    border-radius: 16px;
+  }
+
+  .link-card:nth-child(odd),
+  .link-card:nth-child(even) {
+    transform: none;
+  }
+
+  .link-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .link-content strong {
+    font-size: 0.95rem;
+  }
+
+  .link-content p {
+    font-size: 0.85rem;
+  }
+}
