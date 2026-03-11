@@ -192,17 +192,14 @@ h2:after {
 .boost-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
-  color: white;
-  font-size: 0.75rem;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+  background: none;
+  color: var(--accent);
+  opacity: 0.5;
+  padding: 0;
+  box-shadow: none;
+}
+.boost-badge:hover {
+  opacity: 0.8;
 }
 
 @keyframes slideUp {

@@ -13,10 +13,10 @@ public sealed class JobExecutor(
     private const string ClassName = nameof(JobExecutor);
 
     /// <summary>Delay after processing at least one job.</summary>
-    private const int DelayWithJobs = 30_000;   // 30 seconds
+    private const int DelayWithJobs = 60_000;   // 60 seconds
 
     /// <summary>Delay when the queue was empty.</summary>
-    private const int DelayNoJobs = 120_000;    // 2 minutes
+    private const int DelayNoJobs = 300_000;    // 5 minutes
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

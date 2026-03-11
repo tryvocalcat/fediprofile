@@ -248,6 +248,7 @@ public class UserScopedDb : LocalDbService
                     Description TEXT,
                     IssuedOn TEXT,
                     AcceptedOn TEXT,
+                    Hidden INTEGER NOT NULL DEFAULT 0,
                     ReceivedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (IssuerId) REFERENCES BadgeIssuers(Id)
                 );
@@ -375,6 +376,16 @@ public class UserScopedDb : LocalDbService
             {
                 using var alterCommand = connection.CreateCommand();
                 alterCommand.CommandText = "ALTER TABLE Links ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            // ReceivedBadges migrations
+            var badgeColumns = GetTableColumns(connection, "ReceivedBadges");
+
+            if (!badgeColumns.Contains("Hidden"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE ReceivedBadges ADD COLUMN Hidden INTEGER NOT NULL DEFAULT 0;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
@@ -762,7 +773,7 @@ public class UserScopedDb : LocalDbService
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id, NoteId, IssuerId, Title, Image, Description, IssuedOn, AcceptedOn, ReceivedUtc FROM ReceivedBadges ORDER BY ReceivedUtc DESC";
+        command.CommandText = "SELECT Id, NoteId, IssuerId, Title, Image, Description, IssuedOn, AcceptedOn, Hidden, ReceivedUtc FROM ReceivedBadges ORDER BY ReceivedUtc DESC";
 
         using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -777,11 +788,24 @@ public class UserScopedDb : LocalDbService
                 Description = reader.IsDBNull(5) ? null : reader.GetString(5),
                 IssuedOn = reader.IsDBNull(6) ? null : reader.GetString(6),
                 AcceptedOn = reader.IsDBNull(7) ? null : reader.GetString(7),
-                ReceivedUtc = reader.GetString(8)
+                Hidden = reader.GetInt64(8) != 0,
+                ReceivedUtc = reader.GetString(9)
             });
         }
 
         return badges;
+    }
+
+    public async Task SetBadgeHiddenAsync(int badgeId, bool hidden)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE ReceivedBadges SET Hidden = @Hidden WHERE Id = @Id";
+        command.Parameters.AddWithValue("@Hidden", hidden ? 1 : 0);
+        command.Parameters.AddWithValue("@Id", badgeId);
+        await command.ExecuteNonQueryAsync();
     }
 
     public async Task<int> StoreBadgeAsync(string noteId, int issuerId, string title, string? image = null, 

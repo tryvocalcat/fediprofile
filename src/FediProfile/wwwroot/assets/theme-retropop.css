@@ -286,6 +286,7 @@ h2::after {
   border: 2px solid var(--border);
   background: var(--pop-lime);
   padding: 2px;
+  filter: none;
 }
 
 .link-content {
@@ -313,17 +314,15 @@ h2::after {
 
 /* ── Boost badge — neon pill ───────────────────────────── */
 .boost-badge {
-  background: var(--pop-orange);
-  color: #fff;
-  font-size: 0.75rem;
-  padding: 6px 14px;
-  border-radius: 100px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  flex-shrink: 0;
-  border: 2px solid var(--border);
-  box-shadow: 2px 2px 0 var(--pop-pink);
+  background: none;
+  color: var(--pop-orange);
+  opacity: 0.5;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+}
+.boost-badge:hover {
+  opacity: 0.8;
 }
 
 /* ── Info section ──────────────────────────────────────── */

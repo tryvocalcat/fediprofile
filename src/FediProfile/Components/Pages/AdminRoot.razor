@@ -44,6 +44,8 @@
                     @onclick='() => SetTab("jobs")'>Job Queue</button>
             <button class="admin-tab @(_activeTab == "sql" ? "admin-tab-active" : "")"
                     @onclick='() => SetTab("sql")'>SQL</button>
+            <button class="admin-tab @(_activeTab == "badges" ? "admin-tab-active" : "")"
+                    @onclick='() => SetTab("badges")'>Badge Issuers</button>
         </div>
 
         <!-- Users Tab -->
@@ -82,7 +84,7 @@
                     </form>
 
                     <div class="admin-section">
-                        <h3>Registered Users</h3>
+                        <h3>Registered Users (@(_users?.Count ?? 0))</h3>
                         @if (_users == null)
                         {
                             <p>Loading users...</p>
@@ -111,6 +113,7 @@
                                             <td>@user.CreatedUtc</td>
                                             <td>
                                                 <a href="/@user.Slug" target="_blank" class="button button-small">View</a>
+                                                <a href="/admin/?impersonate=@user.Slug" class="button button-small button-secondary">Edit</a>
                                                 @if (user.Slug != "root")
                                                 {
                                                     <button @onclick="() => CreateUserDatabase(user.Slug)"
@@ -200,10 +203,22 @@
                             <h2 style="margin:0">Job Queue</h2>
                             <p class="muted" style="margin:0.25rem 0 0">Background ActivityPub job processing</p>
                         </div>
-                        <button class="button button-ghost button-small" @onclick="LoadJobs">
-                            Refresh
-                        </button>
+                        <div style="display:flex;gap:0.5rem">
+                            <button class="button button-ghost button-small" @onclick="LoadJobs">
+                                Refresh
+                            </button>
+                            <button class="button button-small button-danger" @onclick="CleanJobs" disabled="@_isProcessing"
+                                    title="Remove old completed/failed jobs when there are more than 100">
+                                @(_isProcessing ? "Cleaning..." : "Clean Old Jobs")
+                            </button>
+                        </div>
                     </div>
+                    @if (!string.IsNullOrEmpty(_cleanJobsMessage))
+                    {
+                        <div class="alert @(_cleanJobsIsError ? "alert-error" : "alert-success")" style="margin-bottom:1rem">
+                            @_cleanJobsMessage
+                        </div>
+                    }
 
                     @if (_jobs == null)
                     {
@@ -242,7 +257,7 @@
                                 <tbody>
                                     @foreach (var job in FilteredJobs)
                                     {
-                                        <tr class="@GetJobRowClass(job)" @onclick="() => SelectJob(job)" style="cursor:pointer">
+                                        <tr class="@GetJobRowClass(job) @(_selectedJob?.Id == job.Id ? "job-row-selected" : "")" @onclick="() => ToggleJob(job)" style="cursor:pointer">
                                             <td>@job.Id</td>
                                             <td><span class="job-type-badge">@job.JobType</span></td>
                                             <td><span class="job-status job-status-@job.Status">@job.Status</span></td>
@@ -250,8 +265,8 @@
                                             <td>@job.CurrentRetry/@job.MaxRetries</td>
                                             <td class="job-date-cell">@job.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                                             <td>
-                                                <button class="button button-small button-ghost" @onclick="() => SelectJob(job)" @onclick:stopPropagation="true">
-                                                    Details
+                                                <button class="button button-small button-ghost" @onclick="() => ToggleJob(job)" @onclick:stopPropagation="true">
+                                                    @(_selectedJob?.Id == job.Id ? "Hide" : "Details")
                                                 </button>
                                                 @if (job.Status == "failed")
                                                 {
@@ -262,119 +277,121 @@
                                                 }
                                             </td>
                                         </tr>
+                                        @if (_selectedJob?.Id == job.Id)
+                                        {
+                                            <tr class="job-detail-inline-row">
+                                                <td colspan="7" style="padding:0">
+                                                    <div class="job-detail-inline" @onclick:stopPropagation="true">
+                                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+                                                            <h3 style="margin:0;font-size:1rem">Job #@_selectedJob.Id — @_selectedJob.JobType</h3>
+                                                            <button class="button button-ghost button-small" @onclick="() => _selectedJob = null">Close</button>
+                                                        </div>
+
+                                                        <div class="job-detail-grid">
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Status</span>
+                                                                <span class="job-status job-status-@_selectedJob.Status">@_selectedJob.Status</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Actor URI</span>
+                                                                <span>@(_selectedJob.ActorUri ?? "—")</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Created</span>
+                                                                <span>@_selectedJob.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Scheduled For</span>
+                                                                <span>@_selectedJob.ScheduledFor.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Started</span>
+                                                                <span>@(_selectedJob.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Completed</span>
+                                                                <span>@(_selectedJob.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Retries</span>
+                                                                <span>@_selectedJob.CurrentRetry / @_selectedJob.MaxRetries</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Created By</span>
+                                                                <span>@(_selectedJob.CreatedBy ?? "—")</span>
+                                                            </div>
+                                                            <div class="job-detail-row">
+                                                                <span class="job-detail-label">Notes</span>
+                                                                <span>@(_selectedJob.Notes ?? "—")</span>
+                                                            </div>
+                                                            @if (!string.IsNullOrEmpty(_selectedJob.LastError))
+                                                            {
+                                                                <div class="job-detail-row">
+                                                                    <span class="job-detail-label">Last Error</span>
+                                                                    <span class="job-error-text">@_selectedJob.LastError</span>
+                                                                </div>
+                                                            }
+                                                        </div>
+
+                                                        @if (_selectedJob.Status == "failed")
+                                                        {
+                                                            <div style="margin-top:1rem">
+                                                                <button class="button button-secondary" @onclick="() => RetryJob(_selectedJob.Id)" disabled="@_isProcessing">
+                                                                    Retry This Job
+                                                                </button>
+                                                            </div>
+                                                        }
+
+                                                        <!-- Payload -->
+                                                        <div style="margin-top:1.5rem">
+                                                            <h4 style="margin-bottom:0.5rem">Payload</h4>
+                                                            @if (string.IsNullOrEmpty(_selectedJob.Payload))
+                                                            {
+                                                                <p class="muted">No payload.</p>
+                                                            }
+                                                            else
+                                                            {
+                                                                <pre class="job-payload-pre">@FormatJson(_selectedJob.Payload)</pre>
+                                                            }
+                                                        </div>
+
+                                                        <!-- Logs -->
+                                                        <div style="margin-top:1.5rem">
+                                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+                                                                <h4 style="margin:0">Logs</h4>
+                                                                <button class="button button-ghost button-small" @onclick="LoadSelectedJobLogs">Refresh</button>
+                                                            </div>
+                                                            @if (_selectedJobLogs == null)
+                                                            {
+                                                                <p>Loading logs...</p>
+                                                            }
+                                                            else if (!_selectedJobLogs.Any())
+                                                            {
+                                                                <p class="muted">No log entries.</p>
+                                                            }
+                                                            else
+                                                            {
+                                                                <div class="job-logs-list">
+                                                                    @foreach (var log in _selectedJobLogs)
+                                                                    {
+                                                                        <div class="job-log-entry @(log.Message.StartsWith("FAILED") || log.Message.StartsWith("RETRY") ? "job-log-error" : "")">
+                                                                            <span class="job-log-time">@log.CreatedAt.ToString("HH:mm:ss")</span>
+                                                                            <span class="job-log-msg">@log.Message</span>
+                                                                        </div>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
                                     }
                                 </tbody>
                             </table>
                         </div>
                     }
                 </article>
-
-                <!-- Job Detail Panel -->
-                @if (_selectedJob != null)
-                {
-                    <article class="card admin-card-spaced">
-                        <div style="display:flex;justify-content:space-between;align-items:center">
-                            <h3 style="margin:0">Job #@_selectedJob.Id — @_selectedJob.JobType</h3>
-                            <button class="button button-ghost button-small" @onclick="() => _selectedJob = null">Close</button>
-                        </div>
-
-                        <div class="job-detail-grid">
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Status</span>
-                                <span class="job-status job-status-@_selectedJob.Status">@_selectedJob.Status</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Actor URI</span>
-                                <span>@(_selectedJob.ActorUri ?? "—")</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Created</span>
-                                <span>@_selectedJob.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Scheduled For</span>
-                                <span>@_selectedJob.ScheduledFor.ToString("yyyy-MM-dd HH:mm:ss")</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Started</span>
-                                <span>@(_selectedJob.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Completed</span>
-                                <span>@(_selectedJob.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Retries</span>
-                                <span>@_selectedJob.CurrentRetry / @_selectedJob.MaxRetries</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Created By</span>
-                                <span>@(_selectedJob.CreatedBy ?? "—")</span>
-                            </div>
-                            <div class="job-detail-row">
-                                <span class="job-detail-label">Notes</span>
-                                <span>@(_selectedJob.Notes ?? "—")</span>
-                            </div>
-                            @if (!string.IsNullOrEmpty(_selectedJob.LastError))
-                            {
-                                <div class="job-detail-row">
-                                    <span class="job-detail-label">Last Error</span>
-                                    <span class="job-error-text">@_selectedJob.LastError</span>
-                                </div>
-                            }
-                        </div>
-
-                        @if (_selectedJob.Status == "failed")
-                        {
-                            <div style="margin-top:1rem">
-                                <button class="button button-secondary" @onclick="() => RetryJob(_selectedJob.Id)" disabled="@_isProcessing">
-                                    Retry This Job
-                                </button>
-                            </div>
-                        }
-
-                        <!-- Payload -->
-                        <div style="margin-top:1.5rem">
-                            <h4 style="margin-bottom:0.5rem">Payload</h4>
-                            @if (string.IsNullOrEmpty(_selectedJob.Payload))
-                            {
-                                <p class="muted">No payload.</p>
-                            }
-                            else
-                            {
-                                <pre class="job-payload-pre">@FormatJson(_selectedJob.Payload)</pre>
-                            }
-                        </div>
-
-                        <!-- Logs -->
-                        <div style="margin-top:1.5rem">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-                                <h4 style="margin:0">Logs</h4>
-                                <button class="button button-ghost button-small" @onclick="LoadSelectedJobLogs">Refresh</button>
-                            </div>
-                            @if (_selectedJobLogs == null)
-                            {
-                                <p>Loading logs...</p>
-                            }
-                            else if (!_selectedJobLogs.Any())
-                            {
-                                <p class="muted">No log entries.</p>
-                            }
-                            else
-                            {
-                                <div class="job-logs-list">
-                                    @foreach (var log in _selectedJobLogs)
-                                    {
-                                        <div class="job-log-entry @(log.Message.StartsWith("FAILED") || log.Message.StartsWith("RETRY") ? "job-log-error" : "")">
-                                            <span class="job-log-time">@log.CreatedAt.ToString("HH:mm:ss")</span>
-                                            <span class="job-log-msg">@log.Message</span>
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </article>
-                }
             </div>
         }
         <!-- SQL Tab -->
@@ -471,6 +488,82 @@
                 </article>
             </div>
         }
+        <!-- Badge Issuers Tab -->
+        @if (_activeTab == "badges")
+        {
+            <div class="admin-section">
+                <article class="card">
+                    <h2>Badge Issuers</h2>
+                    <p class="muted">Add relay bot actor URLs to sync badge announcements from their outbox.</p>
+
+                    @if (!string.IsNullOrEmpty(_badgeMessage))
+                    {
+                        <div class="alert @(_badgeIsError ? "alert-error" : "alert-success")">
+                            @_badgeMessage
+                        </div>
+                    }
+
+                    <form @onsubmit="AddBadgeIssuer" class="admin-form">
+                        <div class="form-group">
+                            <label for="issuerUrl">Actor URL</label>
+                            <input type="url" id="issuerUrl" @bind="_newIssuerUrl" required
+                                   placeholder="e.g., https://badgefed.org/actors/badgefed.org/_relaybot"
+                                   class="form-control" />
+                            <small>The ActivityPub actor URL of the badge issuer or relay bot.</small>
+                        </div>
+                        <button type="submit" class="button button-primary" disabled="@_isProcessing">
+                            @(_isProcessing ? "Adding..." : "Add Badge Issuer")
+                        </button>
+                    </form>
+
+                    <div class="admin-section" style="margin-top:1.5rem">
+                        <h3>Registered Badge Issuers (@(_badgeIssuers?.Count ?? 0))</h3>
+                        @if (_badgeIssuers == null)
+                        {
+                            <p>Loading...</p>
+                        }
+                        else if (!_badgeIssuers.Any())
+                        {
+                            <p class="muted">No badge issuers registered yet.</p>
+                        }
+                        else
+                        {
+                            <table class="user-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Actor URL</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var issuer in _badgeIssuers)
+                                    {
+                                        <tr>
+                                            <td>@issuer.Id</td>
+                                            <td>@issuer.Name</td>
+                                            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@issuer.ActorUrl">
+                                                <a href="@issuer.ActorUrl" target="_blank">@issuer.ActorUrl</a>
+                                            </td>
+                                            <td>@issuer.CreatedUtc</td>
+                                            <td>
+                                                <button class="button button-small button-secondary"
+                                                        @onclick="() => SyncBadgeIssuer(issuer)"
+                                                        disabled="@_isProcessing">
+                                                    @(_syncingIssuerId == issuer.Id ? "Syncing..." : "Sync Outbox")
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </article>
+            </div>
+        }
     }
 </section>
 
@@ -529,6 +622,14 @@
     }
     .job-date-cell { font-size: 0.82rem; color: var(--text-muted, #888); }
     tr.job-row-failed { background: #fff5f5; }
+    tr.job-row-selected > td { background: var(--bg-secondary, #f0f4ff); }
+
+    /* Inline detail row */
+    .job-detail-inline-row > td { background: var(--bg-secondary, #fafafa); }
+    .job-detail-inline {
+        padding: 1rem 1.25rem;
+        border-top: 2px solid var(--accent, #4a90d9);
+    }
 
     /* Job detail */
     .job-detail-grid {
@@ -659,6 +760,7 @@
         _activeTab = tab;
         if (tab == "jobs") LoadJobs();
         if (tab == "sql") LoadAvailableDbs();
+        if (tab == "badges") _ = LoadBadgeIssuers();
     }
 
     // ===== Users =====
@@ -1040,6 +1142,45 @@
 
     // ===== Jobs =====
 
+    private string? _cleanJobsMessage;
+    private bool _cleanJobsIsError;
+
+    private void CleanJobs()
+    {
+        _cleanJobsMessage = null;
+        _isProcessing = true;
+        try
+        {
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            var domainDb = DbFactory.GetInstance(domain);
+            var jobQueue = new JobQueueService(domainDb);
+            var deleted = jobQueue.CleanCompletedJobs(threshold: 100, keep: 50);
+            if (deleted > 0)
+            {
+                _cleanJobsMessage = $"Cleaned {deleted} old completed/failed jobs.";
+                _cleanJobsIsError = false;
+                LoadJobs();
+                _selectedJob = null;
+                _selectedJobLogs = null;
+            }
+            else
+            {
+                _cleanJobsMessage = "Nothing to clean — total jobs are under the threshold or no completed/failed jobs to remove.";
+                _cleanJobsIsError = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error cleaning jobs");
+            _cleanJobsMessage = $"Error cleaning jobs: {ex.Message}";
+            _cleanJobsIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
     private void LoadJobs()
     {
         try
@@ -1060,6 +1201,19 @@
     {
         _selectedJob = job;
         LoadSelectedJobLogs();
+    }
+
+    private void ToggleJob(SimpleJob job)
+    {
+        if (_selectedJob?.Id == job.Id)
+        {
+            _selectedJob = null;
+            _selectedJobLogs = null;
+        }
+        else
+        {
+            SelectJob(job);
+        }
     }
 
     private void LoadSelectedJobLogs()
@@ -1313,6 +1467,113 @@
         finally
         {
             _isSqlRunning = false;
+        }
+    }
+
+    // ===== Badge Issuers =====
+
+    private string? _newIssuerUrl;
+    private string? _badgeMessage;
+    private bool _badgeIsError;
+    private List<BadgeIssuer>? _badgeIssuers;
+    private int? _syncingIssuerId;
+
+    private async Task LoadBadgeIssuers()
+    {
+        try
+        {
+            _badgeIssuers = await DomainDb.GetBadgeIssuersAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading badge issuers");
+            _badgeIssuers = new List<BadgeIssuer>();
+        }
+    }
+
+    private async Task AddBadgeIssuer()
+    {
+        _badgeMessage = null;
+        _badgeIsError = false;
+        _isProcessing = true;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_newIssuerUrl))
+            {
+                _badgeMessage = "Actor URL is required.";
+                _badgeIsError = true;
+                return;
+            }
+
+            var url = _newIssuerUrl.Trim();
+
+            // Try to fetch actor info for a friendly name
+            var name = url;
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                http.DefaultRequestHeaders.Add("Accept", "application/ld+json, application/activity+json, application/json");
+                var resp = await http.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(resp);
+                if (doc.RootElement.TryGetProperty("name", out var nEl) && !string.IsNullOrEmpty(nEl.GetString()))
+                    name = nEl.GetString()!;
+                else if (doc.RootElement.TryGetProperty("preferredUsername", out var uEl) && !string.IsNullOrEmpty(uEl.GetString()))
+                    name = uEl.GetString()!;
+            }
+            catch { /* use URL as name */ }
+
+            var issuerId = await DomainDb.UpsertBadgeIssuerAsync(name, url);
+
+            _badgeMessage = $"Badge issuer '{name}' added (ID: {issuerId}).";
+            _badgeIsError = false;
+            _newIssuerUrl = null;
+            await LoadBadgeIssuers();
+        }
+        catch (Exception ex)
+        {
+            _badgeMessage = $"Error: {ex.Message}";
+            _badgeIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task SyncBadgeIssuer(BadgeIssuer issuer)
+    {
+        _badgeMessage = null;
+        _badgeIsError = false;
+        _isProcessing = true;
+        _syncingIssuerId = issuer.Id;
+        StateHasChanged();
+
+        try
+        {
+            var domain = DomainDb.GetDomain() ?? "localhost";
+            var domainDb = DbFactory.GetInstance(domain);
+            var jobQueue = new JobQueueService(domainDb);
+
+            var jobId = await jobQueue.AddJobAsync(
+                jobType: "sync_badge_issuer",
+                payload: issuer.ActorUrl,
+                actorUri: issuer.ActorUrl,
+                createdBy: "AdminRoot",
+                notes: $"Sync outbox of badge issuer: {issuer.Name}");
+
+            _badgeMessage = $"Sync job #{jobId} enqueued for '{issuer.Name}'. Check the Job Queue tab for progress.";
+            _badgeIsError = false;
+        }
+        catch (Exception ex)
+        {
+            _badgeMessage = $"Error: {ex.Message}";
+            _badgeIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+            _syncingIssuerId = null;
         }
     }
 

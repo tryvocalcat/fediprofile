@@ -2,6 +2,8 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Security.Claims
+@using System.Text.Json
+@using System.Net.Http.Headers
 @attribute [Authorize]
 @layout FediProfile.Components.Layouts.MainLayout
 @rendermode InteractiveServer
@@ -23,12 +25,25 @@
     <header class="admin-header">
         <div>
             <h1 class="admin-title">Admin Console</h1>
-            <p class="admin-subtitle">Manage users and system settings.</p>
+            @if (_impersonating)
+            {
+                <p class="admin-subtitle" style="color:#e67e22;font-weight:600;">Impersonating: @_currentUserSlug</p>
+            }
+            else
+            {
+                <p class="admin-subtitle">Manage users and system settings.</p>
+            }
         </div>
-        @if (_isAuthorized && _isRootUser)
-        {
-            <a href="/admin/root" class="button button-primary">Root Admin</a>
-        }
+        <div style="display:flex;gap:0.5rem;align-items:center">
+            @if (_impersonating)
+            {
+                <a href="/admin/" class="button button-ghost">Stop Impersonating</a>
+            }
+            @if (_isAuthorized && _isRootUser)
+            {
+                <a href="/admin/root" class="button button-primary">Root Admin</a>
+            }
+        </div>
        
     </header>
 
@@ -141,7 +156,7 @@
                                         </div>
 
                                         <!-- Icon -->
-                                        <div class="pe-link-icon-btn" @onclick="() => ToggleLinkIconGrid(link)" title="Change icon">
+                                        <div class="@(link.IsEditing ? "pe-link-icon-btn" : "pe-link-icon-static")" @onclick="() => { if (link.IsEditing) ToggleLinkIconGrid(link); else ToggleEditLink(link); }" title="@(link.IsEditing ? "Change icon" : "")">
                                             @if (!string.IsNullOrWhiteSpace(link.Icon))
                                             {
                                                 <img src="@link.Icon" alt="" />
@@ -213,12 +228,18 @@
                                                     <small>@icon.Value.Name</small>
                                                 </div>
                                             }
+                                            <div class="pe-icon-grid-item @(link.SelectedIconKey == "__favicon__" ? "pe-icon-selected" : "")"
+                                                 @onclick="() => FetchFaviconForLink(link)"
+                                                 title="Fetch favicon from link URL">
+                                                <span style="font-size:1.4rem">📎</span>
+                                                <small>Favicon</small>
+                                            </div>
                                             <div class="pe-icon-grid-item @(link.SelectedIconKey == "__custom__" ? "pe-icon-selected" : "")"
                                                  @onclick='() => SelectLinkIcon(link, "__custom__")'>
                                                 <span style="font-size:1.4rem">🌐</span>
                                                 <small>Custom</small>
                                             </div>
-                                            @if (link.SelectedIconKey == "__custom__")
+                                            @if (link.SelectedIconKey == "__custom__" || link.SelectedIconKey == "__favicon__")
                                             {
                                                 <div class="pe-icon-grid-custom">
                                                     <input type="text" @bind="link.CustomIconUrl" @bind:after="() => ApplyCustomIcon(link)"
@@ -330,12 +351,18 @@
                                             <small>@icon.Value.Name</small>
                                         </div>
                                     }
+                                    <div class="pe-icon-grid-item @(_selectedIconKey == "__favicon__" ? "pe-icon-selected" : "")"
+                                         @onclick="FetchFaviconForNewLink"
+                                         title="Fetch favicon from link URL">
+                                        <span style="font-size:1.4rem">📎</span>
+                                        <small>Favicon</small>
+                                    </div>
                                     <div class="pe-icon-grid-item @(_selectedIconKey == "__custom__" ? "pe-icon-selected" : "")"
                                          @onclick='() => SelectIcon("__custom__")'>
                                         <span style="font-size:1.4rem">🌐</span>
                                         <small>Custom</small>
                                     </div>
-                                    @if (_selectedIconKey == "__custom__")
+                                    @if (_selectedIconKey == "__custom__" || _selectedIconKey == "__favicon__")
                                     {
                                         <div class="pe-icon-grid-custom">
                                             <input type="text" @bind="_customIconUrl"
@@ -467,90 +494,188 @@
                 </article>
             }
 
-            <!-- Badge Configuration (collapsible) -->
+            <!-- Badges & Verifications -->
             <article class="card admin-card-spaced">
-                <div class="admin-collapsible-header" @onclick="() => _badgeSectionOpen = !_badgeSectionOpen" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem">
                     <div>
-                        <h2 style="margin:0">Badge Configuration</h2>
-                        <p class="muted" style="margin:0.25rem 0 0">Verified URIs and trusted badge issuers</p>
+                        <h2 style="margin:0">🏅 Badges</h2>
+                        <p class="muted" style="margin:0.25rem 0 0">Badges you've earned and received</p>
                     </div>
-                    <span style="font-size:1.2rem">@(_badgeSectionOpen ? "▲" : "▼")</span>
+                    <div style="display:flex;gap:0.5rem">
+                        <button class="button button-ghost button-small" @onclick="() => _showImportBadge = !_showImportBadge">
+                            @(_showImportBadge ? "✕ Cancel" : "⬇️ Import Badge")
+                        </button>
+                        <button class="button button-ghost button-small" @onclick="() => _showBadgeIssuers = !_showBadgeIssuers">
+                            @(_showBadgeIssuers ? "✕ Close" : "🔑 Issuers")
+                        </button>
+                        <button class="button button-ghost button-small" @onclick="() => _showVerifiedUris = !_showVerifiedUris">
+                            @(_showVerifiedUris ? "✕ Close" : "✅ Verified URIs")
+                        </button>
+                    </div>
                 </div>
 
-                @if (_badgeSectionOpen)
+                <!-- Import Badge (hidden until button click) -->
+                @if (_showImportBadge)
                 {
-                    <!-- Verified URIs -->
-                    <div style="margin-top:1rem">
-                        <h3>Verified URIs</h3>
-                        <p class="muted">URIs verified as belonging to you (from your Mastodon actor)</p>
+                    <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <h3 style="margin:0 0 0.25rem">Import a Badge</h3>
+                        <p class="muted" style="margin:0 0 0.75rem">Paste a BadgeFed grant URL to import</p>
 
-                        @if (_verifiedUris == null)
+                        @if (!string.IsNullOrEmpty(_importBadgeMessage))
                         {
-                            <p>Loading verified URIs...</p>
+                            <div class="alert @(_importBadgeIsError ? "alert-error" : "alert-success")" style="margin-bottom:0.75rem">
+                                @_importBadgeMessage
+                            </div>
                         }
-                        else if (!_verifiedUris.Any())
-                        {
-                            <p class="text-muted">No verified URIs yet.</p>
-                        }
-                        else
-                        {
-                            <table class="user-table">
-                                <thead>
-                                    <tr>
-                                        <th>URI</th>
-                                        <th>Verified</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var uri in _verifiedUris)
-                                    {
-                                        <tr>
-                                            <td><a href="@uri.Uri" target="_blank" rel="noopener">@TruncateUrl(uri.Uri)</a></td>
-                                            <td>@uri.VerifiedUtc</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        }
+
+                        <div style="display:flex;gap:0.5rem;align-items:center">
+                            <input type="text" @bind="_importBadgeUrl" placeholder="https://badgefed.org/view/grant/..." class="form-control" style="flex:1" />
+                            <button class="button button-primary" @onclick="ImportBadge" disabled="@(_isImportingBadge || string.IsNullOrWhiteSpace(_importBadgeUrl))">
+                                @(_isImportingBadge ? "Importing..." : "Import")
+                            </button>
+                        </div>
                     </div>
+                }
 
-                    <!-- Badge Issuers -->
-                    <div style="margin-top:1.5rem">
-                        <h3>Badge Issuers</h3>
-                        <p class="muted">Trusted actors that can issue you badges</p>
+                <!-- Badge Issuers (hidden until button click) -->
+                @if (_showBadgeIssuers)
+                {
+                    <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <h3 style="margin:0 0 0.75rem">Trusted Badge Issuers</h3>
 
                         @if (_badgeIssuers == null)
                         {
-                            <p>Loading badge issuers...</p>
+                            <p class="muted">Loading issuers...</p>
                         }
                         else if (!_badgeIssuers.Any())
                         {
-                            <p class="text-muted">No badge issuers configured.</p>
+                            <p class="muted">No badge issuers yet. Import a badge to see issuers here.</p>
                         }
                         else
                         {
-                            <table class="user-table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Actor URL</th>
-                                        <th>Following</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var issuer in _badgeIssuers)
-                                    {
-                                        <tr>
-                                            <td>@issuer.Name</td>
-                                            <td><a href="@issuer.ActorUrl" target="_blank">@TruncateUrl(issuer.ActorUrl)</a></td>
-                                            <td>@(issuer.Following ? "Yes" : "No")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                            <div style="display:flex;flex-direction:column;gap:0.75rem">
+                                @foreach (var issuer in _badgeIssuers)
+                                {
+                                    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem;border-radius:6px;background:var(--bg, #fff)">
+                                        @if (!string.IsNullOrEmpty(issuer.Avatar))
+                                        {
+                                            <img src="@issuer.Avatar" alt="@issuer.Name" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" />
+                                        }
+                                        else
+                                        {
+                                            <div style="width:36px;height:36px;border-radius:50%;background:var(--border, #ddd);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1rem">🔑</div>
+                                        }
+                                        <div style="min-width:0;flex:1">
+                                            <div style="font-weight:600">@issuer.Name</div>
+                                            <a href="@issuer.ActorUrl" target="_blank" rel="noopener" style="font-size:0.8rem;color:var(--muted);word-break:break-all">@TruncateUrl(issuer.ActorUrl)</a>
+                                        </div>
+                                        @if (issuer.Following)
+                                        {
+                                            <span style="font-size:0.75rem;padding:2px 8px;border-radius:9999px;background:#4caf50;color:#fff;white-space:nowrap">Following</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
                         }
                     </div>
                 }
+
+                <!-- Verified URIs (hidden until button click) -->
+                @if (_showVerifiedUris)
+                {
+                    <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <h3 style="margin:0 0 0.75rem">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;color:#4caf50"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Verified URIs
+                        </h3>
+
+                        @if (_verifiedUris == null)
+                        {
+                            <p class="muted">Loading verified URIs...</p>
+                        }
+                        else if (!_verifiedUris.Any())
+                        {
+                            <p class="muted">No verified URIs yet.</p>
+                        }
+                        else
+                        {
+                            <div style="display:flex;flex-direction:column;gap:0.5rem">
+                                @foreach (var uri in _verifiedUris)
+                                {
+                                    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-radius:6px;background:var(--bg, #fff)">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#4caf50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                                        <a href="@uri.Uri" target="_blank" rel="noopener" style="flex:1;word-break:break-all;font-size:0.9rem">@TruncateUrl(uri.Uri)</a>
+                                        <span class="muted" style="font-size:0.75rem;white-space:nowrap">@uri.VerifiedUtc</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Received Badges (always visible - main content) -->
+                <div style="margin-top:1rem">
+                    @if (_receivedBadges == null)
+                    {
+                        <p class="muted">Loading badges...</p>
+                    }
+                    else if (!_receivedBadges.Any())
+                    {
+                        <div style="text-align:center;padding:2rem 1rem;color:var(--muted)">
+                            <div style="font-size:2.5rem;margin-bottom:0.5rem">🏅</div>
+                            <p style="margin:0">No badges yet. Import one to get started!</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));gap:0.75rem">
+                            @foreach (var badge in _receivedBadges)
+                            {
+                                var issuer = _badgeIssuers?.FirstOrDefault(i => i.Id == badge.IssuerId);
+                                <div style="border:1px solid var(--border, #ddd);border-radius:10px;overflow:hidden;transition:opacity 0.2s;@(badge.Hidden ? "opacity:0.45;" : "")">
+                                    @if (!string.IsNullOrEmpty(badge.Image))
+                                    {
+                                        <div style="background:var(--bg-subtle, #f0f0f0);display:flex;align-items:center;justify-content:center;padding:0.75rem">
+                                            <img src="@badge.Image" alt="@badge.Title" style="max-width:100%;max-height:100px;object-fit:contain;border-radius:6px" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div style="background:var(--bg-subtle, #f0f0f0);display:flex;align-items:center;justify-content:center;padding:1rem;font-size:2.5rem">
+                                            🏅
+                                        </div>
+                                    }
+                                    <div style="padding:0.75rem">
+                                        <div style="font-weight:700;font-size:0.95rem;margin-bottom:0.25rem">@badge.Title</div>
+                                        @if (issuer != null)
+                                        {
+                                            <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.25rem">
+                                                by @issuer.Name
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(badge.IssuedOn))
+                                        {
+                                            <div style="font-size:0.75rem;color:var(--muted)">Issued: @badge.IssuedOn</div>
+                                        }
+                                        <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.5rem">
+                                            <button class="button button-ghost button-small"
+                                                    style="font-size:0.75rem;padding:2px 8px"
+                                                    @onclick="() => ToggleBadgeVisibility(badge)"
+                                                    title="@(badge.Hidden ? "Show on profile" : "Hide from profile")">
+                                                @(badge.Hidden ? "👁️ Show" : "🙈 Hide")
+                                            </button>
+                                            @if (!string.IsNullOrEmpty(badge.NoteId))
+                                            {
+                                                <a href="@badge.NoteId" target="_blank" rel="noopener" class="button button-ghost button-small" style="font-size:0.75rem;padding:2px 8px;text-decoration:none">
+                                                    🔗 View
+                                                </a>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
             </article>
 
             <!-- Danger Zone -->
@@ -599,6 +724,10 @@
 
 
 @code {
+    [SupplyParameterFromQuery(Name = "impersonate")]
+    public string? ImpersonateSlug { get; set; }
+
+    private bool _impersonating;
     private string? _signedInAs;
     private string? _dbName;
     private bool _isProcessing;
@@ -788,11 +917,22 @@
     // Badge issuers
     private List<BadgeIssuer>? _badgeIssuers;
 
+    // Received badges
+    private List<ReceivedBadge>? _receivedBadges;
+
+    // Import badge
+    private string? _importBadgeUrl;
+    private string? _importBadgeMessage;
+    private bool _importBadgeIsError;
+    private bool _isImportingBadge;
+
     // Verified URIs
     private List<(int Id, string Uri, string VerifiedUtc)>? _verifiedUris;
 
-    // Collapsible sections
-    private bool _badgeSectionOpen;
+    // Badge section toggles
+    private bool _showImportBadge;
+    private bool _showBadgeIssuers;
+    private bool _showVerifiedUris;
 
     // Followers
     private List<Follower>? _followers;
@@ -865,6 +1005,20 @@
         }
 
         _isRootUser = _currentUserSlug?.Equals("root", StringComparison.OrdinalIgnoreCase) ?? false;
+
+        // Impersonation: if root and ?impersonate=slug is set, switch to that user
+        _impersonating = false;
+        if (_isRootUser && !string.IsNullOrWhiteSpace(ImpersonateSlug))
+        {
+            var allUsers = await DomainDb.GetAllUsersAsync();
+            var targetUser = allUsers?.FirstOrDefault(u => u.Slug.Equals(ImpersonateSlug, StringComparison.OrdinalIgnoreCase));
+            if (targetUser is { } t && !string.IsNullOrEmpty(t.Slug))
+            {
+                _currentUserSlug = t.Slug;
+                _impersonating = true;
+            }
+        }
+
         _dbName = Path.GetFileName(DomainDb.DbPath);
         _currentDomain = DomainDb.GetDomain() ?? "localhost";
 
@@ -883,6 +1037,7 @@
             await LoadProfileSettings();
             await LoadLinks();
             await LoadBadgeIssuers();
+            await LoadReceivedBadges();
             await LoadVerifiedUris();
             await LoadFollowers();
         }
@@ -1178,6 +1333,7 @@
     private void ToggleLinkIconGrid(EditableLink link)
     {
         link.IconGridOpen = !link.IconGridOpen;
+        
     }
 
     private void SelectLinkIcon(EditableLink link, string? key)
@@ -1202,9 +1358,94 @@
 
     private void ApplyCustomIcon(EditableLink link)
     {
-        if (link.SelectedIconKey == "__custom__")
+        if (link.SelectedIconKey == "__custom__" || link.SelectedIconKey == "__favicon__")
         {
             link.Icon = link.CustomIconUrl;
+        }
+    }
+
+    private async Task FetchFaviconForLink(EditableLink link)
+    {
+        var faviconUrl = await ResolveFaviconUrl(link.Url);
+        if (!string.IsNullOrEmpty(faviconUrl))
+        {
+            link.SelectedIconKey = "__favicon__";
+            link.CustomIconUrl = faviconUrl;
+            link.Icon = faviconUrl;
+        }
+        else
+        {
+            link.SelectedIconKey = "__custom__";
+            link.CustomIconUrl = null;
+            link.Icon = null;
+        }
+        link.IconGridOpen = false;
+    }
+
+    private async Task FetchFaviconForNewLink()
+    {
+        var faviconUrl = await ResolveFaviconUrl(_newLinkUrl);
+        if (!string.IsNullOrEmpty(faviconUrl))
+        {
+            _selectedIconKey = "__favicon__";
+            _customIconUrl = faviconUrl;
+        }
+        else
+        {
+            _selectedIconKey = "__custom__";
+            _customIconUrl = null;
+        }
+        _newLinkIconGridOpen = false;
+    }
+
+    private async Task<string?> ResolveFaviconUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        try
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+            var origin = $"{uri.Scheme}://{uri.Host}";
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("FediProfile/1.0");
+
+            // Try to parse the HTML for a <link rel="icon"> or <link rel="shortcut icon">
+            try
+            {
+                var html = await http.GetStringAsync(url);
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    html,
+                    @"<link[^>]*rel=[""'](?:shortcut )?icon[""'][^>]*href=[""']([^""']+)[""']",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!match.Success)
+                {
+                    // Also try href before rel
+                    match = System.Text.RegularExpressions.Regex.Match(
+                        html,
+                        @"<link[^>]*href=[""']([^""']+)[""'][^>]*rel=[""'](?:shortcut )?icon[""']",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+                if (match.Success)
+                {
+                    var href = match.Groups[1].Value;
+                    if (href.StartsWith("//")) return $"{uri.Scheme}:{href}";
+                    if (href.StartsWith("/")) return $"{origin}{href}";
+                    if (href.StartsWith("http")) return href;
+                    return $"{origin}/{href}";
+                }
+            }
+            catch { /* fall through to /favicon.ico */ }
+
+            // Fallback: try /favicon.ico
+            var faviconIco = $"{origin}/favicon.ico";
+            var resp = await http.SendAsync(new HttpRequestMessage(HttpMethod.Head, faviconIco));
+            if (resp.IsSuccessStatusCode) return faviconIco;
+
+            return null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -1492,7 +1733,7 @@
 
     private string? ResolveNewLinkIcon()
     {
-        if (_selectedIconKey == "__custom__") return _customIconUrl;
+        if (_selectedIconKey == "__custom__" || _selectedIconKey == "__favicon__") return _customIconUrl;
         if (!string.IsNullOrEmpty(_selectedIconKey) && _platformIcons.TryGetValue(_selectedIconKey, out var icon))
             return icon.Path;
         return null;
@@ -1502,7 +1743,7 @@
     {
         _selectedIconKey = key;
         _newLinkIconGridOpen = false;
-        if (key != "__custom__")
+        if (key != "__custom__" && key != "__favicon__")
             _customIconUrl = null;
     }
 
@@ -1662,6 +1903,161 @@ I don't know if this is the best UX
         }
     }
 
+    // ===== Import Badge =====
+
+    private async Task ImportBadge()
+    {
+        if (string.IsNullOrWhiteSpace(_importBadgeUrl) || _currentUserDb == null) return;
+
+        _importBadgeMessage = null;
+        _importBadgeIsError = false;
+        _isImportingBadge = true;
+
+        try
+        {
+            // Fetch the badge JSON-LD from the URL
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/ld+json"));
+            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json", 0.9));
+            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json", 0.8));
+
+            var response = await http.GetAsync(_importBadgeUrl);
+            if (!response.IsSuccessStatusCode)
+            {
+                _importBadgeMessage = $"Failed to fetch URL: HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+                _importBadgeIsError = true;
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Extract badge details from the Note
+            var noteId = root.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? _importBadgeUrl : _importBadgeUrl;
+            var badgeTitle = root.TryGetProperty("name", out var nameEl)
+                ? nameEl.GetString() ?? "Unknown Badge" : "Unknown Badge";
+            var badgeImage = root.TryGetProperty("image", out var imageEl) && imageEl.ValueKind == JsonValueKind.String
+                ? imageEl.GetString() : null;
+            var badgeDescription = root.TryGetProperty("content", out var contentEl)
+                ? contentEl.GetString() : null;
+
+            // Extract issuer info from attributedTo
+            var issuerUrl = root.TryGetProperty("attributedTo", out var attrEl)
+                ? attrEl.GetString() ?? "" : "";
+            var issuerName = issuerUrl;
+
+            // Try to resolve issuer name from the actor URL
+            if (!string.IsNullOrEmpty(issuerUrl))
+            {
+                try
+                {
+                    var actorResponse = await http.GetAsync(issuerUrl);
+                    if (actorResponse.IsSuccessStatusCode)
+                    {
+                        var actorJson = await actorResponse.Content.ReadAsStringAsync();
+                        using var actorDoc = JsonDocument.Parse(actorJson);
+                        var actorRoot = actorDoc.RootElement;
+                        if (actorRoot.TryGetProperty("name", out var actorNameEl))
+                            issuerName = actorNameEl.GetString() ?? issuerUrl;
+                        else if (actorRoot.TryGetProperty("preferredUsername", out var prefEl))
+                            issuerName = prefEl.GetString() ?? issuerUrl;
+                    }
+                }
+                catch { /* Fallback to URL as issuer name */ }
+            }
+
+            // Extract recipient URIs and issuedOn from attachment assertions
+            string? badgeIssuedOn = null;
+            var recipientUris = new List<string>();
+            if (root.TryGetProperty("attachment", out var attachments) && attachments.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var attachment in attachments.EnumerateArray())
+                {
+                    if (attachment.TryGetProperty("type", out var typeEl) &&
+                        string.Equals(typeEl.GetString(), "Assertion", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Extract recipient identity
+                        if (attachment.TryGetProperty("recipient", out var recipientEl) &&
+                            recipientEl.TryGetProperty("identity", out var identityEl))
+                        {
+                            var identity = identityEl.GetString();
+                            if (!string.IsNullOrEmpty(identity))
+                                recipientUris.Add(identity);
+                        }
+
+                        // Extract issuedOn
+                        if (string.IsNullOrEmpty(badgeIssuedOn) &&
+                            attachment.TryGetProperty("issuedOn", out var issuedEl))
+                        {
+                            badgeIssuedOn = issuedEl.GetString();
+                        }
+                    }
+                }
+            }
+
+            // Fallback: try to extract issued date from content HTML if not found in attachments
+            if (string.IsNullOrEmpty(badgeIssuedOn) && !string.IsNullOrEmpty(badgeDescription))
+            {
+                var issuedMatch = System.Text.RegularExpressions.Regex.Match(
+                    badgeDescription, @"Issued on:\s*([\d/]+ [\d:]+)");
+                if (issuedMatch.Success)
+                    badgeIssuedOn = issuedMatch.Groups[1].Value;
+            }
+
+            if (string.IsNullOrEmpty(issuerUrl))
+            {
+                _importBadgeMessage = "Could not determine badge issuer from the fetched data.";
+                _importBadgeIsError = true;
+                return;
+            }
+
+            // Verify recipient matches one of the user's verified URIs
+            if (recipientUris.Count > 0 && !string.IsNullOrEmpty(_currentUserSlug))
+            {
+                var myVerifiedUris = await DomainDb.GetVerifiedUrisAsync(_currentUserSlug);
+                var myUriSet = new HashSet<string>(myVerifiedUris.Select(v => v.Uri), StringComparer.OrdinalIgnoreCase);
+
+                var matchFound = recipientUris.Any(r => myUriSet.Contains(r));
+                if (!matchFound)
+                {
+                    var recipientList = string.Join(", ", recipientUris);
+                    _importBadgeMessage = $"This badge was issued to {recipientList} which is not one of your verified URIs. " +
+                        "Add the matching URI to your Mastodon profile and re-sync your verified URIs first.";
+                    _importBadgeIsError = true;
+                    return;
+                }
+            }
+
+            // Store issuer and badge
+            var issuerId = await DomainDb.CreateOrGetBadgeIssuerAsync(issuerName, issuerUrl);
+            var badgeRecordId = await _currentUserDb.StoreBadgeAsync(noteId, issuerId, badgeTitle, badgeImage, badgeDescription, badgeIssuedOn);
+
+            if (badgeRecordId > 0)
+            {
+                _importBadgeMessage = $"Badge '{badgeTitle}' imported successfully!";
+                _importBadgeUrl = null;
+                await LoadBadgeIssuers();
+                await LoadReceivedBadges();
+                await RegenerateStaticProfileAsync();
+            }
+            else
+            {
+                _importBadgeMessage = "Badge was already imported or could not be stored.";
+                _importBadgeIsError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _importBadgeMessage = $"Error importing badge: {ex.Message}";
+            _importBadgeIsError = true;
+        }
+        finally
+        {
+            _isImportingBadge = false;
+        }
+    }
+
     // ===== Badge Issuers =====
 
     private async Task LoadBadgeIssuers()
@@ -1674,6 +2070,37 @@ I don't know if this is the best UX
         catch
         {
             _badgeIssuers = new List<BadgeIssuer>();
+        }
+    }
+
+    // ===== Received Badges =====
+
+    private async Task LoadReceivedBadges()
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            _receivedBadges = await _currentUserDb.GetReceivedBadgesAsync();
+        }
+        catch
+        {
+            _receivedBadges = new List<ReceivedBadge>();
+        }
+    }
+
+    private async Task ToggleBadgeVisibility(ReceivedBadge badge)
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            var newHidden = !badge.Hidden;
+            await _currentUserDb.SetBadgeHiddenAsync(badge.Id, newHidden);
+            badge.Hidden = newHidden;
+            await RegenerateStaticProfileAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to toggle badge visibility for badge {BadgeId}", badge.Id);
         }
     }
 
@@ -1787,7 +2214,8 @@ I don't know if this is the best UX
             var fullDomain = httpContext?.Request.Host.ToString() ?? _currentDomain ?? "localhost";
             var baseDomain = $"{scheme}://{fullDomain}";
             await ProfileHtml.GenerateAsync(_currentUserDb, _currentUserSlug, baseDomain);
-            await ActorService.GenerateActorJsonAsync(_currentUserDb, _currentUserSlug, baseDomain);
+            var verifiedUriList = (_verifiedUris ?? await DomainDb.GetVerifiedUrisAsync(_currentUserSlug)).Select(v => v.Uri).ToList();
+            await ActorService.GenerateActorJsonAsync(_currentUserDb, _currentUserSlug, baseDomain, verifiedUriList);
         }
         catch (Exception ex)
         {

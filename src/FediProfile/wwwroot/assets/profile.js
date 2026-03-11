@@ -38,6 +38,9 @@ async function loadProfile() {
 
     // Render links from attachments
     renderLinks(actor.attachment || []);
+
+    // Fetch and render badges
+    await loadBadges();
   } catch (error) {
     console.error(error);
     document.getElementById('profile-container').innerHTML = '<p>Error loading profile.</p>';
@@ -84,10 +87,10 @@ function renderLinks(attachments) {
         <a href="${escapeHtml(url)}" class="link-card" rel="me" data-type="${escapeHtml(link.type || 'link')}">
           ${iconUrl ? `<img src="${escapeHtml(iconUrl)}" alt="" class="link-icon" />` : ''}
           <div class="link-content">
-            <strong>${escapeHtml(link.name)}</strong>
+            <strong>${escapeHtml(link.name)}${link.verified ? '<span class="verified-badge" title="Verified"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>' : ''}</strong>
             ${link.description ? `<p>${escapeHtml(link.description)}</p>` : ''}
           </div>
-          ${link.autoBoost ? '<span class="boost-badge">Boosted</span>' : ''}
+          ${link.autoBoost ? '<span class="boost-badge" title="Boosted"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>' : ''}
         </a>
       `;
     });
@@ -96,6 +99,52 @@ function renderLinks(attachments) {
 
   html += '</div>';
   container.innerHTML = html;
+}
+
+async function loadBadges() {
+  try {
+    const url = basePath + '/badges?t=' + Date.now();
+    const response = await fetch(url);
+    if (!response.ok) return;
+
+    const badges = await response.json();
+    if (!badges || badges.length === 0) return;
+
+    const section = document.getElementById('badges-section');
+    const container = document.getElementById('badges-container');
+    if (!section || !container) return;
+
+    let html = '';
+    badges.forEach(badge => {
+      const title = escapeHtml(badge.title || 'Badge');
+      const image = badge.image;
+      const description = badge.description ? escapeHtml(badge.description) : '';
+      const issuedOn = badge.issuedOn ? escapeHtml(badge.issuedOn) : '';
+      const noteId = badge.noteId || '';
+
+      const imgHtml = image
+        ? `<img src="${escapeHtml(image)}" alt="${title}" class="badge-image" />`
+        : `<div class="badge-image badge-placeholder">\uD83C\uDFC5</div>`;
+
+      const linkOpen = noteId ? `<a href="${escapeHtml(noteId)}" target="_blank" rel="noopener" class="badge-card">` : '<div class="badge-card">';
+      const linkClose = noteId ? '</a>' : '</div>';
+
+      html += `
+        ${linkOpen}
+          ${imgHtml}
+          <div class="badge-info">
+            <strong class="badge-title">${title}</strong>
+            ${issuedOn ? `<span class="badge-date">${issuedOn}</span>` : ''}
+          </div>
+        ${linkClose}
+      `;
+    });
+
+    container.innerHTML = html;
+    section.style.display = '';
+  } catch (err) {
+    // Badges are optional — silently ignore errors
+  }
 }
 
 function escapeHtml(text) {

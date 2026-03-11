@@ -184,7 +184,7 @@ app.MapGet("/{userSlug}", async (HttpRequest request, string userSlug, LocalDbFa
             return NotFoundPage(env);
         }
 
-        var actor = await actorService.BuildActorAsync(userDb, request);
+        var actor = await actorService.BuildActorAsync(userDb, request, verifiedUris: (await mainDb.GetVerifiedUrisAsync(userSlug)).Select(v => v.Uri).ToList());
         var actorJson = JsonSerializer.Serialize(actor, ActorService.ActorJsonOptions);
 
         // Write the file so subsequent requests are served from disk
@@ -293,11 +293,18 @@ app.MapGet("/{userSlug}/links", async (UserScopedDb db) =>
     return Results.Json(links);
 });
 
-// User-scoped badges endpoint: /{user}/badges
+// User-scoped badges endpoint: /{user}/badges (public - hidden badges excluded)
 app.MapGet("/{userSlug}/badges", async (UserScopedDb db) =>
 {
     var badges = await db.GetReceivedBadgesAsync();
-    return Results.Json(badges);
+    var visible = badges.Where(b => !b.Hidden).Select(b => new {
+        b.Title,
+        b.Image,
+        b.Description,
+        b.IssuedOn,
+        b.NoteId
+    });
+    return Results.Json(visible);
 });
 
 // ActivityPub followers collection: /{user}/followers

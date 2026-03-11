@@ -1046,6 +1046,25 @@ public class DomainScopedDb : LocalDbService
     }
 
     /// <summary>
+    /// Returns all user slugs that have the given URI in their verified URIs.
+    /// </summary>
+    public async Task<List<string>> GetUserSlugsByVerifiedUriAsync(string uri)
+    {
+        var slugs = new List<string>();
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT UserSlug FROM VerifiedUris WHERE Uri = @uri";
+        cmd.Parameters.AddWithValue("@uri", uri);
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            slugs.Add(reader.GetString(0));
+        }
+        return slugs;
+    }
+
+    /// <summary>
     /// Removes a verified URI by Id.
     /// </summary>
     public async Task RemoveVerifiedUriAsync(int id)

@@ -26,7 +26,7 @@ public class ActorService
     /// </summary>
     public static JsonSerializerOptions ActorJsonOptions => _actorJsonOptions;
 
-    public async Task<ActivityPubActor> BuildActorAsync(UserScopedDb db, HttpRequest request, string? userSlug = null)
+    public async Task<ActivityPubActor> BuildActorAsync(UserScopedDb db, HttpRequest request, string? userSlug = null, List<string>? verifiedUris = null)
     {
         var domain = request.Host.Host;
         if (request.Host.Port.HasValue && request.Host.Port != 80 && request.Host.Port != 443)
@@ -36,14 +36,14 @@ public class ActorService
         var scheme = request.Scheme;
         var slug = userSlug ?? request.RouteValues["userSlug"]?.ToString() ?? "profile";
         var baseDomain = $"{scheme}://{domain}";
-        return await BuildActorCoreAsync(db, slug, baseDomain);
+        return await BuildActorCoreAsync(db, slug, baseDomain, verifiedUris);
     }
 
     /// <summary>
     /// Builds the ActivityPub actor object without requiring an HttpRequest.
     /// Used both for live requests and for static file generation.
     /// </summary>
-    public async Task<ActivityPubActor> BuildActorCoreAsync(UserScopedDb db, string slug, string baseDomain)
+    public async Task<ActivityPubActor> BuildActorCoreAsync(UserScopedDb db, string slug, string baseDomain, List<string>? verifiedUris = null)
     {
         // Get username and other settings from database
         var username = await db.GetActorUsernameAsync();
@@ -94,7 +94,8 @@ public class ActorService
                     Icon = !string.IsNullOrEmpty(icon) ? new ActivityPubImage { Type = "Image", Url = icon } : null,
                     Category = link.Category,
                     Description = link.Description,
-                    AutoBoost = link.AutoBoost ? true : null
+                    AutoBoost = link.AutoBoost ? true : null,
+                    Verified = verifiedUris != null && verifiedUris.Contains(url, StringComparer.OrdinalIgnoreCase) ? true : null
                 };
             })
             .ToList();
@@ -145,11 +146,11 @@ public class ActorService
     /// Called when the user saves their profile or changes links,
     /// mirroring the ProfileHtmlService pattern.
     /// </summary>
-    public async Task GenerateActorJsonAsync(UserScopedDb userDb, string userSlug, string baseDomain)
+    public async Task GenerateActorJsonAsync(UserScopedDb userDb, string userSlug, string baseDomain, List<string>? verifiedUris = null)
     {
         try
         {
-            var actor = await BuildActorCoreAsync(userDb, userSlug, baseDomain);
+            var actor = await BuildActorCoreAsync(userDb, userSlug, baseDomain, verifiedUris);
             var json = JsonSerializer.Serialize(actor, _actorJsonOptions);
 
             var profilesDir = Path.Combine(_env.WebRootPath, "profiles");

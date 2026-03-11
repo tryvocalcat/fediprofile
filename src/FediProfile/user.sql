@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS ReceivedBadges (
     Description TEXT,
     IssuedOn TEXT,
     AcceptedOn TEXT,
+    Hidden INTEGER NOT NULL DEFAULT 0,
     ReceivedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (IssuerId) REFERENCES BadgeIssuers(Id)
 );

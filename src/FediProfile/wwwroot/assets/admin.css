@@ -1024,6 +1024,26 @@ input[type="checkbox"] {
   color: var(--admin-ink-muted);
 }
 
+.pe-link-icon-static {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.pe-link-icon-static img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.pe-link-icon-static svg {
+  color: var(--admin-ink-muted);
+}
+
 .pe-link-name {
   flex: 1;
   min-width: 0;

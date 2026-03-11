@@ -68,7 +68,7 @@ public class SharedInboxController : ControllerBase
             }
             else if (inboxMsg.IsAnnounce())
             {
-                _logger.LogInformation("Shared inbox: received Announce from {Actor}, ignoring", inboxMsg.Actor);
+                jobType = "announce";
             }
             else
             {

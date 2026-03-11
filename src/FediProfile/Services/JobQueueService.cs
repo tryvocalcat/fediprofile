@@ -433,6 +433,72 @@ public class JobQueueService
         }
     }
 
+    /// <summary>
+    /// Cleans old completed/failed jobs when the total count exceeds the threshold.
+    /// Keeps the most recent <paramref name="keep"/> jobs and deletes the rest
+    /// along with their associated log entries.
+    /// </summary>
+    /// <returns>The number of jobs deleted.</returns>
+    public int CleanCompletedJobs(int threshold = 100, int keep = 50)
+    {
+        using var connection = _domainDb.GetConnection();
+        connection.Open();
+
+        // Check total job count
+        using var countCmd = connection.CreateCommand();
+        countCmd.CommandText = "SELECT COUNT(*) FROM Jobs";
+        var totalJobs = (long)countCmd.ExecuteScalar();
+
+        if (totalJobs <= threshold)
+            return 0;
+
+        // Find IDs of completed/failed jobs to delete (oldest first, keep the newest ones)
+        using var selectCmd = connection.CreateCommand();
+        selectCmd.CommandText = @"
+            SELECT Id FROM Jobs
+            WHERE Status IN ('completed', 'failed')
+            ORDER BY CreatedAt DESC
+            LIMIT -1 OFFSET @keep";
+        selectCmd.Parameters.AddWithValue("@keep", keep);
+
+        var idsToDelete = new List<long>();
+        using (var reader = selectCmd.ExecuteReader())
+        {
+            while (reader.Read())
+                idsToDelete.Add(reader.GetInt64(0));
+        }
+
+        if (idsToDelete.Count == 0)
+            return 0;
+
+        var idList = string.Join(",", idsToDelete);
+
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            // Delete associated logs first
+            using var deleteLogsCmd = connection.CreateCommand();
+            deleteLogsCmd.Transaction = transaction;
+            deleteLogsCmd.CommandText = $"DELETE FROM JobLogs WHERE JobId IN ({idList})";
+            deleteLogsCmd.ExecuteNonQuery();
+
+            // Delete the jobs
+            using var deleteJobsCmd = connection.CreateCommand();
+            deleteJobsCmd.Transaction = transaction;
+            deleteJobsCmd.CommandText = $"DELETE FROM Jobs WHERE Id IN ({idList})";
+            var deleted = deleteJobsCmd.ExecuteNonQuery();
+
+            transaction.Commit();
+            _logger?.LogInformation("Cleaned {Count} old completed/failed jobs", deleted);
+            return deleted;
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
+
     private static SimpleJob ReadJob(SQLiteDataReader reader)
     {
         return new SimpleJob

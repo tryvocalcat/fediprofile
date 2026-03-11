@@ -290,23 +290,14 @@ h2::after {
 .boost-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.65rem;
-  padding: 4px 12px;
-  border-radius: 100px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+  background: none;
+  color: var(--accent);
+  opacity: 0.5;
+  padding: 0;
+  box-shadow: none;
 }
-
-@media (prefers-color-scheme: dark) {
-  .boost-badge {
-    color: #0c1117;
-  }
+.boost-badge:hover {
+  opacity: 0.8;
 }
 
 /* ── Info section ──────────────────────────────────────── */

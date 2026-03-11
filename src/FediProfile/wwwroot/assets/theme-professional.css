@@ -123,15 +123,14 @@ h2 {
 }
 
 .boost-badge {
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  background: none;
+  color: var(--accent);
+  opacity: 0.5;
+  padding: 0;
   box-shadow: none;
+}
+.boost-badge:hover {
+  opacity: 0.8;
 }
 
 .info-section {

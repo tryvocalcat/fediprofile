@@ -26,10 +26,12 @@ public class ActivityPubActor
 
     [JsonPropertyName("url")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonConverter(typeof(SingleOrFirstUrlConverter))]
     public string? Url { get; set; }
 
     [JsonPropertyName("icon")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonConverter(typeof(SingleOrBestImageConverter))]
     public ActivityPubImage? Icon { get; set; }
 
     [JsonPropertyName("inbox")]
@@ -62,6 +64,7 @@ public class ActivityPubActor
 
     [JsonPropertyName("image")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonConverter(typeof(SingleOrBestImageConverter))]
     public ActivityPubImage? Image { get; set; }
 
     [JsonPropertyName("attachment")]
@@ -112,6 +115,14 @@ public class ActivityPubImage
     [JsonPropertyName("url")]
     public string Url { get; set; } = default!;
 
+    [JsonPropertyName("width")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Width { get; set; }
+
+    [JsonPropertyName("height")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Height { get; set; }
+
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; set; }
@@ -154,4 +165,8 @@ public class LinkAttachment
     [JsonPropertyName("autoBoost")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? AutoBoost { get; set; }
+
+    [JsonPropertyName("verified")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Verified { get; set; }
 }

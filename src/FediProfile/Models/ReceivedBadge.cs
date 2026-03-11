@@ -10,5 +10,6 @@ public class ReceivedBadge
     public string? Description { get; set; }
     public string? IssuedOn { get; set; }
     public string? AcceptedOn { get; set; }
+    public bool Hidden { get; set; }
     public string ReceivedUtc { get; set; } = string.Empty;
 }

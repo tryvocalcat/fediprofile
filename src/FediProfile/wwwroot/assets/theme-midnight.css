@@ -81,9 +81,19 @@ h2:after {
   color: #a1a1aa;
 }
 
+.link-icon {
+  filter: invert(1);
+}
+
 .boost-badge {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+  background: none;
+  color: var(--accent);
+  opacity: 0.5;
+  padding: 0;
+  box-shadow: none;
+}
+.boost-badge:hover {
+  opacity: 0.8;
 }
 
 .info-section summary {
