@@ -376,6 +376,38 @@ h2::after {
   transform: rotate(-3deg) scale(1.05);
 }
 
+/* ── QR Modal — retropop overrides ─────────────────────── */
+.qr-avatar-btn {
+  border-color: var(--bg);
+  background: var(--pop-cyan);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--pop-pink);
+}
+
+.qr-avatar-btn:hover {
+  background: var(--pop-pink);
+  color: #fff;
+}
+
+.qr-modal {
+  border: 3px solid var(--border);
+  box-shadow: 6px 6px 0 var(--pop-pink), 12px 12px 0 var(--pop-cyan);
+}
+
+.qr-download-btn {
+  border: 3px solid var(--border);
+  background: var(--pop-cyan);
+  color: var(--ink);
+  font-weight: 800;
+  box-shadow: 3px 3px 0 var(--pop-pink);
+}
+
+.qr-download-btn:hover {
+  background: var(--pop-pink);
+  color: #fff;
+  box-shadow: 4px 4px 0 var(--pop-purple);
+}
+
 /* ── Fedi handle ───────────────────────────────────────── */
 .fedi-handle-hero {
   color: var(--accent);

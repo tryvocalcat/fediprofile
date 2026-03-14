@@ -208,7 +208,7 @@ public class LocalDbService
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id, ActorUsername, ActorBio, ActorAvatarUrl, UiTheme, CreatedUtc, UpdatedUtc FROM Settings WHERE Id = 1";
+        command.CommandText = "SELECT Id, ActorUsername, ActorBio, ActorAvatarUrl, UiTheme, CreatedUtc, UpdatedUtc, CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('Settings') WHERE name='SkipReplies') THEN SkipReplies ELSE 0 END, CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('Settings') WHERE name='ShowRecentPosts') THEN ShowRecentPosts ELSE 1 END FROM Settings WHERE Id = 1";
 
         using var reader = await command.ExecuteReaderAsync();
         if (await reader.ReadAsync())
@@ -221,7 +221,9 @@ public class LocalDbService
                 ActorAvatarUrl = reader.IsDBNull(3) ? null : reader.GetString(3),
                 UiTheme = reader.GetString(4),
                 CreatedUtc = reader.GetString(5),
-                UpdatedUtc = reader.GetString(6)
+                UpdatedUtc = reader.GetString(6),
+                SkipReplies = !reader.IsDBNull(7) && reader.GetInt32(7) == 1,
+                ShowRecentPosts = reader.IsDBNull(8) || reader.GetInt32(8) == 1
             };
         }
 

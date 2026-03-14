@@ -99,6 +99,25 @@ CREATE TABLE IF NOT EXISTS Settings (
     ActorBio TEXT,
     ActorAvatarUrl TEXT,
     UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
+    SkipReplies INTEGER NOT NULL DEFAULT 0,
+    ShowRecentPosts INTEGER NOT NULL DEFAULT 1,
     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==============================================================================
+-- RecentPosts table: Rolling window of the last N boosted/announced posts
+-- for display on the public profile.
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS RecentPosts (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    NoteId TEXT NOT NULL UNIQUE,
+    ActorUri TEXT NOT NULL,
+    ActorName TEXT,
+    ActorAvatar TEXT,
+    Content TEXT,
+    Summary TEXT,
+    Url TEXT,
+    PublishedUtc TEXT,
+    BoostedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

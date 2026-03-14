@@ -29,9 +29,14 @@
 @code {
     private string? _message;
     private bool _isError;
+    private string? _refParam;
 
     protected override async Task OnInitializedAsync()
     {
+        var uri = new Uri(NavigationManager.Uri);
+        var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        _refParam = qs.ContainsKey("ref") ? qs["ref"].ToString() : null;
+
         try
         {
             var state = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -53,7 +58,9 @@
             if (dbUser.HasValue)
             {
                 // Existing user — redirect to admin
-                NavigationManager.NavigateTo("/admin/", true);
+                var dest = "/admin/";
+                if (!string.IsNullOrEmpty(_refParam)) dest += $"?ref={Uri.EscapeDataString(_refParam)}";
+                NavigationManager.NavigateTo(dest, true);
             }
             else
             {
@@ -61,17 +68,26 @@
                 var invitationCode = Configuration.GetValue<string>("InvitationCode") ?? "";
                 if (!string.IsNullOrEmpty(invitationCode))
                 {
-                    NavigationManager.NavigateTo("/register/invitation", true);
+                    var invDest = "/register/invitation";
+                    if (!string.IsNullOrEmpty(_refParam)) invDest += $"?ref={Uri.EscapeDataString(_refParam)}";
+                    NavigationManager.NavigateTo(invDest, true);
                 }
                 else
                 {
-                    NavigationManager.NavigateTo("/register/choose-username", true);
+                    var regDest = "/register/choose-username";
+                    if (!string.IsNullOrEmpty(_refParam)) regDest += $"?ref={Uri.EscapeDataString(_refParam)}";
+                    NavigationManager.NavigateTo(regDest, true);
                 }
             }
+        }
+        catch (NavigationException)
+        {
+            throw; // expected during SSR — lets the redirect complete
         }
         catch (Exception ex)
         {
             _message = $"Error checking account: {ex.Message}";
+            Console.WriteLine(ex);
             _isError = true;
         }
     }

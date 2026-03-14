@@ -15,11 +15,39 @@ internal static class LoginLogoutEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("");
 
-        group.MapGet("/login/oauth/{server}", (string server, string? returnUrl) =>
+        group.MapGet("/login/oauth/{server}", (string server, string? returnUrl, string? @ref) =>
         {
             var authProps = GetAuthProperties(returnUrl ?? "/admin");
             authProps.Items["mastodon_server"] = server;
+            if (!string.IsNullOrEmpty(@ref))
+                authProps.Items["integration_ref"] = @ref;
             return TypedResults.Challenge(authProps, new[] { "DynamicMastodon" });
+        }).AllowAnonymous();
+
+        group.MapGet("/login/github", (string? returnUrl, string? @ref, IConfiguration config) =>
+        {
+            var clientId = config["Authentication:GitHub:ClientId"];
+            var clientSecret = config["Authentication:GitHub:ClientSecret"];
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+                return Results.NotFound("GitHub authentication is not configured.");
+
+            var authProps = GetAuthProperties(returnUrl ?? "/login/check");
+            if (!string.IsNullOrEmpty(@ref))
+                authProps.Items["integration_ref"] = @ref;
+            return Results.Challenge(authProps, new[] { "GitHub" });
+        }).AllowAnonymous();
+
+        group.MapGet("/login/linkedin", (string? returnUrl, string? @ref, IConfiguration config) =>
+        {
+            var clientId = config["Authentication:LinkedIn:ClientId"];
+            var clientSecret = config["Authentication:LinkedIn:ClientSecret"];
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+                return Results.NotFound("LinkedIn authentication is not configured.");
+
+            var authProps = GetAuthProperties(returnUrl ?? "/login/check");
+            if (!string.IsNullOrEmpty(@ref))
+                authProps.Items["integration_ref"] = @ref;
+            return Results.Challenge(authProps, new[] { "LinkedIn" });
         }).AllowAnonymous();
 
         group.MapGet("/logout", (string? returnUrl) =>
@@ -48,11 +76,13 @@ internal static class LoginLogoutEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/register");
 
-        group.MapGet("/oauth/{server}", (string server, string? returnUrl) =>
+        group.MapGet("/oauth/{server}", (string server, string? returnUrl, string? @ref) =>
         {
-            var authProps = GetAuthProperties("/register/choose-username");
+            var authProps = GetAuthProperties(returnUrl ?? "/register/choose-username");
             authProps.Items["mastodon_server"] = server;
             authProps.Items["registration_flow"] = "true";
+            if (!string.IsNullOrEmpty(@ref))
+                authProps.Items["integration_ref"] = @ref;
             return TypedResults.Challenge(authProps, new[] { "DynamicMastodon" });
         }).AllowAnonymous();
 

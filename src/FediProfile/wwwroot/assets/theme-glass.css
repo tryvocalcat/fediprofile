@@ -363,6 +363,38 @@ h2::after {
   color: var(--ink);
 }
 
+/* ── QR Modal — glass overrides ────────────────────────── */
+.qr-avatar-btn {
+  border-color: var(--card);
+  background: var(--accent);
+}
+
+.qr-modal {
+  background: var(--card);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+}
+
+.qr-close,
+.qr-title {
+  color: var(--ink);
+}
+
+.qr-url {
+  color: var(--ink);
+}
+
+.qr-download-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.qr-download-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
 /* ── Fedi handle ───────────────────────────────────────── */
 .fedi-handle-hero {
   color: var(--ink);

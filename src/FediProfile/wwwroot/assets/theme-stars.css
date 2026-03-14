@@ -430,6 +430,37 @@ h2::after {
   stroke-linejoin: round;
 }
 
+/* ── QR Modal — Galaxy overrides ───────────────────────── */
+.qr-avatar-btn {
+  border-color: var(--bgColor, #0d1117);
+  background: var(--accentColor);
+}
+
+.qr-modal {
+  background: var(--bgColor, #0d1117);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.qr-close,
+.qr-title {
+  color: var(--textColor);
+}
+
+.qr-url {
+  color: var(--textColor);
+}
+
+.qr-download-btn {
+  border-color: var(--accentColor);
+  color: var(--accentColor);
+}
+
+.qr-download-btn:hover {
+  background: var(--accentColor);
+  color: var(--bgColor);
+}
+
 /* ── Card entrance animation ───────────────────────────── */
 @keyframes cardFadeIn {
   from {

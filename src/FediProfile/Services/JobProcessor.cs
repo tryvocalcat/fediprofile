@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using FediProfile.Models;
+using FediProfile.Core;
 using System.Net.Http.Headers;
 
 namespace FediProfile.Services;
@@ -265,18 +266,12 @@ public class JobProcessor
 
         var mainDb = _factory.GetInstance(domain);
 
-        // Extract badge details once from the Note object (shared across assertions)
-        var badgeTitle = objectElement.TryGetProperty("name", out var nameEl)
-            ? nameEl.GetString() ?? "Unknown Badge" : "Unknown Badge";
-        var badgeImage = objectElement.TryGetProperty("image", out var imageEl)
-            ? imageEl.GetString() : null;
-        var badgeDescription = objectElement.TryGetProperty("content", out var contentEl)
-            ? contentEl.GetString() : null;
-        var issuerUrl = inboxMsg.Actor ?? "";
-        var issuerName = objectElement.TryGetProperty("attributedTo", out var attrEl)
-            ? attrEl.GetString() ?? issuerUrl : issuerUrl;
         var noteId = objectElement.TryGetProperty("id", out var noteIdEl)
             ? noteIdEl.GetString() ?? inboxMsg.Id : inboxMsg.Id;
+
+        // Resolve issuer details by probing the assertion's issuer object and AP actor URLs
+        var issuerInfo = await ActivityPubHelper.ResolveIssuerAsync(
+            objectElement, fallbackActorUrl: inboxMsg.Actor);
 
         // Upsert issuer once for the whole batch
         int? issuerId = null;
@@ -292,11 +287,27 @@ public class JobProcessor
                 continue;
             }
 
+            // Extract badge details from the assertion's nested badge (BadgeClass) object
+            var badgeTitle = "Unknown Badge";
+            string? badgeImage = null;
+            string? badgeDescription = null;
+
+            if (attachment.TryGetProperty("badge", out var badgeEl) && badgeEl.ValueKind == JsonValueKind.Object)
+            {
+                badgeTitle = badgeEl.TryGetProperty("name", out var nameEl)
+                    ? nameEl.GetString() ?? "Unknown Badge" : "Unknown Badge";
+                badgeImage = badgeEl.TryGetProperty("image", out var imageEl)
+                    ? imageEl.GetString() : null;
+                badgeDescription = badgeEl.TryGetProperty("description", out var descEl)
+                    ? descEl.GetString() : null;
+            }
+
             var badgeIssuedOn = attachment.TryGetProperty("issuedOn", out var issuedEl)
                 ? issuedEl.GetString() : null;
 
             // Lazy-init issuer on first match
-            issuerId ??= await mainDb.CreateOrGetBadgeIssuerAsync(issuerName, issuerUrl);
+            issuerId ??= await mainDb.UpsertBadgeIssuerAsync(
+                issuerInfo.Name, issuerInfo.ActorUrl, issuerInfo.Avatar, issuerInfo.Bio);
 
             foreach (var userSlug in matchedSlugs)
             {
@@ -323,6 +334,7 @@ public class JobProcessor
     /// <summary>
     /// Fans out a Create activity to all local users that follow the actor,
     /// delegating to AnnounceService.SendAnnounceAsync for each.
+    /// After a successful announce, stores the post in the user's RecentPosts table.
     /// </summary>
     private async Task ProcessAnnouncements(InboxMessage inboxMsg, SimpleJob job, string domain, string fullDomain, JobQueueService jobQueue)
     {
@@ -342,14 +354,54 @@ public class JobProcessor
 
         var announceService = _serviceProvider.GetRequiredService<AnnounceService>();
 
+        // Check once whether this Create activity is a reply (has inReplyTo)
+        var isReply = inboxMsg.IsReply();
+
+        // Extract post metadata once from the Note object (shared across all users)
+        var (noteId, noteContent, noteSummary, noteUrl, notePublished, noteActorName, noteActorAvatar) = ExtractNoteMetadata(inboxMsg);
+
         foreach (var userSlug in localFollowers)
         {
             try
             {
                 var userDb = _factory.GetInstance(domain, userSlug);
+
+                // If the user has SkipReplies enabled and this is a reply, skip announcing
+                if (isReply)
+                {
+                    var settings = await userDb.GetSettingsAsync();
+                    if (settings?.SkipReplies == true)
+                    {
+                        await jobQueue.AddJobLogAsync(job.Id, $"Skipping reply announcement for user {userSlug} (SkipReplies enabled)");
+                        _logger.LogInformation("Create job {JobId}: skipping reply for user {UserSlug} (SkipReplies)", job.Id, userSlug);
+                        continue;
+                    }
+                }
+
                 var actorId = $"{scheme}://{fullDomain}/{userSlug}";
                 await announceService.SendAnnounceAsync(inboxMsg, userDb, actorId, jobQueue, job.Id);
                 await jobQueue.AddJobLogAsync(job.Id, $"Announced to user {userSlug}");
+
+                // Store in RecentPosts for the public profile feed
+                if (!string.IsNullOrEmpty(noteId))
+                {
+                    try
+                    {
+                        await userDb.StoreRecentPostAsync(
+                            noteId: noteId,
+                            actorUri: inboxMsg.Actor ?? "",
+                            actorName: noteActorName,
+                            actorAvatar: noteActorAvatar,
+                            content: noteContent,
+                            summary: noteSummary,
+                            url: noteUrl,
+                            publishedUtc: notePublished);
+                    }
+                    catch (Exception storeEx)
+                    {
+                        _logger.LogWarning(storeEx, "Create job {JobId}: failed to store recent post for {UserSlug}", job.Id, userSlug);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -357,6 +409,56 @@ public class JobProcessor
                 await jobQueue.AddJobLogAsync(job.Id, $"Error for user {userSlug}: {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Extracts metadata from a Create activity's inner Note object for storage in RecentPosts.
+    /// </summary>
+    private static (string? NoteId, string? Content, string? Summary, string? Url, string? Published, string? ActorName, string? ActorAvatar) ExtractNoteMetadata(InboxMessage inboxMsg)
+    {
+        if (inboxMsg.Object is not JsonElement obj || obj.ValueKind != JsonValueKind.Object)
+            return (inboxMsg.Id, null, null, null, null, null, null);
+
+        var noteId = obj.TryGetProperty("id", out var idEl) ? idEl.GetString() : inboxMsg.Id;
+        var content = obj.TryGetProperty("content", out var contentEl) ? contentEl.GetString() : null;
+        var summary = obj.TryGetProperty("summary", out var summaryEl) ? summaryEl.GetString() : null;
+
+        // url can be a string or an object with href
+        string? url = null;
+        if (obj.TryGetProperty("url", out var urlEl))
+        {
+            if (urlEl.ValueKind == JsonValueKind.String)
+                url = urlEl.GetString();
+            else if (urlEl.ValueKind == JsonValueKind.Object && urlEl.TryGetProperty("href", out var hrefEl))
+                url = hrefEl.GetString();
+        }
+        url ??= noteId; // fallback to the Note ID which is typically a URL
+
+        var published = obj.TryGetProperty("published", out var pubEl) ? pubEl.GetString() : null;
+
+        // Try to get actor display info from attributedTo or icon
+        string? actorName = null;
+        string? actorAvatar = null;
+        if (obj.TryGetProperty("attributedTo", out var attrEl))
+        {
+            if (attrEl.ValueKind == JsonValueKind.String)
+            {
+                // Just the URI — name will come from the actor URI itself
+            }
+            else if (attrEl.ValueKind == JsonValueKind.Object)
+            {
+                actorName = attrEl.TryGetProperty("name", out var nEl) ? nEl.GetString() : null;
+                if (attrEl.TryGetProperty("icon", out var iconEl))
+                {
+                    if (iconEl.ValueKind == JsonValueKind.String)
+                        actorAvatar = iconEl.GetString();
+                    else if (iconEl.ValueKind == JsonValueKind.Object && iconEl.TryGetProperty("url", out var iconUrlEl))
+                        actorAvatar = iconUrlEl.GetString();
+                }
+            }
+        }
+
+        return (noteId, content, summary, url, published, actorName, actorAvatar);
     }
 
     /// <summary>

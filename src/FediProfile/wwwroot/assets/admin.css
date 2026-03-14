@@ -1311,6 +1311,29 @@ input[type="checkbox"] {
   padding-top: 0;
 }
 
+.pe-save-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pe-save-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.button-success {
+  background: #10b981;
+  color: #fff;
+  border-color: #10b981;
+}
+.button-success:hover:not(:disabled) {
+  background: #059669;
+  border-color: #059669;
+}
+
 .pe-save-bar .form-control {
   width: auto;
   min-width: 140px;
@@ -1343,7 +1366,51 @@ input[type="checkbox"] {
     align-items: stretch;
   }
 
+  .pe-save-bar-left,
+  .pe-save-bar-right {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pe-save-bar-right {
+    margin-left: 0;
+  }
+
   .pe-save-bar .button-primary {
     margin-left: 0;
   }
+}
+
+/* ===== Integration Banner ===== */
+.integration-banner {
+    background: #f0f9ff;
+    border: 2px solid #3b82f6;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+.integration-banner p {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+}
+.integration-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.button-accent {
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+.button-accent:hover {
+    background: #059669;
 }

@@ -3,17 +3,21 @@
 @inject UserScopedDb UserDb
 @inject DomainScopedDb DomainDb
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
 
 <div class="app-shell">
     <header class="topbar">
         <a class="brand" href="/">FediProfile</a>
         <nav class="topbar-nav">
-            <a href="/admin/">Admin</a>
-            <a href="/@_currentUserSlug" class="topbar-user" title="@(_signedInAs ?? "Unknown")">
-                <svg class="topbar-avatar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
-                <span class="topbar-user-name">@(_currentUserSlug ?? "user")</span>
+            @if (_integrationRef != null)
+            {
+                <a href="@_integrationRef.Url" class="button button-primary" style="font-size:0.85rem;color:white;text-decoration:none;">&larr; @_integrationRef.Name</a>
+            }
+
+            <a class="button button-ghost" href="/logout">
+                <svg style="width:14px;height:14px;vertical-align:-2px;margin-right:0.25rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Logout
             </a>
-             <a class="button button-ghost" href="/logout">Logout</a>
         </nav>
     </header>
 
@@ -26,9 +30,16 @@
     private string? _currentUserSlug;
     private bool _isAuthorized;
     private string? _signedInAs;
+    private FediProfile.Core.IntegrationRef? _integrationRef;
 
     protected override async Task OnInitializedAsync()
     {
+        // Parse integration ref from query string
+        var uri = new Uri(NavigationManager.Uri);
+        var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (qs.ContainsKey("ref"))
+            _integrationRef = FediProfile.Core.IntegrationRef.FromQueryParam(qs["ref"]);
+
         // Get authenticated user's Mastodon identity from claims
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
         var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;

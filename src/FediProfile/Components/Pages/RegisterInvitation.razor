@@ -40,6 +40,14 @@
 @code {
     private string? _code;
     private string? _errorMessage;
+    private string? _refParam;
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        _refParam = qs.ContainsKey("ref") ? qs["ref"].ToString() : null;
+    }
 
     private void OnCodeChanged()
     {
@@ -59,13 +67,17 @@
         if (string.IsNullOrEmpty(expectedCode))
         {
             // No code required, just redirect
-            NavigationManager.NavigateTo("/register/choose-username", true);
+            var dest = "/register/choose-username";
+            if (!string.IsNullOrEmpty(_refParam)) dest += $"?ref={Uri.EscapeDataString(_refParam)}";
+            NavigationManager.NavigateTo(dest, true);
             return;
         }
 
         if (_code.Trim().Equals(expectedCode, StringComparison.OrdinalIgnoreCase))
         {
-            NavigationManager.NavigateTo($"/register/choose-username?code={Uri.EscapeDataString(_code.Trim())}", true);
+            var dest = $"/register/choose-username?code={Uri.EscapeDataString(_code.Trim())}";
+            if (!string.IsNullOrEmpty(_refParam)) dest += $"&ref={Uri.EscapeDataString(_refParam)}";
+            NavigationManager.NavigateTo(dest, true);
         }
         else
         {

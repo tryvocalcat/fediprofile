@@ -4,6 +4,7 @@
 @using System.Security.Claims
 @using System.Text.Json
 @using System.Net.Http.Headers
+@using FediProfile.Core
 @attribute [Authorize]
 @layout FediProfile.Components.Layouts.MainLayout
 @rendermode InteractiveServer
@@ -20,28 +21,25 @@
 @inject NavigationManager Navigation
 @inject ProfileHtmlService ProfileHtml
 @inject ActorService ActorService
+@inject IJSRuntime JS
 
 <section class="admin-shell">
     <header class="admin-header">
         <div>
-            <h1 class="admin-title">Admin Console</h1>
+            <h1 class="admin-title">My Profile</h1>
             @if (_impersonating)
             {
                 <p class="admin-subtitle" style="color:#e67e22;font-weight:600;">Impersonating: @_currentUserSlug</p>
             }
             else
             {
-                <p class="admin-subtitle">Manage users and system settings.</p>
+                <p class="admin-subtitle">Edit your links, bio, and badges.</p>
             }
         </div>
         <div style="display:flex;gap:0.5rem;align-items:center">
             @if (_impersonating)
             {
                 <a href="/admin/" class="button button-ghost">Stop Impersonating</a>
-            }
-            @if (_isAuthorized && _isRootUser)
-            {
-                <a href="/admin/root" class="button button-primary">Root Admin</a>
             }
         </div>
        
@@ -59,10 +57,6 @@
         </div>
     }
 
-  
-       
-   
-
     @if (_isAuthorized && !string.IsNullOrEmpty(_currentUserSlug))
     {
         <div class="admin-section">
@@ -76,7 +70,7 @@
                 }
 
                 <div class="pe-save-bar pe-save-bar-top">
-                    <div style="display:flex;align-items:center;gap:0.5rem">
+                    <div class="pe-save-bar-left">
                         <label class="muted" style="white-space:nowrap;margin:0">Theme</label>
                         <select value="@_profileTheme" @onchange="OnThemeChanged" class="form-control">
                             @foreach (var t in Themes.All)
@@ -89,7 +83,18 @@
                             <span class="muted" style="font-size:0.8rem">✓ saved</span>
                         }
                     </div>
-                    <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto">
+                    <div class="pe-save-bar-right">
+                        @if (_integrationRef != null)
+                        {
+                            <button class="button button-success button-small" @onclick="CopyProfileUrl">
+                                <svg style="width:14px;height:14px;vertical-align:-2px;margin-right:0.3rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                Copy URL
+                            </button>
+                            @if (_copied)
+                            {
+                                <span class="muted" style="font-size:0.8rem;align-self:center;">Copied!</span>
+                            }
+                        }
                         <a href="/@_currentUserSlug" target="_blank" class="button button-ghost button-small">Preview ↗</a>
                         <button class="button button-primary" @onclick="SaveProfile" disabled="@_isProcessing">
                             @(_isProcessing ? "Saving..." : "Save Profile")
@@ -427,7 +432,7 @@
                 <!-- Fedi handle info -->
                 <div class="pe-info-section">
                     <p class="muted">Follow me in the fediverse: @@<strong>@_currentUserSlug@@@(_currentDomain)</strong></p>
-                    <p class="muted" style="font-size:0.82rem">This is a read-only profile — it doesn't post or reply. It boosts and relays content from linked accounts.</p>
+                    <p class="muted" style="font-size:0.82rem">Not in the fediverse? <a href="https://joinmastodon.org" target="_blank" style="text-decoration:underline">Join now </a></p>
                 </div>
 
                 <!-- Footer: Save -->
@@ -656,7 +661,7 @@
                                         {
                                             <div style="font-size:0.75rem;color:var(--muted)">Issued: @badge.IssuedOn</div>
                                         }
-                                        <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.5rem">
+                                        <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap">
                                             <button class="button button-ghost button-small"
                                                     style="font-size:0.75rem;padding:2px 8px"
                                                     @onclick="() => ToggleBadgeVisibility(badge)"
@@ -669,12 +674,123 @@
                                                     🔗 View
                                                 </a>
                                             }
+                                            @if (_badgeDeleteConfirmId == badge.Id)
+                                            {
+                                                <span style="font-size:0.75rem;color:#dc3545;font-weight:600">Delete?</span>
+                                                <button class="button button-ghost button-small"
+                                                        style="font-size:0.75rem;padding:2px 8px;color:#dc3545;border-color:#dc3545"
+                                                        @onclick="() => DeleteBadge(badge.Id)">
+                                                    Yes
+                                                </button>
+                                                <button class="button button-ghost button-small"
+                                                        style="font-size:0.75rem;padding:2px 8px"
+                                                        @onclick="() => _badgeDeleteConfirmId = null">
+                                                    No
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button class="button button-ghost button-small"
+                                                        style="font-size:0.75rem;padding:2px 8px;color:#dc3545"
+                                                        @onclick="() => _badgeDeleteConfirmId = badge.Id"
+                                                        title="Delete this badge permanently">
+                                                    🗑️
+                                                </button>
+                                            }
                                         </div>
                                     </div>
                                 </div>
                             }
                         </div>
                     }
+                </div>
+            </article>
+
+            <!-- Recent Posts -->
+            <article class="card admin-card-spaced">
+                <h2>Recent Posts (@(_recentPosts?.Count ?? 0))</h2>
+                <p class="muted">The last boosted posts from your linked accounts. These are shown on your public profile.</p>
+
+                @if (_recentPosts == null)
+                {
+                    <p class="muted">Loading…</p>
+                }
+                else if (!_recentPosts.Any())
+                {
+                    <div style="padding:1.25rem;border:1px dashed var(--border, #d0d0d0);border-radius:10px;background:var(--bg-subtle, #f8f9fa);text-align:center">
+                        <p style="font-size:0.95rem;font-weight:600;margin:0 0 0.4rem">Want to show your latest posts and activity?</p>
+                        <p class="muted" style="font-size:0.85rem;margin:0 0 0.6rem;line-height:1.5">
+                            Add a fediverse account — such as <strong>Mastodon</strong>, <strong>Pixelfed</strong>, or <strong>Misskey</strong> — as a link with <em>AutoBoost</em> enabled.<br />
+                            Your recent posts will then appear here and on your public profile automatically.
+                        </p>
+                        <p class="muted" style="font-size:0.8rem;margin:0">Head to the <strong>Links</strong> section above to add one.</p>
+                        <p class="muted" style="font-size:0.8rem;margin:0.5rem 0 0">Unsure where to start? <a href="https://joinmastodon.org" target="_blank" rel="noopener">Join Mastodon ↗</a></p>
+                    </div>
+                }
+                else
+                {
+                    <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.75rem">
+                        @foreach (var post in _recentPosts)
+                        {
+                            <div style="border:1px solid var(--border, #e0e0e0);border-radius:8px;padding:0.75rem;background:var(--bg-subtle, #f8f9fa)">
+                                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+                                    @if (!string.IsNullOrEmpty(post.ActorAvatar))
+                                    {
+                                        <img src="@post.ActorAvatar" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover" />
+                                    }
+                                    <strong style="font-size:0.9rem">@(post.ActorName ?? post.ActorUri)</strong>
+                                    @if (!string.IsNullOrEmpty(post.PublishedUtc))
+                                    {
+                                        <span class="muted" style="font-size:0.78rem;margin-left:auto" title="@post.PublishedUtc">@FormatPostDate(post.PublishedUtc)</span>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrEmpty(post.Content))
+                                {
+                                    <div style="font-size:0.88rem;line-height:1.45;overflow:hidden;max-height:6rem">@((MarkupString)post.Content)</div>
+                                }
+                                else if (!string.IsNullOrEmpty(post.Summary))
+                                {
+                                    <p style="font-size:0.88rem;line-height:1.45" class="muted">@post.Summary</p>
+                                }
+                                @if (!string.IsNullOrEmpty(post.Url))
+                                {
+                                    <a href="@post.Url" target="_blank" rel="noopener" style="font-size:0.8rem;margin-top:0.3rem;display:inline-block">View original ↗</a>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </article>
+
+            <!-- Settings -->
+            <article class="card admin-card-spaced">
+                <h2>Settings</h2>
+                <p class="muted">Configure how your profile behaves.</p>
+
+                <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:1rem">
+                    <!-- Skip Replies -->
+                    <div style="display:flex;align-items:flex-start;gap:0.75rem;padding:0.75rem;border:1px solid var(--border, #e0e0e0);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <label class="pe-toggle" style="flex-shrink:0;margin-top:0.1rem;cursor:pointer" title="@(_profileSkipReplies ? "Only boosting main posts" : "Boosting all posts including replies")">
+                            <input type="checkbox" checked="@_profileSkipReplies" @onchange="OnSkipRepliesChanged" />
+                            <span class="pe-toggle-badge @(_profileSkipReplies ? "pe-toggle-on" : "")">@(_profileSkipReplies ? "ON" : "OFF")</span>
+                        </label>
+                        <div>
+                            <strong style="font-size:0.92rem">Skip Replies</strong>
+                            <p class="muted" style="font-size:0.82rem;margin:0.15rem 0 0">Only boost original/main posts. When enabled, replies from your linked accounts will not be announced to your followers.</p>
+                        </div>
+                    </div>
+
+                    <!-- Show Recent Posts -->
+                    <div style="display:flex;align-items:flex-start;gap:0.75rem;padding:0.75rem;border:1px solid var(--border, #e0e0e0);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <label class="pe-toggle" style="flex-shrink:0;margin-top:0.1rem;cursor:pointer" title="@(_profileShowRecentPosts ? "Recent posts visible on public profile" : "Recent posts hidden from public profile")">
+                            <input type="checkbox" checked="@_profileShowRecentPosts" @onchange="OnShowRecentPostsChanged" />
+                            <span class="pe-toggle-badge @(_profileShowRecentPosts ? "pe-toggle-on" : "")">@(_profileShowRecentPosts ? "ON" : "OFF")</span>
+                        </label>
+                        <div>
+                            <strong style="font-size:0.92rem">Show Recent Posts</strong>
+                            <p class="muted" style="font-size:0.82rem;margin:0.15rem 0 0">Display recently boosted posts on your public profile page. When disabled, the Recent Activity section is hidden from visitors.</p>
+                        </div>
+                    </div>
                 </div>
             </article>
 
@@ -743,6 +859,8 @@
     private string? _profileTheme;
     private string? _profileMessage;
     private bool _profileIsError;
+    private bool _profileSkipReplies;
+    private bool _profileShowRecentPosts = true;
 
     // Link fields (new link form)
     private string? _newLinkName;
@@ -893,6 +1011,7 @@
     private static readonly Dictionary<string, (string Name, string Path)> _platformIcons = new()
     {
         ["bluesky"] = ("Bluesky", "/assets/icons/bluesky.svg"),
+        ["fediverse"] = ("Fediverse", "/assets/icons/fediverse.svg"),
         ["github"] = ("GitHub", "/assets/icons/github.svg"),
         ["instagram"] = ("Instagram", "/assets/icons/instagram.svg"),
         ["lemmy"] = ("Lemmy", "/assets/icons/lemmy.svg"),
@@ -919,6 +1038,7 @@
 
     // Received badges
     private List<ReceivedBadge>? _receivedBadges;
+    private int? _badgeDeleteConfirmId;
 
     // Import badge
     private string? _importBadgeUrl;
@@ -938,11 +1058,18 @@
     private List<Follower>? _followers;
     private int _followerCount;
 
+    // Recent posts (boosted content)
+    private List<RecentPost>? _recentPosts;
+
     // Danger Zone - Delete Account
     private bool _deleteAccountConfirming;
     private string? _deleteAccountConfirmText;
     private string? _deleteAccountMessage;
     private bool _deleteAccountIsError;
+
+    // Integration ref (for external deep-link return flow)
+    private FediProfile.Core.IntegrationRef? _integrationRef;
+    private bool _copied;
 
     // User-scoped database for the current authenticated user
     private UserScopedDb? _currentUserDb;
@@ -978,6 +1105,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Parse integration ref from query string
+        var navUri = new Uri(Navigation.Uri);
+        var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(navUri.Query);
+        if (qs.ContainsKey("ref"))
+            _integrationRef = FediProfile.Core.IntegrationRef.FromQueryParam(qs["ref"]);
+
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
         var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
         var mastodonHost = state.User.FindFirst("urn:mastodon:hostname")?.Value;
@@ -1040,6 +1173,7 @@
             await LoadReceivedBadges();
             await LoadVerifiedUris();
             await LoadFollowers();
+            await LoadRecentPosts();
         }
     }
 
@@ -1057,6 +1191,8 @@
                 _profileBio = settings.ActorBio;
                 _profileAvatarUrl = settings.ActorAvatarUrl;
                 _profileTheme = Themes.Resolve(settings.UiTheme);
+                _profileSkipReplies = settings.SkipReplies;
+                _profileShowRecentPosts = settings.ShowRecentPosts;
             }
             else
             {
@@ -1095,6 +1231,38 @@
         await Task.Delay(2000);
         _themeSaved = false;
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnSkipRepliesChanged(ChangeEventArgs e)
+    {
+        _profileSkipReplies = e.Value is true;
+        if (_currentUserDb == null) return;
+
+        try
+        {
+            await _currentUserDb.UpsertSettingsAsync(skipReplies: _profileSkipReplies);
+        }
+        catch (Exception ex)
+        {
+            _profileMessage = $"Error saving skip-replies setting: {ex.Message}";
+            _profileIsError = true;
+        }
+    }
+
+    private async Task OnShowRecentPostsChanged(ChangeEventArgs e)
+    {
+        _profileShowRecentPosts = e.Value is true;
+        if (_currentUserDb == null) return;
+
+        try
+        {
+            await _currentUserDb.UpsertSettingsAsync(showRecentPosts: _profileShowRecentPosts);
+        }
+        catch (Exception ex)
+        {
+            _profileMessage = $"Error saving show-recent-posts setting: {ex.Message}";
+            _profileIsError = true;
+        }
     }
 
     private async Task SaveProfile()
@@ -1916,10 +2084,7 @@ I don't know if this is the best UX
         try
         {
             // Fetch the badge JSON-LD from the URL
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/ld+json"));
-            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json", 0.9));
-            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json", 0.8));
+            using var http = ActivityPubHelper.CreateActivityPubHttpClient();
 
             var response = await http.GetAsync(_importBadgeUrl);
             if (!response.IsSuccessStatusCode)
@@ -1942,30 +2107,8 @@ I don't know if this is the best UX
             var badgeDescription = root.TryGetProperty("content", out var contentEl)
                 ? contentEl.GetString() : null;
 
-            // Extract issuer info from attributedTo
-            var issuerUrl = root.TryGetProperty("attributedTo", out var attrEl)
-                ? attrEl.GetString() ?? "" : "";
-            var issuerName = issuerUrl;
-
-            // Try to resolve issuer name from the actor URL
-            if (!string.IsNullOrEmpty(issuerUrl))
-            {
-                try
-                {
-                    var actorResponse = await http.GetAsync(issuerUrl);
-                    if (actorResponse.IsSuccessStatusCode)
-                    {
-                        var actorJson = await actorResponse.Content.ReadAsStringAsync();
-                        using var actorDoc = JsonDocument.Parse(actorJson);
-                        var actorRoot = actorDoc.RootElement;
-                        if (actorRoot.TryGetProperty("name", out var actorNameEl))
-                            issuerName = actorNameEl.GetString() ?? issuerUrl;
-                        else if (actorRoot.TryGetProperty("preferredUsername", out var prefEl))
-                            issuerName = prefEl.GetString() ?? issuerUrl;
-                    }
-                }
-                catch { /* Fallback to URL as issuer name */ }
-            }
+            // Resolve issuer details by probing the assertion's issuer and the AP actor
+            var issuerInfo = await ActivityPubHelper.ResolveIssuerAsync(root, httpClient: http);
 
             // Extract recipient URIs and issuedOn from attachment assertions
             string? badgeIssuedOn = null;
@@ -2005,7 +2148,7 @@ I don't know if this is the best UX
                     badgeIssuedOn = issuedMatch.Groups[1].Value;
             }
 
-            if (string.IsNullOrEmpty(issuerUrl))
+            if (string.IsNullOrEmpty(issuerInfo.ActorUrl))
             {
                 _importBadgeMessage = "Could not determine badge issuer from the fetched data.";
                 _importBadgeIsError = true;
@@ -2030,7 +2173,8 @@ I don't know if this is the best UX
             }
 
             // Store issuer and badge
-            var issuerId = await DomainDb.CreateOrGetBadgeIssuerAsync(issuerName, issuerUrl);
+            var issuerId = await DomainDb.UpsertBadgeIssuerAsync(
+                issuerInfo.Name, issuerInfo.ActorUrl, issuerInfo.Avatar, issuerInfo.Bio);
             var badgeRecordId = await _currentUserDb.StoreBadgeAsync(noteId, issuerId, badgeTitle, badgeImage, badgeDescription, badgeIssuedOn);
 
             if (badgeRecordId > 0)
@@ -2104,6 +2248,22 @@ I don't know if this is the best UX
         }
     }
 
+    private async Task DeleteBadge(int badgeId)
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            await _currentUserDb.DeleteBadgeAsync(badgeId);
+            _badgeDeleteConfirmId = null;
+            await LoadReceivedBadges();
+            await RegenerateStaticProfileAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to delete badge {BadgeId}", badgeId);
+        }
+    }
+
     private async Task LoadVerifiedUris()
     {
         if (string.IsNullOrEmpty(_currentUserSlug)) return;
@@ -2132,6 +2292,36 @@ I don't know if this is the best UX
             _followers = new List<Follower>();
             _followerCount = 0;
         }
+    }
+
+    // ===== Recent Posts =====
+
+    private async Task LoadRecentPosts()
+    {
+        if (_currentUserDb == null) return;
+        try
+        {
+            _recentPosts = await _currentUserDb.GetRecentPostsAsync();
+        }
+        catch
+        {
+            _recentPosts = new List<RecentPost>();
+        }
+    }
+
+    private static string FormatPostDate(string? utcString)
+    {
+        if (string.IsNullOrEmpty(utcString)) return "";
+        if (DateTime.TryParse(utcString, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt))
+        {
+            var ago = DateTime.UtcNow - dt.ToUniversalTime();
+            if (ago.TotalMinutes < 1) return "just now";
+            if (ago.TotalHours < 1) return $"{(int)ago.TotalMinutes}m ago";
+            if (ago.TotalDays < 1) return $"{(int)ago.TotalHours}h ago";
+            if (ago.TotalDays < 30) return $"{(int)ago.TotalDays}d ago";
+            return dt.ToString("MMM d, yyyy");
+        }
+        return utcString;
     }
 
     // ===== Helpers =====
@@ -2197,6 +2387,14 @@ I don't know if this is the best UX
     {
         if (string.IsNullOrEmpty(url)) return "-";
         return url.Length > 50 ? url.Substring(0, 47) + "..." : url;
+    }
+
+    private async Task CopyProfileUrl()
+    {
+        var profileUrl = $"{(_currentDomain?.Contains("localhost") == true ? "http" : "https")}://{_currentDomain}/{_currentUserSlug}";
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", profileUrl);
+        _copied = true;
+        StateHasChanged();
     }
 
     /// <summary>

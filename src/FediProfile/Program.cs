@@ -95,6 +95,87 @@ auth.AddDynamicMastodon(o =>
     o.SaveTokens = true;
 }, localDbFactory);
 
+// Conditionally add GitHub OAuth if credentials are configured
+var ghClientId = builder.Configuration["Authentication:GitHub:ClientId"];
+var ghClientSecret = builder.Configuration["Authentication:GitHub:ClientSecret"];
+if (!string.IsNullOrEmpty(ghClientId) && !string.IsNullOrEmpty(ghClientSecret))
+{
+    auth.AddOAuth("GitHub", o =>
+    {
+        o.ClientId = ghClientId;
+        o.ClientSecret = ghClientSecret;
+        o.AuthorizationEndpoint = "https://github.com/login/oauth/authorize";
+        o.TokenEndpoint = "https://github.com/login/oauth/access_token";
+        o.UserInformationEndpoint = "https://api.github.com/user";
+        o.CallbackPath = "/signin-github";
+        o.SaveTokens = true;
+        o.Scope.Add("read:user");
+
+        o.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "id");
+        o.ClaimActions.MapJsonKey(ClaimTypes.Name, "login");
+
+        o.Events = new OAuthEvents
+        {
+            OnCreatingTicket = async context =>
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
+                request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                request.Headers.Add("User-Agent", "FediProfile");
+
+                var response = await context.Backchannel.SendAsync(request, context.HttpContext.RequestAborted);
+                response.EnsureSuccessStatusCode();
+
+                var user = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                context.RunClaimActions(user.RootElement);
+
+                // Add hostname claim for compatibility with existing auth flow
+                context.Identity?.AddClaim(new System.Security.Claims.Claim("urn:mastodon:hostname", "github.com"));
+            }
+        };
+    });
+}
+
+// Conditionally add LinkedIn OAuth if credentials are configured
+var liClientId = builder.Configuration["Authentication:LinkedIn:ClientId"];
+var liClientSecret = builder.Configuration["Authentication:LinkedIn:ClientSecret"];
+if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
+{
+    auth.AddOAuth("LinkedIn", o =>
+    {
+        o.ClientId = liClientId;
+        o.ClientSecret = liClientSecret;
+        o.AuthorizationEndpoint = "https://www.linkedin.com/oauth/v2/authorization";
+        o.TokenEndpoint = "https://www.linkedin.com/oauth/v2/accessToken";
+        o.UserInformationEndpoint = "https://api.linkedin.com/v2/userinfo";
+        o.CallbackPath = "/signin-linkedin";
+        o.SaveTokens = true;
+        o.Scope.Add("openid");
+        o.Scope.Add("profile");
+
+        o.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "sub");
+        o.ClaimActions.MapJsonKey(ClaimTypes.Name, "name");
+
+        o.Events = new OAuthEvents
+        {
+            OnCreatingTicket = async context =>
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
+
+                var response = await context.Backchannel.SendAsync(request, context.HttpContext.RequestAborted);
+                response.EnsureSuccessStatusCode();
+
+                var user = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                context.RunClaimActions(user.RootElement);
+
+                // Add hostname claim for compatibility with existing auth flow
+                context.Identity?.AddClaim(new System.Security.Claims.Claim("urn:mastodon:hostname", "linkedin.com"));
+            }
+        };
+    });
+}
+
 var app = builder.Build();
 
 app.UseRouting();
@@ -305,6 +386,26 @@ app.MapGet("/{userSlug}/badges", async (UserScopedDb db) =>
         b.NoteId
     });
     return Results.Json(visible);
+});
+
+// User-scoped recent posts endpoint: /{user}/recent-posts (public, respects ShowRecentPosts setting)
+app.MapGet("/{userSlug}/recent-posts", async (UserScopedDb db) =>
+{
+    var settings = await db.GetSettingsAsync();
+    if (settings == null || !settings.ShowRecentPosts)
+    {
+        return Results.Json(Array.Empty<object>());
+    }
+
+    var posts = await db.GetRecentPostsAsync();
+    var result = posts.Select(p => new {
+        p.Content,
+        p.Summary,
+        p.Url,
+        p.PublishedUtc,
+        p.BoostedUtc
+    });
+    return Results.Json(result);
 });
 
 // ActivityPub followers collection: /{user}/followers

@@ -92,11 +92,17 @@
     private bool _slugAvailable;
     private bool _registrationOpen = true;
     private bool _invalidInvitation;
+    private string? _refParam;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            // Parse ref param from URL
+            var refUri = new Uri(NavigationManager.Uri);
+            var refQs = QueryHelpers.ParseQuery(refUri.Query);
+            _refParam = refQs.ContainsKey("ref") ? refQs["ref"].ToString() : null;
+
             _registrationOpen = Configuration.GetValue<bool>("RegistrationOpen", true);
             if (!_registrationOpen) return;
 
@@ -139,7 +145,7 @@
 
             if (string.IsNullOrWhiteSpace(_mastodonUser) || string.IsNullOrWhiteSpace(_mastodonDomain))
             {
-                _message = "You must be logged in with Mastodon to register";
+                _message = "You must be logged in to register";
                 _isError = true;
             //    NavigationManager.NavigateTo("/login");
                 return;
@@ -292,7 +298,9 @@
 
             // Redirect to admin page
             await Task.Delay(500);
-            NavigationManager.NavigateTo("/admin/");
+            var adminDest = "/admin/";
+            if (!string.IsNullOrEmpty(_refParam)) adminDest += $"?ref={Uri.EscapeDataString(_refParam)}";
+            NavigationManager.NavigateTo(adminDest);
         }
         catch (ArgumentException ex)
         {

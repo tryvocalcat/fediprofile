@@ -292,8 +292,27 @@ public class UserScopedDb : LocalDbService
                     ActorBio TEXT,
                     ActorAvatarUrl TEXT,
                     UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
+                    SkipReplies INTEGER NOT NULL DEFAULT 0,
+                    ShowRecentPosts INTEGER NOT NULL DEFAULT 1,
                     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+            ";
+            command.ExecuteNonQuery();
+
+            // Create RecentPosts table: Rolling window of last N boosted posts for public profile
+            command.CommandText = @"
+                CREATE TABLE IF NOT EXISTS RecentPosts (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    NoteId TEXT NOT NULL UNIQUE,
+                    ActorUri TEXT NOT NULL,
+                    ActorName TEXT,
+                    ActorAvatar TEXT,
+                    Content TEXT,
+                    Summary TEXT,
+                    Url TEXT,
+                    PublishedUtc TEXT,
+                    BoostedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             ";
             command.ExecuteNonQuery();
@@ -387,6 +406,43 @@ public class UserScopedDb : LocalDbService
                 using var alterCommand = connection.CreateCommand();
                 alterCommand.CommandText = "ALTER TABLE ReceivedBadges ADD COLUMN Hidden INTEGER NOT NULL DEFAULT 0;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            // Settings migrations
+            var settingsColumns = GetTableColumns(connection, "Settings");
+
+            if (settingsColumns.Count > 0 && !settingsColumns.Contains("SkipReplies"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN SkipReplies INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (settingsColumns.Count > 0 && !settingsColumns.Contains("ShowRecentPosts"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN ShowRecentPosts INTEGER NOT NULL DEFAULT 1;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            // RecentPosts table migration (create if missing)
+            {
+                using var createCmd = connection.CreateCommand();
+                createCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS RecentPosts (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        NoteId TEXT NOT NULL UNIQUE,
+                        ActorUri TEXT NOT NULL,
+                        ActorName TEXT,
+                        ActorAvatar TEXT,
+                        Content TEXT,
+                        Summary TEXT,
+                        Url TEXT,
+                        PublishedUtc TEXT,
+                        BoostedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                ";
+                try { createCmd.ExecuteNonQuery(); } catch { }
             }
 
             connection.Close();
@@ -808,6 +864,17 @@ public class UserScopedDb : LocalDbService
         await command.ExecuteNonQueryAsync();
     }
 
+    public async Task DeleteBadgeAsync(int badgeId)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM ReceivedBadges WHERE Id = @Id";
+        command.Parameters.AddWithValue("@Id", badgeId);
+        await command.ExecuteNonQueryAsync();
+    }
+
     public async Task<int> StoreBadgeAsync(string noteId, int issuerId, string title, string? image = null, 
         string? description = null, string? issuedOn = null)
     {
@@ -894,10 +961,100 @@ public class UserScopedDb : LocalDbService
         await UpsertFollowerAsync(followerUri, domain);
     }
 
+    // ===== RECENT POSTS MANAGEMENT =====
+
+    private const int MaxRecentPosts = 10;
+
+    /// <summary>
+    /// Stores a recently boosted post. If the NoteId already exists it is updated.
+    /// After inserting, trims the table to keep only the last <see cref="MaxRecentPosts"/> entries.
+    /// </summary>
+    public async Task StoreRecentPostAsync(string noteId, string actorUri, string? actorName,
+        string? actorAvatar, string? content, string? summary, string? url, string? publishedUtc)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var upsert = connection.CreateCommand();
+        upsert.CommandText = @"
+            INSERT INTO RecentPosts (NoteId, ActorUri, ActorName, ActorAvatar, Content, Summary, Url, PublishedUtc, BoostedUtc)
+            VALUES (@NoteId, @ActorUri, @ActorName, @ActorAvatar, @Content, @Summary, @Url, @PublishedUtc, CURRENT_TIMESTAMP)
+            ON CONFLICT(NoteId) DO UPDATE SET
+                ActorName   = @ActorName,
+                ActorAvatar = @ActorAvatar,
+                Content     = @Content,
+                Summary     = @Summary,
+                Url         = @Url,
+                PublishedUtc = @PublishedUtc,
+                BoostedUtc  = CURRENT_TIMESTAMP;
+        ";
+
+        upsert.Parameters.AddWithValue("@NoteId", noteId);
+        upsert.Parameters.AddWithValue("@ActorUri", actorUri);
+        upsert.Parameters.AddWithValue("@ActorName", (object?)actorName ?? DBNull.Value);
+        upsert.Parameters.AddWithValue("@ActorAvatar", (object?)actorAvatar ?? DBNull.Value);
+        upsert.Parameters.AddWithValue("@Content", (object?)content ?? DBNull.Value);
+        upsert.Parameters.AddWithValue("@Summary", (object?)summary ?? DBNull.Value);
+        upsert.Parameters.AddWithValue("@Url", (object?)url ?? DBNull.Value);
+        upsert.Parameters.AddWithValue("@PublishedUtc", (object?)publishedUtc ?? DBNull.Value);
+
+        await upsert.ExecuteNonQueryAsync();
+
+        // Trim to keep only the most recent N posts
+        using var trim = connection.CreateCommand();
+        trim.CommandText = @"
+            DELETE FROM RecentPosts WHERE Id NOT IN (
+                SELECT Id FROM RecentPosts ORDER BY BoostedUtc DESC LIMIT @Limit
+            );
+        ";
+        trim.Parameters.AddWithValue("@Limit", MaxRecentPosts);
+        await trim.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Returns the most recent boosted posts, newest first.
+    /// </summary>
+    public async Task<List<RecentPost>> GetRecentPostsAsync(int limit = 10)
+    {
+        var posts = new List<RecentPost>();
+
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT Id, NoteId, ActorUri, ActorName, ActorAvatar, Content, Summary, Url, PublishedUtc, BoostedUtc
+            FROM RecentPosts
+            ORDER BY BoostedUtc DESC
+            LIMIT @Limit;
+        ";
+        command.Parameters.AddWithValue("@Limit", limit);
+
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            posts.Add(new RecentPost
+            {
+                Id = reader.GetInt32(0),
+                NoteId = reader.GetString(1),
+                ActorUri = reader.GetString(2),
+                ActorName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                ActorAvatar = reader.IsDBNull(4) ? null : reader.GetString(4),
+                Content = reader.IsDBNull(5) ? null : reader.GetString(5),
+                Summary = reader.IsDBNull(6) ? null : reader.GetString(6),
+                Url = reader.IsDBNull(7) ? null : reader.GetString(7),
+                PublishedUtc = reader.IsDBNull(8) ? null : reader.GetString(8),
+                BoostedUtc = reader.GetString(9)
+            });
+        }
+
+        return posts;
+    }
+
     // ===== USER SETTINGS MANAGEMENT =====
 
     public async Task UpsertSettingsAsync(string? actorUsername = null, string? actorBio = null, 
-        string? actorAvatarUrl = null, string? uiTheme = null)
+        string? actorAvatarUrl = null, string? uiTheme = null, bool? skipReplies = null, bool? showRecentPosts = null)
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
@@ -908,14 +1065,16 @@ public class UserScopedDb : LocalDbService
         if (actorBio != null) setClauses.Add("ActorBio = @ActorBio");
         if (actorAvatarUrl != null) setClauses.Add("ActorAvatarUrl = @ActorAvatarUrl");
         if (uiTheme != null) setClauses.Add("UiTheme = @UiTheme");
+        if (skipReplies != null) setClauses.Add("SkipReplies = @SkipReplies");
+        if (showRecentPosts != null) setClauses.Add("ShowRecentPosts = @ShowRecentPosts");
         setClauses.Add("UpdatedUtc = CURRENT_TIMESTAMP");
 
         var updateSet = string.Join(",\n                ", setClauses);
 
         using var command = connection.CreateCommand();
         command.CommandText = $@"
-            INSERT INTO Settings (Id, ActorUsername, ActorBio, ActorAvatarUrl, UiTheme, CreatedUtc, UpdatedUtc)
-            VALUES (1, @InsertActorUsername, @InsertActorBio, @InsertActorAvatarUrl, @InsertUiTheme, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            INSERT INTO Settings (Id, ActorUsername, ActorBio, ActorAvatarUrl, UiTheme, SkipReplies, ShowRecentPosts, CreatedUtc, UpdatedUtc)
+            VALUES (1, @InsertActorUsername, @InsertActorBio, @InsertActorAvatarUrl, @InsertUiTheme, @InsertSkipReplies, @InsertShowRecentPosts, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(Id) DO UPDATE SET
                 {updateSet};
         ";
@@ -925,12 +1084,16 @@ public class UserScopedDb : LocalDbService
         command.Parameters.AddWithValue("@InsertActorBio", (object?)actorBio ?? DBNull.Value);
         command.Parameters.AddWithValue("@InsertActorAvatarUrl", (object?)actorAvatarUrl ?? DBNull.Value);
         command.Parameters.AddWithValue("@InsertUiTheme", uiTheme ?? "theme-classic.css");
+        command.Parameters.AddWithValue("@InsertSkipReplies", skipReplies == true ? 1 : 0);
+        command.Parameters.AddWithValue("@InsertShowRecentPosts", showRecentPosts != false ? 1 : 0);
 
         // UPDATE params: only added when the caller provided a non-null value
         if (actorUsername != null) command.Parameters.AddWithValue("@ActorUsername", actorUsername);
         if (actorBio != null) command.Parameters.AddWithValue("@ActorBio", actorBio);
         if (actorAvatarUrl != null) command.Parameters.AddWithValue("@ActorAvatarUrl", actorAvatarUrl);
         if (uiTheme != null) command.Parameters.AddWithValue("@UiTheme", uiTheme);
+        if (skipReplies != null) command.Parameters.AddWithValue("@SkipReplies", skipReplies.Value ? 1 : 0);
+        if (showRecentPosts != null) command.Parameters.AddWithValue("@ShowRecentPosts", showRecentPosts.Value ? 1 : 0);
 
         await command.ExecuteNonQueryAsync();
     }

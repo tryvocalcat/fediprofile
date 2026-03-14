@@ -25,6 +25,14 @@
 
 @code {
     private string? server;
+    private string? _refParam;
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        _refParam = qs.ContainsKey("ref") ? qs["ref"].ToString() : null;
+    }
 
     private void StartRegistration()
     {
@@ -34,6 +42,9 @@
         }
 
         var sanitized = server.Trim();
-        NavigationManager.NavigateTo($"/register/oauth/{sanitized}?returnUrl=/register/choose-username&registration=true", true);
+        var url = $"/register/oauth/{sanitized}?returnUrl={Uri.EscapeDataString("/register/choose-username")}&registration=true";
+        if (!string.IsNullOrEmpty(_refParam))
+            url += $"&ref={Uri.EscapeDataString(_refParam)}";
+        NavigationManager.NavigateTo(url, true);
     }
 }

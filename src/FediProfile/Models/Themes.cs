@@ -29,6 +29,7 @@ public static class Themes
         new("theme-stars.css",        "Stars"),
         new("theme-retropop.css",     "Retro Pop"),
         new("theme-glass.css",        "Glass"),
+        new("theme-cosmos.css",       "Cosmos"),
     };
 
     /// <summary>

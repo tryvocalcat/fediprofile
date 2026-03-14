@@ -75,6 +75,15 @@ public static class MastodonOAuthExtensions
                         ? storedServer
                         : throw new InvalidOperationException("Mastodon server not found in properties");
                     var userInfoEndpoint = $"https://{hostname}/api/v1/accounts/verify_credentials";
+
+                    // Re-append integration_ref to RedirectUri so it survives the OAuth round-trip
+                    if (context.Properties.Items.TryGetValue("integration_ref", out var integrationRef)
+                        && !string.IsNullOrEmpty(integrationRef))
+                    {
+                        var redirectUri = context.Properties.RedirectUri ?? "/";
+                        var sep = redirectUri.Contains('?') ? "&" : "?";
+                        context.Properties.RedirectUri = $"{redirectUri}{sep}ref={Uri.EscapeDataString(integrationRef)}";
+                    }
                     
                     var domain = context.HttpContext.Request.Host.Host;
                     

@@ -34,6 +34,26 @@ public class InboxMessage
 
     public bool IsAnnounce() => Type?.Equals("Announce", StringComparison.OrdinalIgnoreCase) == true;
 
+    /// <summary>
+    /// Returns true when the inner object of a Create activity has an "inReplyTo" value,
+    /// meaning this is a reply rather than a top-level / original post.
+    /// </summary>
+    public bool IsReply()
+    {
+        if (Object is JsonElement elem && elem.ValueKind == JsonValueKind.Object)
+        {
+            if (elem.TryGetProperty("inReplyTo", out var replyTo))
+            {
+                // inReplyTo can be a string URL or null
+                if (replyTo.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(replyTo.GetString()))
+                    return true;
+                if (replyTo.ValueKind == JsonValueKind.Array && replyTo.GetArrayLength() > 0)
+                    return true;
+            }
+        }
+        return false;
+    }
+
     public string? GetFollowActor()
     {
         if (IsFollow() && !string.IsNullOrEmpty(Actor))
