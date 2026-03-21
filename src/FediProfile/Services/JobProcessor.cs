@@ -240,26 +240,8 @@ public class JobProcessor
         if (inboxMsg.Object is not JsonElement objectElement)
             return;
 
-        if (!objectElement.TryGetProperty("attachment", out var attachments) ||
-            attachments.ValueKind != JsonValueKind.Array)
-            return;
-
-        // First pass: extract assertions with valid recipient URIs (cheap, no DB)
-        var assertions = new List<(JsonElement Attachment, string RecipientUri)>();
-        foreach (var attachment in attachments.EnumerateArray())
-        {
-            if (!attachment.TryGetProperty("type", out var typeEl) ||
-                !string.Equals(typeEl.GetString(), "Assertion", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (!attachment.TryGetProperty("recipient", out var recipientEl) ||
-                !recipientEl.TryGetProperty("identity", out var identityEl))
-                continue;
-
-            var recipientIdentity = identityEl.GetString();
-            if (!string.IsNullOrEmpty(recipientIdentity))
-                assertions.Add((attachment, recipientIdentity));
-        }
+        // Extract all OpenBadge Assertion attachments using shared parser
+        var assertions = BadgeParser.ExtractAssertions(objectElement);
 
         if (assertions.Count == 0)
             return;
@@ -276,34 +258,16 @@ public class JobProcessor
         // Upsert issuer once for the whole batch
         int? issuerId = null;
 
-        foreach (var (attachment, recipientUri) in assertions)
+        foreach (var assertion in assertions)
         {
             // Targeted lookup: only query users that own this specific verified URI
-            var matchedSlugs = await mainDb.GetUserSlugsByVerifiedUriAsync(recipientUri);
+            var matchedSlugs = await mainDb.GetUserSlugsByVerifiedUriAsync(assertion.RecipientUri);
             if (matchedSlugs.Count == 0)
             {
                 _logger.LogDebug("Create job {JobId}: assertion recipient {Recipient} does not match any verified URI",
-                    job.Id, recipientUri);
+                    job.Id, assertion.RecipientUri);
                 continue;
             }
-
-            // Extract badge details from the assertion's nested badge (BadgeClass) object
-            var badgeTitle = "Unknown Badge";
-            string? badgeImage = null;
-            string? badgeDescription = null;
-
-            if (attachment.TryGetProperty("badge", out var badgeEl) && badgeEl.ValueKind == JsonValueKind.Object)
-            {
-                badgeTitle = badgeEl.TryGetProperty("name", out var nameEl)
-                    ? nameEl.GetString() ?? "Unknown Badge" : "Unknown Badge";
-                badgeImage = badgeEl.TryGetProperty("image", out var imageEl)
-                    ? imageEl.GetString() : null;
-                badgeDescription = badgeEl.TryGetProperty("description", out var descEl)
-                    ? descEl.GetString() : null;
-            }
-
-            var badgeIssuedOn = attachment.TryGetProperty("issuedOn", out var issuedEl)
-                ? issuedEl.GetString() : null;
 
             // Lazy-init issuer on first match
             issuerId ??= await mainDb.UpsertBadgeIssuerAsync(
@@ -314,12 +278,14 @@ public class JobProcessor
                 try
                 {
                     var userDb = _factory.GetInstance(domain, userSlug);
-                    var badgeRecordId = await userDb.StoreBadgeAsync(noteId, issuerId.Value, badgeTitle, badgeImage, badgeDescription, badgeIssuedOn);
+                    var badgeRecordId = await userDb.StoreBadgeAsync(
+                        noteId, issuerId.Value, assertion.BadgeTitle, assertion.BadgeImage,
+                        assertion.BadgeDescription, assertion.IssuedOn);
 
                     if (badgeRecordId > 0)
                     {
-                        await jobQueue.AddJobLogAsync(job.Id, $"Stored badge '{badgeTitle}' for user {userSlug} (record {badgeRecordId})");
-                        _logger.LogInformation("Create job {JobId}: stored badge '{Title}' for user {UserSlug}", job.Id, badgeTitle, userSlug);
+                        await jobQueue.AddJobLogAsync(job.Id, $"Stored badge '{assertion.BadgeTitle}' for user {userSlug} (record {badgeRecordId})");
+                        _logger.LogInformation("Create job {JobId}: stored badge '{Title}' for user {UserSlug}", job.Id, assertion.BadgeTitle, userSlug);
                     }
                 }
                 catch (Exception ex)

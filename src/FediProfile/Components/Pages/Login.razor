@@ -21,18 +21,19 @@
 <section class="login-shell">
     <div class="login-card">
         <h1 class="admin-title">Login or Sign Up</h1>
-        <p class="admin-subtitle">Sign in with your Mastodon account. If you don't have a profile yet, we'll help you create one.</p>
+        <p class="admin-subtitle">Sign in with your Fediverse account. If you don't have a profile yet, we'll help you create one.</p>
 
-        <label class="field-label" for="mastodonServer">Mastodon server</label>
-        <input id="mastodonServer" class="input" placeholder="mastodon.social" @bind="server" />
+        <label class="field-label" for="fediverseServer">Server</label>
+        <input id="fediverseServer" class="input" placeholder="mastodon.social" @bind="server" />
+        <p class="muted small">Mastodon, GoToSocial, and compatible servers.</p>
 
         <button class="button button-primary" @onclick="StartLogin" disabled="@string.IsNullOrWhiteSpace(server)">
             Continue
         </button>
 
-        <p class="muted small">You'll be redirected to your Mastodon instance to authorize.</p>
+        <p class="muted small">You'll be redirected to your server to authorize.</p>
 
-        <p class="muted small">Not on Mastodon? <a href="https://joinmastodon.org" target="_blank" rel="noopener noreferrer">Join here</a></p>
+        <p class="muted small">Not on the Fediverse? <a href="https://joinmastodon.org" target="_blank" rel="noopener noreferrer">Join here</a></p>
 
         @if (_githubEnabled || _linkedInEnabled)
         {

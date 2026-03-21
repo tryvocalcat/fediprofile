@@ -272,60 +272,45 @@ public class AnnounceService
     {
         try
         {
-            // Get the Object from the message - it should be the Note/content
-            if (message.Object is JsonElement objectElement)
+            if (message.Object is not JsonElement objectElement)
+                return;
+
+            // Extract all OpenBadge Assertion attachments using shared parser
+            var assertions = BadgeParser.ExtractAssertions(objectElement);
+            if (assertions.Count == 0)
             {
-                var objectJson = objectElement.GetRawText();
-                using var jsonDoc = JsonDocument.Parse(objectJson);
-                var objectRoot = jsonDoc.RootElement;
+                _logger.LogDebug("No OpenBadge assertions in Create object");
+                return;
+            }
 
-                // Check if this note has an OpenBadge assertion
-                if (!objectRoot.TryGetProperty("openbadges:assertion", out var assertionElement))
+            // Resolve issuer details by probing the assertion's issuer and the AP actor
+            var issuerInfo = await ActivityPubHelper.ResolveIssuerAsync(
+                objectElement, fallbackActorUrl: message.Actor);
+
+            var noteId = message.Id ?? $"{actorId}/note/{Guid.NewGuid()}";
+            int? issuerId = null;
+
+            foreach (var assertion in assertions)
+            {
+                // Lazy-init issuer on first match
+                if (issuerId == null)
                 {
-                    _logger.LogDebug("No OpenBadge assertion in Create object");
-                    return;
+                    issuerId = domainDb != null
+                        ? await domainDb.UpsertBadgeIssuerAsync(
+                            issuerInfo.Name, issuerInfo.ActorUrl, issuerInfo.Avatar, issuerInfo.Bio)
+                        : await db.UpsertBadgeIssuerAsync(
+                            issuerInfo.Name, issuerInfo.ActorUrl, issuerInfo.Avatar, issuerInfo.Bio);
                 }
 
-                // Check if we're mentioned in the note (To, Cc, Tag) or if any of our links are mentioned
-                var userLinks = await db.GetLinksAsync();
-                var linkUrls = userLinks.Select(l => l.Url).ToList();
-                var mentionsUs = IsMentionedInObject(objectRoot, actorId, linkUrls);
-                if (!mentionsUs)
-                {
-                    _logger.LogDebug($"Profile not mentioned in badge note from {message.Actor}");
-                    return;
-                }
-
-                _logger.LogInformation($"Found badge mentioned for us in Create from {message.Actor}");
-
-                // Get the assertion content
-                var assertion = assertionElement.GetRawText();
-                using var assertionDoc = JsonDocument.Parse(assertion);
-                var assertionRoot = assertionDoc.RootElement;
-
-                // Extract badge details from assertion
-                var badgeTitle = objectRoot.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "Unknown Badge" : "Unknown Badge";
-                var badgeImage = objectRoot.TryGetProperty("image", out var imageEl) ? imageEl.GetString() : null;
-                var badgeDescription = objectRoot.TryGetProperty("content", out var contentEl) ? contentEl.GetString() : null;
-                var badgeIssuedOn = assertionRoot.TryGetProperty("issuedOn", out var issuedEl) ? issuedEl.GetString() : null;
-
-                // Create or get the badge issuer
-                var issuerUrl = message.Actor;
-                var issuerName = objectRoot.TryGetProperty("attributedTo", out var attrEl) ? attrEl.GetString() ?? message.Actor : message.Actor;
-                var issuerAvatar = objectRoot.TryGetProperty("icon", out var iconEl) ? iconEl.GetString() : null;
-
-                var issuerId = domainDb != null
-                    ? await domainDb.CreateOrGetBadgeIssuerAsync(issuerName!, issuerUrl!, issuerAvatar)
-                    : await db.CreateOrGetBadgeIssuerAsync(issuerName!, issuerUrl!, issuerAvatar);
-
-                // Store the badge
-                var noteId = message.Id ?? $"{actorId}/note/{Guid.NewGuid()}";
-                var badgeRecordId = await db.StoreBadgeAsync(noteId, issuerId, badgeTitle, badgeImage, badgeDescription, badgeIssuedOn);
+                var badgeRecordId = await db.StoreBadgeAsync(
+                    noteId, issuerId.Value, assertion.BadgeTitle, assertion.BadgeImage,
+                    assertion.BadgeDescription, assertion.IssuedOn);
 
                 if (badgeRecordId > 0)
                 {
-                    _logger.LogInformation($"Stored badge '{badgeTitle}' from issuer {issuerUrl} (Badge ID: {badgeRecordId})");
-                    
+                    _logger.LogInformation("Stored badge '{BadgeTitle}' from issuer {IssuerUrl} (Badge ID: {BadgeId})",
+                        assertion.BadgeTitle, issuerInfo.ActorUrl, badgeRecordId);
+
                     // Also announce/boost the badge activity
                     await SendAnnounceAsync(message, db, actorId);
                 }

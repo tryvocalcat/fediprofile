@@ -8,10 +8,11 @@
 <section class="login-shell">
     <div class="login-card">
         <h1 class="admin-title">FediProfile Admin</h1>
-        <p class="admin-subtitle">Sign in with your Mastodon account.</p>
+        <p class="admin-subtitle">Sign in with your Fediverse account.</p>
 
-        <label class="field-label" for="mastodonServer">Mastodon server</label>
-        <input id="mastodonServer" class="input" placeholder="mastodon.social" @bind="server" />
+        <label class="field-label" for="fediverseServer">Server</label>
+        <input id="fediverseServer" class="input" placeholder="mastodon.social" @bind="server" />
+        <p class="muted small">Mastodon, GoToSocial, and compatible servers.</p>
 
         <button class="button button-primary" @onclick="StartLogin" disabled="@string.IsNullOrWhiteSpace(server)">
             Continue

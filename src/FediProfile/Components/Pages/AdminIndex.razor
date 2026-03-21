@@ -501,26 +501,28 @@
 
             <!-- Badges & Verifications -->
             <article class="card admin-card-spaced">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem">
-                    <div>
-                        <h2 style="margin:0">🏅 Badges</h2>
-                        <p class="muted" style="margin:0.25rem 0 0">Badges you've earned and received</p>
-                    </div>
-                    <div style="display:flex;gap:0.5rem">
-                        <button class="button button-ghost button-small" @onclick="() => _showImportBadge = !_showImportBadge">
-                            @(_showImportBadge ? "✕ Cancel" : "⬇️ Import Badge")
-                        </button>
-                        <button class="button button-ghost button-small" @onclick="() => _showBadgeIssuers = !_showBadgeIssuers">
-                            @(_showBadgeIssuers ? "✕ Close" : "🔑 Issuers")
-                        </button>
-                        <button class="button button-ghost button-small" @onclick="() => _showVerifiedUris = !_showVerifiedUris">
-                            @(_showVerifiedUris ? "✕ Close" : "✅ Verified URIs")
-                        </button>
-                    </div>
+                <div style="margin-bottom:0.75rem">
+                    <h2 style="margin:0">🏅 Badges</h2>
+                    <p class="muted" style="margin:0.25rem 0 0">Badges you've earned and received</p>
                 </div>
 
-                <!-- Import Badge (hidden until button click) -->
-                @if (_showImportBadge)
+                <div style="display:flex;gap:0;border-bottom:2px solid var(--border, #ddd);margin-bottom:1rem">
+                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "badges" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "badges" ? "600" : "400")" @onclick="ShowBadgesTab">
+                        🏅 My Badges
+                    </button>
+                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "import" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "import" ? "600" : "400")" @onclick="ShowImportTab">
+                        ⬇️ Import
+                    </button>
+                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "issuers" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "issuers" ? "600" : "400")" @onclick="ShowIssuersTab">
+                        🔑 Issuers
+                    </button>
+                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "verified" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "verified" ? "600" : "400")" @onclick="ShowVerifiedTab">
+                        ✅ Verified URIs
+                    </button>
+                </div>
+
+                <!-- Import Badge tab -->
+                @if (_badgeTab == "import")
                 {
                     <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
                         <h3 style="margin:0 0 0.25rem">Import a Badge</h3>
@@ -542,8 +544,8 @@
                     </div>
                 }
 
-                <!-- Badge Issuers (hidden until button click) -->
-                @if (_showBadgeIssuers)
+                <!-- Badge Issuers tab -->
+                @if (_badgeTab == "issuers")
                 {
                     <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
                         <h3 style="margin:0 0 0.75rem">Trusted Badge Issuers</h3>
@@ -585,8 +587,8 @@
                     </div>
                 }
 
-                <!-- Verified URIs (hidden until button click) -->
-                @if (_showVerifiedUris)
+                <!-- Verified URIs tab -->
+                @if (_badgeTab == "verified")
                 {
                     <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
                         <h3 style="margin:0 0 0.75rem">
@@ -617,8 +619,10 @@
                     </div>
                 }
 
-                <!-- Received Badges (always visible - main content) -->
-                <div style="margin-top:1rem">
+                <!-- Received Badges tab (default) -->
+                @if (_badgeTab == "badges")
+                {
+                <div>
                     @if (_receivedBadges == null)
                     {
                         <p class="muted">Loading badges...</p>
@@ -704,6 +708,7 @@
                         </div>
                     }
                 </div>
+                }
             </article>
 
             <!-- Recent Posts -->
@@ -1049,10 +1054,12 @@
     // Verified URIs
     private List<(int Id, string Uri, string VerifiedUtc)>? _verifiedUris;
 
-    // Badge section toggles
-    private bool _showImportBadge;
-    private bool _showBadgeIssuers;
-    private bool _showVerifiedUris;
+    // Badge section tab: "badges" (default), "import", "issuers", "verified"
+    private string _badgeTab = "badges";
+    private void ShowBadgesTab() => _badgeTab = "badges";
+    private void ShowImportTab() => _badgeTab = "import";
+    private void ShowIssuersTab() => _badgeTab = "issuers";
+    private void ShowVerifiedTab() => _badgeTab = "verified";
 
     // Followers
     private List<Follower>? _followers;
@@ -2098,55 +2105,20 @@ I don't know if this is the best UX
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            // Extract badge details from the Note
             var noteId = root.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? _importBadgeUrl : _importBadgeUrl;
-            var badgeTitle = root.TryGetProperty("name", out var nameEl)
-                ? nameEl.GetString() ?? "Unknown Badge" : "Unknown Badge";
-            var badgeImage = root.TryGetProperty("image", out var imageEl) && imageEl.ValueKind == JsonValueKind.String
-                ? imageEl.GetString() : null;
-            var badgeDescription = root.TryGetProperty("content", out var contentEl)
-                ? contentEl.GetString() : null;
+
+            // Extract all OpenBadge Assertion attachments using shared parser
+            var assertions = BadgeParser.ExtractAssertions(root);
+
+            if (assertions.Count == 0)
+            {
+                _importBadgeMessage = "No OpenBadge assertions found in the fetched data.";
+                _importBadgeIsError = true;
+                return;
+            }
 
             // Resolve issuer details by probing the assertion's issuer and the AP actor
             var issuerInfo = await ActivityPubHelper.ResolveIssuerAsync(root, httpClient: http);
-
-            // Extract recipient URIs and issuedOn from attachment assertions
-            string? badgeIssuedOn = null;
-            var recipientUris = new List<string>();
-            if (root.TryGetProperty("attachment", out var attachments) && attachments.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var attachment in attachments.EnumerateArray())
-                {
-                    if (attachment.TryGetProperty("type", out var typeEl) &&
-                        string.Equals(typeEl.GetString(), "Assertion", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Extract recipient identity
-                        if (attachment.TryGetProperty("recipient", out var recipientEl) &&
-                            recipientEl.TryGetProperty("identity", out var identityEl))
-                        {
-                            var identity = identityEl.GetString();
-                            if (!string.IsNullOrEmpty(identity))
-                                recipientUris.Add(identity);
-                        }
-
-                        // Extract issuedOn
-                        if (string.IsNullOrEmpty(badgeIssuedOn) &&
-                            attachment.TryGetProperty("issuedOn", out var issuedEl))
-                        {
-                            badgeIssuedOn = issuedEl.GetString();
-                        }
-                    }
-                }
-            }
-
-            // Fallback: try to extract issued date from content HTML if not found in attachments
-            if (string.IsNullOrEmpty(badgeIssuedOn) && !string.IsNullOrEmpty(badgeDescription))
-            {
-                var issuedMatch = System.Text.RegularExpressions.Regex.Match(
-                    badgeDescription, @"Issued on:\s*([\d/]+ [\d:]+)");
-                if (issuedMatch.Success)
-                    badgeIssuedOn = issuedMatch.Groups[1].Value;
-            }
 
             if (string.IsNullOrEmpty(issuerInfo.ActorUrl))
             {
@@ -2155,35 +2127,61 @@ I don't know if this is the best UX
                 return;
             }
 
-            // Verify recipient matches one of the user's verified URIs
-            if (recipientUris.Count > 0 && !string.IsNullOrEmpty(_currentUserSlug))
+            // Pre-load user's verified URIs for recipient matching
+            HashSet<string>? myUriSet = null;
+            if (!string.IsNullOrEmpty(_currentUserSlug))
             {
                 var myVerifiedUris = await DomainDb.GetVerifiedUrisAsync(_currentUserSlug);
-                var myUriSet = new HashSet<string>(myVerifiedUris.Select(v => v.Uri), StringComparer.OrdinalIgnoreCase);
+                myUriSet = new HashSet<string>(myVerifiedUris.Select(v => v.Uri), StringComparer.OrdinalIgnoreCase);
+            }
 
-                var matchFound = recipientUris.Any(r => myUriSet.Contains(r));
-                if (!matchFound)
+            // Upsert issuer once for the whole batch
+            var issuerId = await DomainDb.UpsertBadgeIssuerAsync(
+                issuerInfo.Name, issuerInfo.ActorUrl, issuerInfo.Avatar, issuerInfo.Bio);
+
+            int importedCount = 0;
+            var skippedRecipients = new List<string>();
+            var importedTitles = new List<string>();
+
+            foreach (var assertion in assertions)
+            {
+                // Verify recipient matches one of the user's verified URIs
+                if (myUriSet != null && !myUriSet.Contains(assertion.RecipientUri))
                 {
-                    var recipientList = string.Join(", ", recipientUris);
-                    _importBadgeMessage = $"This badge was issued to {recipientList} which is not one of your verified URIs. " +
-                        "Add the matching URI to your Mastodon profile and re-sync your verified URIs first.";
-                    _importBadgeIsError = true;
-                    return;
+                    skippedRecipients.Add(assertion.RecipientUri);
+                    continue;
+                }
+
+                var badgeRecordId = await _currentUserDb.StoreBadgeAsync(
+                    noteId, issuerId, assertion.BadgeTitle, assertion.BadgeImage,
+                    assertion.BadgeDescription, assertion.IssuedOn);
+
+                if (badgeRecordId > 0)
+                {
+                    importedCount++;
+                    importedTitles.Add(assertion.BadgeTitle);
                 }
             }
 
-            // Store issuer and badge
-            var issuerId = await DomainDb.UpsertBadgeIssuerAsync(
-                issuerInfo.Name, issuerInfo.ActorUrl, issuerInfo.Avatar, issuerInfo.Bio);
-            var badgeRecordId = await _currentUserDb.StoreBadgeAsync(noteId, issuerId, badgeTitle, badgeImage, badgeDescription, badgeIssuedOn);
-
-            if (badgeRecordId > 0)
+            // Build result message
+            if (importedCount > 0)
             {
-                _importBadgeMessage = $"Badge '{badgeTitle}' imported successfully!";
+                var titles = string.Join(", ", importedTitles.Select(t => $"'{t}'"));
+                _importBadgeMessage = importedCount == 1
+                    ? $"Badge {titles} imported successfully!"
+                    : $"{importedCount} badges imported: {titles}";
                 _importBadgeUrl = null;
                 await LoadBadgeIssuers();
                 await LoadReceivedBadges();
                 await RegenerateStaticProfileAsync();
+                _badgeTab = "badges";
+            }
+            else if (skippedRecipients.Count > 0)
+            {
+                var recipientList = string.Join(", ", skippedRecipients);
+                _importBadgeMessage = $"This badge was issued to {recipientList} which is not one of your verified URIs. " +
+                    "Add the matching URI to your Mastodon profile and re-sync your verified URIs first.";
+                _importBadgeIsError = true;
             }
             else
             {

@@ -1,0 +1,613 @@
+/* ══════════════════════════════════════════════════════════
+   Theme: Cosmos
+   ══════════════════════════════════════════════════════════
+
+   A deep-space dark theme with starfield background, glassmorphic card,
+   tabbed link categories, and a polished dark UI.
+
+   ══════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0b0e17;
+  --ink: #e8e8ef;
+  --accent: #7c5bf5;
+  --accent-hover: #9b7dff;
+  --card: rgba(18, 22, 42, 0.82);
+  --card-hover: rgba(26, 31, 56, 0.92);
+  --border: rgba(124, 91, 245, 0.12);
+  --shadow: rgba(0, 0, 0, 0.5);
+  --link-hover: rgba(124, 91, 245, 0.08);
+  --muted: #6b6e82;
+
+  /* cosmos-specific */
+  --cosmos-card-bg: rgba(20, 24, 46, 0.75);
+  --cosmos-link-bg: rgba(22, 27, 52, 0.7);
+  --cosmos-tab-active-bg: rgba(232, 163, 58, 0.12);
+  --cosmos-tab-active-color: #e8a33a;
+  --cosmos-star-glow: rgba(160, 180, 255, 0.6);
+  --cosmos-rp-bg: rgba(22, 27, 52, 0.55);
+}
+
+/* ── Starfield background ──────────────────────────────── */
+
+body {
+  background: linear-gradient(180deg, #0b0e17 0%, #131831 45%, #0d1020 100%);
+  background-attachment: fixed;
+  overflow-x: hidden;
+  position: relative;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  opacity: 0;
+  animation: cosmosFadeIn 800ms ease-out 0.15s forwards;
+}
+
+@keyframes cosmosFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Star layer 1 — tiny (1px) ─────────────────────────── */
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::before {
+  background:
+    radial-gradient(1px 1px at  5%  8%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 12% 22%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 20% 46%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 28% 68%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 35% 15%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 42% 88%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 50% 35%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 58% 72%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 65% 52%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 72% 10%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 80% 92%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 88% 38%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 95% 60%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 18% 55%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 45% 95%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 68% 82%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 85% 25%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at  3% 42%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 53% 77%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 74% 48%, #dde4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 39% 64%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at  9% 89%, #c8d4ff 50%, transparent 100%),
+    radial-gradient(1px 1px at 92% 17%, #fff 50%, transparent 100%),
+    radial-gradient(1px 1px at 24% 33%, #e8ecff 50%, transparent 100%),
+    radial-gradient(1px 1px at 61%  5%, #fff 50%, transparent 100%);
+  opacity: 0.8;
+  animation: cosmosTwinkle1 6s ease-in-out infinite alternate;
+}
+
+/* ── Star layer 2 — larger (2px) ───────────────────────── */
+
+body::after {
+  background:
+    radial-gradient(2px 2px at 10% 15%, var(--cosmos-star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 25% 50%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 40% 80%, var(--cosmos-star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 55% 25%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 70% 65%, var(--cosmos-star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 85% 40%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 15% 90%, var(--cosmos-star-glow) 40%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 48% 55%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 77% 19%, var(--cosmos-star-glow) 40%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 33%  7%, #fff 40%, transparent 100%),
+    radial-gradient(2px 2px at 59% 93%, var(--cosmos-star-glow) 40%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 91% 73%, #fff 40%, transparent 100%);
+  opacity: 0.6;
+  animation: cosmosTwinkle2 8s ease-in-out infinite alternate;
+}
+
+@keyframes cosmosTwinkle1 {
+  0%   { opacity: 0.55; }
+  50%  { opacity: 0.85; }
+  100% { opacity: 0.65; }
+}
+
+@keyframes cosmosTwinkle2 {
+  0%   { opacity: 0.45; }
+  50%  { opacity: 0.7; }
+  100% { opacity: 0.5; }
+}
+
+/* ── Card — glassmorphic dark panel ────────────────────── */
+
+.card {
+  position: relative;
+  z-index: 1;
+  max-width: 580px;
+  background: var(--cosmos-card-bg);
+  border: 1px solid rgba(124, 91, 245, 0.1);
+  border-radius: 24px;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  padding: 40px 36px;
+  animation: cosmosCardIn 700ms cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+@keyframes cosmosCardIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Avatar ────────────────────────────────────────────── */
+
+.avatar-wrapper {
+  position: relative;
+  width: 120px;
+  margin: 0 auto 1rem;
+}
+
+.profile-avatar {
+  border: 3px solid var(--accent);
+  box-shadow: 0 0 20px rgba(124, 91, 245, 0.25);
+}
+
+.qr-avatar-btn {
+  border-color: var(--cosmos-card-bg);
+  background: var(--accent);
+  box-shadow: 0 2px 10px rgba(124, 91, 245, 0.4);
+}
+
+.qr-avatar-btn:hover {
+  box-shadow: 0 4px 18px rgba(124, 91, 245, 0.5);
+}
+
+/* ── Name ──────────────────────────────────────────────── */
+
+h1 {
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+
+/* ── Subtitle / bio ────────────────────────────────────── */
+
+.subtitle {
+  color: var(--accent);
+  font-size: 0.95rem;
+  margin-bottom: 24px;
+}
+
+/* ── Fedi handle ───────────────────────────────────────── */
+
+.fedi-handle-hero {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.fedi-handle-hero [data-fedi-address] {
+  color: var(--accent);
+}
+
+.copy-fedi-btn {
+  color: var(--accent);
+}
+
+/* ── Category headings (visible in non-tabbed mode) ───── */
+
+h2 {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+h2::before,
+h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ════════════════════════════════════════════════════════
+   Tabbed Categories
+   ════════════════════════════════════════════════════════ */
+
+.category-tabs {
+  display: flex !important;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 4px;
+  background: rgba(15, 18, 35, 0.5);
+  border-radius: 16px;
+  border: 1px solid rgba(124, 91, 245, 0.08);
+}
+
+.category-tab {
+  padding: 8px 20px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 220ms ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.category-tab:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.category-tab.active {
+  background: var(--cosmos-tab-active-bg);
+  color: var(--cosmos-tab-active-color);
+  font-weight: 600;
+}
+
+/* Hide non-active tab panels */
+.category[data-tab-panel] {
+  display: none;
+}
+
+.category[data-tab-panel].active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Hide the h2 heading inside tab panels (tab bar is the label) */
+.category[data-tab-panel] h2 {
+  display: none;
+}
+
+/* ── Link cards ────────────────────────────────────────── */
+
+.link-card {
+  background: var(--cosmos-link-bg);
+  border: 1px solid rgba(124, 91, 245, 0.08);
+  border-radius: 14px;
+  padding: 14px 18px;
+  box-shadow: none;
+  transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.link-card:hover {
+  background: var(--card-hover);
+  border-color: rgba(124, 91, 245, 0.22);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(124, 91, 245, 0.12);
+}
+
+/* Subtle left accent on hover */
+.link-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--accent);
+  transform: scaleY(0);
+  transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom;
+  border-radius: 0 2px 2px 0;
+}
+
+.link-card:hover::before {
+  transform: scaleY(1);
+}
+
+/* Right-side dash indicator */
+.link-card::after {
+  content: '—';
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.85rem;
+  opacity: 0.4;
+  transition: opacity 200ms;
+}
+
+.link-card:hover::after {
+  opacity: 0.7;
+}
+
+/* Icon styling */
+.link-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(124, 91, 245, 0.15);
+  padding: 6px;
+  filter: invert(1) brightness(1.1);
+}
+
+.link-content strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.link-content p {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* ── Boost badge ───────────────────────────────────────── */
+
+.boost-badge {
+  background: none;
+  color: var(--accent);
+  opacity: 0.4;
+  padding: 0;
+  box-shadow: none;
+}
+
+.boost-badge:hover {
+  opacity: 0.7;
+}
+
+/* ── Verified badge ────────────────────────────────────── */
+
+.verified-badge {
+  color: var(--accent);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Badges
+   ══════════════════════════════════════════════════════════ */
+
+.badges-section {
+  border-top-color: rgba(124, 91, 245, 0.1);
+}
+
+.badges-heading {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+
+.badge-card {
+  background: var(--cosmos-link-bg);
+  border-color: rgba(124, 91, 245, 0.08);
+  border-radius: 14px;
+}
+
+.badge-card:hover {
+  box-shadow: 0 6px 20px rgba(124, 91, 245, 0.12);
+}
+
+.badge-title {
+  color: var(--ink);
+}
+
+.badge-date {
+  color: var(--muted);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Recent Posts — timeline style
+   ══════════════════════════════════════════════════════════ */
+
+.recent-posts-section {
+  border-top-color: rgba(124, 91, 245, 0.1);
+}
+
+.recent-posts-heading {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+
+.rp-card {
+  background: var(--cosmos-rp-bg);
+  border: 1px solid rgba(124, 91, 245, 0.06);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-direction: row;
+  transition: all 220ms ease;
+}
+
+.rp-card:hover {
+  background: rgba(26, 31, 56, 0.7);
+  border-color: rgba(124, 91, 245, 0.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.rp-header {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  min-width: 70px;
+}
+
+.rp-date {
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: rgba(124, 91, 245, 0.08);
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.rp-content {
+  font-size: 0.85rem;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  -webkit-line-clamp: 2;
+}
+
+.rp-content a {
+  color: var(--accent);
+}
+
+.rp-cw summary {
+  color: var(--accent);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Info Section / Footer
+   ══════════════════════════════════════════════════════════ */
+
+.info-section {
+  border-top-color: rgba(124, 91, 245, 0.08);
+}
+
+.info-section p,
+.info-section a {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.info-section a:hover {
+  color: var(--accent);
+}
+
+.fedi-handle {
+  color: var(--muted);
+}
+
+.fedi-note {
+  color: var(--muted);
+  opacity: 0.7;
+  font-size: 0.78rem;
+}
+
+/* ── Share / QR buttons ────────────────────────────────── */
+
+.share-btn {
+  background: var(--cosmos-link-bg);
+  border: 1px solid rgba(124, 91, 245, 0.15);
+  color: var(--ink);
+  border-radius: 12px;
+  font-size: 0.82rem;
+  backdrop-filter: blur(12px);
+}
+
+.share-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(124, 91, 245, 0.3);
+}
+
+/* ── QR Modal ──────────────────────────────────────────── */
+
+.qr-modal {
+  background: rgba(20, 24, 46, 0.95);
+  border: 1px solid rgba(124, 91, 245, 0.15);
+  backdrop-filter: blur(24px);
+}
+
+.qr-title {
+  color: var(--ink);
+}
+
+.qr-close {
+  color: var(--muted);
+}
+
+.qr-url {
+  color: var(--muted);
+}
+
+.qr-download-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.qr-download-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Responsive
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  .card {
+    padding: 28px 20px;
+    border-radius: 18px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+  }
+
+  .category-tabs {
+    gap: 4px;
+    padding: 3px;
+  }
+
+  .category-tab {
+    padding: 6px 14px;
+    font-size: 0.82rem;
+  }
+
+  .rp-card {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .rp-header {
+    min-width: auto;
+  }
+
+  .link-card::after {
+    display: none;
+  }
+}
+
+/* ── Reduced motion ────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    animation: none;
+    opacity: 1;
+  }
+
+  body::before,
+  body::after {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .card {
+    animation: none;
+  }
+
+  .link-card,
+  .rp-card,
+  .badge-card {
+    transition: none;
+  }
+}

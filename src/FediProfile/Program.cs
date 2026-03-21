@@ -69,7 +69,7 @@ builder.Services.AddScoped<MastodonRegistrationService>(provider =>
     var primaryScheme = primaryDomain.Contains("localhost") ? "http" : "https";
     var website = $"{primaryScheme}://{primaryDomain}";
 
-    var redirectUris = new List<string>();
+    var redirectUris = new List<string> { "urn:ietf:wg:oauth:2.0:oob" };
     foreach (var domain in domains)
     {
         Console.WriteLine($"Adding Mastodon redirect URIs for domain: {domain}");

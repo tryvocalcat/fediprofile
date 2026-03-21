@@ -1,0 +1,966 @@
+/* ══════════════════════════════════════════════════════════
+   Theme: Maho.dev
+   ══════════════════════════════════════════════════════════
+
+   A clean, editorial blog-style layout inspired by maho.dev.
+   Two-column sidebar + content layout, teal accent,
+   serif headings, generous whitespace, full-width design.
+
+   ══════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Source+Sans+3:wght@300;400;500;600;700&family=Source+Code+Pro:wght@400;500&display=swap');
+
+:root {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --ink: #2d3748;
+  --accent: #2b8a7e;
+  --accent-hover: #237a6f;
+  --card: transparent;
+  --card-hover: #f7fafa;
+  --border: #e2e8f0;
+  --shadow: rgba(0, 0, 0, 0.04);
+  --link-hover: rgba(43, 138, 126, 0.06);
+  --muted: #7b8794;
+
+  --sidebar-width: 240px;
+  --gap: 56px;
+  --font-serif: 'Lora', 'Georgia', 'Times New Roman', serif;
+  --font-sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Source Code Pro', 'SF Mono', 'Cascadia Code', 'Courier New', monospace;
+}
+
+/* ── Reset & Base ──────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 32px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Card → Two-column Grid Layout ─────────────────────── */
+
+.card {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-auto-flow: dense;
+  gap: 12px var(--gap);
+  max-width: 1100px;
+  width: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  align-content: start;
+}
+
+/* Default: all children go to column 2 (main content) */
+.card > * {
+  grid-column: 2;
+  min-width: 0;
+}
+
+/* Sidebar elements go to column 1 */
+.card > .avatar-wrapper {
+  grid-column: 1;
+  margin-bottom: 4px;
+}
+
+.card > h1 {
+  grid-column: 1;
+}
+
+.card > .fedi-handle-hero {
+  grid-column: 1;
+}
+
+.card > .subtitle {
+  grid-column: 1;
+}
+
+/* ── Sidebar Separator ─────────────────────────────────── */
+
+/* Vertical separator between sidebar and main content */
+.card::before {
+  content: '';
+  grid-column: 1;
+  grid-row: 1 / -1;
+  justify-self: end;
+  width: 1px;
+  background: var(--border);
+  margin-right: calc(var(--gap) / -2 - 1px);
+  /* offset to sit between the columns */
+}
+
+/* ── Avatar ────────────────────────────────────────────── */
+
+.avatar-wrapper {
+  position: relative;
+  width: 100px;
+  margin: 0 auto 8px !important;
+}
+
+.profile-avatar {
+  width: 100px !important;
+  height: 100px !important;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--border);
+  transition: border-color 300ms ease;
+}
+
+.profile-avatar:hover {
+  border-color: var(--accent);
+}
+
+.qr-avatar-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  bottom: 0;
+  right: -2px;
+}
+
+.qr-avatar-btn:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+.qr-avatar-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── Profile Name → Italic Serif ───────────────────────── */
+
+h1 {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 1.65rem;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--ink);
+  margin: 0 0 4px;
+  background: none;
+  -webkit-text-fill-color: unset;
+}
+
+/* ── Fedi Handle (sidebar) ─────────────────────────────── */
+
+.fedi-handle-hero {
+  justify-content: center;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  margin: 0 0 12px;
+  gap: 4px;
+}
+
+.fedi-handle-hero [data-fedi-address] {
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.copy-fedi-btn {
+  color: var(--accent);
+  opacity: 0.4;
+}
+
+.copy-fedi-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* ── Bio / Subtitle ────────────────────────────────────── */
+
+.subtitle {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Section Headings ──────────────────────────────────── */
+
+h2 {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0 0 20px;
+  padding-bottom: 0;
+}
+
+/* ── Links Container ───────────────────────────────────── */
+
+.links-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.category {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.category-tabs {
+  display: none;
+}
+
+/* Category headings */
+.category > h2 {
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 24px 0 8px;
+  font-style: normal;
+}
+
+.category > h2::before,
+.category > h2::after {
+  display: none;
+}
+
+/* ── Link Cards → Blog-post style list items ───────────── */
+
+.link-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  text-decoration: none;
+  color: var(--ink);
+  box-shadow: none;
+  transition: background 200ms ease;
+}
+
+.link-card:first-child {
+  padding-top: 8px;
+}
+
+.link-card:last-child {
+  border-bottom: none;
+}
+
+.link-card:hover {
+  background: var(--link-hover);
+  border-color: var(--border);
+  transform: none;
+  box-shadow: none;
+  margin: 0 -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 8px;
+}
+
+.link-card::before {
+  display: none;
+}
+
+/* ── Link Icon ─────────────────────────────────────────── */
+
+.link-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  filter: none;
+  opacity: 0.85;
+  transition: opacity 200ms ease;
+}
+
+.link-card:hover .link-icon {
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: light) {
+  .link-icon {
+    filter: none;
+  }
+}
+
+/* ── Link Content ──────────────────────────────────────── */
+
+.link-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-content strong {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+
+.link-card:hover .link-content strong {
+  color: var(--accent);
+}
+
+.link-content p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Verified / Boost badges on links ──────────────────── */
+
+.verified-badge {
+  color: var(--accent);
+}
+
+.boost-badge {
+  color: var(--muted);
+  opacity: 0.4;
+}
+
+.boost-badge:hover {
+  opacity: 0.7;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Badges Section
+   ══════════════════════════════════════════════════════════ */
+
+.badges-section {
+  margin-top: 8px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.badges-heading {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: left;
+  color: var(--ink);
+  margin: 0 0 20px;
+}
+
+.badges-container,
+.badges-contaImpr {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 16px;
+}
+
+.badge-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 110px;
+  padding: 14px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.badge-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px var(--shadow);
+  border-color: var(--accent);
+}
+
+.badge-image {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.badge-placeholder {
+  background: #f0f4f4;
+}
+
+.badge-title {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.badge-date {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Recent Posts / Activity Section
+   ══════════════════════════════════════════════════════════ */
+
+.recent-posts-section {
+  margin-top: 8px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.recent-posts-heading {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: left;
+  color: var(--ink);
+  margin: 0 0 20px;
+}
+
+.recent-posts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.rp-card {
+  display: block;
+  padding: 20px 0;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  text-decoration: none;
+  color: inherit;
+  transition: background 200ms ease;
+}
+
+.rp-card:last-child {
+  border-bottom: none;
+}
+
+.rp-card:hover {
+  background: var(--link-hover);
+  margin: 0 -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 8px;
+  transform: none;
+  box-shadow: none;
+}
+
+.rp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rp-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.rp-name {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.rp-date {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rp-content {
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.rp-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rp-content a:hover {
+  color: var(--accent-hover);
+}
+
+.rp-content img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.rp-cw summary {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Info Section (Follow + Powered By)
+   ══════════════════════════════════════════════════════════ */
+
+.info-section {
+  margin-top: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.info-section p {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin: 4px 0;
+}
+
+.info-section a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 150ms ease;
+}
+
+.info-section a:hover {
+  color: var(--accent-hover);
+}
+
+.fedi-handle {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.fedi-handle strong {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.fedi-note {
+  font-size: 0.82rem;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+/* ── Share Button ──────────────────────────────────────── */
+
+.share-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.share-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(43, 138, 126, 0.2);
+}
+
+.share-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ══════════════════════════════════════════════════════════
+   QR Modal — Clean flat style
+   ══════════════════════════════════════════════════════════ */
+
+.qr-modal-overlay {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.qr-modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12);
+  padding: 32px 28px 24px;
+}
+
+.qr-close {
+  color: var(--muted);
+}
+
+.qr-close:hover {
+  color: var(--ink);
+}
+
+.qr-title {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.qr-url {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.qr-download-btn {
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.qr-download-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Sidebar Social Icons Row (bottom of sidebar)
+   If there are nav links rendered in sidebar area, style them
+   ══════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════
+   Responsive — Tablet
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  :root {
+    --sidebar-width: 200px;
+    --gap: 36px;
+  }
+
+  body {
+    padding: 32px 24px;
+  }
+
+  h1 {
+    font-size: 1.45rem;
+  }
+
+  .link-content strong {
+    font-size: 1rem;
+  }
+
+  .badges-heading,
+  .recent-posts-heading {
+    font-size: 1.3rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Responsive — Mobile (single column)
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 680px) {
+  :root {
+    --sidebar-width: 1fr;
+    --gap: 0;
+  }
+
+  body {
+    padding: 20px 16px;
+  }
+
+  .card {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-width: 540px;
+  }
+
+  /* All children go to column 1 in mobile */
+  .card > *,
+  .card > .avatar-wrapper,
+  .card > h1,
+  .card > .fedi-handle-hero,
+  .card > .subtitle {
+    grid-column: 1;
+  }
+
+  /* Hide the vertical separator on mobile */
+  .card::before {
+    display: none;
+  }
+
+  /* Center the sidebar items */
+  .avatar-wrapper {
+    margin: 0 auto 8px !important;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 1.6rem;
+  }
+
+  .fedi-handle-hero {
+    justify-content: center;
+  }
+
+  .subtitle {
+    text-align: center;
+    margin-bottom: 24px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Main content adjustments */
+  .badges-heading,
+  .recent-posts-heading {
+    font-size: 1.3rem;
+    text-align: center;
+  }
+
+  .badges-container,
+  .badges-contaImpr {
+    justify-content: center;
+  }
+
+  .link-card {
+    padding: 18px 0;
+    gap: 14px;
+  }
+
+  .link-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .link-content strong {
+    font-size: 1rem;
+  }
+
+  .link-content p {
+    font-size: 0.85rem;
+  }
+
+  .rp-card {
+    padding: 16px 0;
+  }
+
+  .share-btn {
+    position: fixed;
+    top: auto;
+    bottom: 16px;
+    right: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .info-section {
+    text-align: center;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Small phones
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 400px) {
+  body {
+    padding: 16px 12px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  .link-card {
+    gap: 12px;
+    padding: 14px 0;
+  }
+
+  .link-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+  }
+
+  .link-content strong {
+    font-size: 0.95rem;
+  }
+
+  .badge-card {
+    width: 90px;
+    padding: 10px 8px;
+  }
+
+  .badge-image {
+    width: 44px;
+    height: 44px;
+  }
+
+  .badge-title {
+    font-size: 0.72rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Wide screens — use even more space
+   ══════════════════════════════════════════════════════════ */
+
+@media (min-width: 1400px) {
+  .card {
+    max-width: 1280px;
+  }
+
+  :root {
+    --sidebar-width: 280px;
+    --gap: 72px;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  .link-content strong {
+    font-size: 1.15rem;
+  }
+
+  .badges-heading,
+  .recent-posts-heading {
+    font-size: 1.7rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Print
+   ══════════════════════════════════════════════════════════ */
+
+@media print {
+  body {
+    padding: 0;
+  }
+
+  .card {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .card::before,
+  .share-btn,
+  .qr-avatar-btn {
+    display: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Selection highlight
+   ══════════════════════════════════════════════════════════ */
+
+::selection {
+  background: rgba(43, 138, 126, 0.2);
+  color: var(--ink);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Scrollbar (webkit)
+   ══════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Smooth entrance animation
+   ══════════════════════════════════════════════════════════ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card {
+  animation: fadeInUp 500ms ease-out both;
+}

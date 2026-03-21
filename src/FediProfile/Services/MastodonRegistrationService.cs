@@ -16,10 +16,10 @@ namespace FediProfile.Services
         private readonly string[] _scopes;
         private readonly string[] _redirectUris;
 
-        public MastodonRegistrationService(HttpClient httpClient, string clientName, string website, string[] redirectUris, string[]? scopes = null)
+        public MastodonRegistrationService(HttpClient httpClient, string? clientName, string website, string[] redirectUris, string[]? scopes = null)
         {
             _httpClient = httpClient;
-            _clientName = clientName;
+            _clientName = string.IsNullOrEmpty(clientName) ? "fediprofile" : clientName;
             _website = website;
             _redirectUris = redirectUris ?? throw new ArgumentNullException(nameof(redirectUris));
             _scopes = scopes ?? new[] { "read" };
@@ -32,10 +32,16 @@ namespace FediProfile.Services
                 new KeyValuePair<string, string>("client_name", _clientName),
                 new KeyValuePair<string, string>("redirect_uris", string.Join("\n", _redirectUris)),
                 new KeyValuePair<string, string>("scopes", string.Join(" ", _scopes)),
-                new KeyValuePair<string, string>("website", _website)
+                new KeyValuePair<string, string>("website", string.IsNullOrEmpty(_website) ? _redirectUris[0] : _website)
             });
 
-            var response = await _httpClient.PostAsync($"https://{instanceUrl}/api/v1/apps", content);
+            var request = new HttpRequestMessage(HttpMethod.Post, $"https://{instanceUrl}/api/v1/apps")
+            {
+                Content = content
+            };
+            request.Headers.Add("User-Agent", _clientName);
+
+            var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync();
             return JsonDocument.Parse(json);

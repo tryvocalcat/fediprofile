@@ -21,15 +21,21 @@ public static class Themes
     public static readonly IReadOnlyList<ThemeOption> All = new List<ThemeOption>
     {
         new("theme-classic.css",      "Classic"),
+        
+        new("theme-cosmos.css",       "Cosmos"),
+        
+        new("theme-glass.css",        "Glass"),
+         new("theme-stars.css",        "Stars"),
         new("theme-midnight.css",     "Midnight"),
+        
+        new("theme-retropop.css",     "Retro Pop"),
+        
+        new("theme-hyperspace.css",   "Hyperspace"),
         new("theme-ocean.css",        "Ocean"),
         new("theme-sunset.css",       "Sunset"),
         new("theme-professional.css", "Professional"),
-        new("theme-hyperspace.css",   "Hyperspace"),
-        new("theme-stars.css",        "Stars"),
-        new("theme-retropop.css",     "Retro Pop"),
-        new("theme-glass.css",        "Glass"),
-        new("theme-cosmos.css",       "Cosmos"),
+       
+        new("theme-mahodev.css",      "GreenTypo"),
     };
 
     /// <summary>
