@@ -4,6 +4,7 @@
 @inject DomainScopedDb DomainDb
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
+@inject IHttpContextAccessor HttpContextAccessor
 
 <div class="app-shell">
     <header class="topbar">
@@ -11,11 +12,11 @@
         <nav class="topbar-nav">
             @if (_integrationRef != null)
             {
-                <a href="@_integrationRef.Url" class="button button-primary" style="font-size:0.85rem;color:white;text-decoration:none;">&larr; @_integrationRef.Name</a>
+                <a href="@_backToUrl" class="button button-primary" style="font-size:0.85rem;color:white;text-decoration:none;">&larr; @_integrationRef.Name</a>
             }
 
             <a class="button button-ghost" href="/logout">
-                <svg style="width:14px;height:14px;vertical-align:-2px;margin-right:0.25rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <svg style="width:16px;height:16px;vertical-align:-2px;margin-right:0.25rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 Logout
             </a>
         </nav>
@@ -31,6 +32,7 @@
     private bool _isAuthorized;
     private string? _signedInAs;
     private FediProfile.Core.IntegrationRef? _integrationRef;
+    private string? _backToUrl;
 
     protected override async Task OnInitializedAsync()
     {
@@ -66,6 +68,26 @@
                 _currentUserSlug = dbUser.Value.Slug;
                 _isAuthorized = true;
             }
+        }
+
+        // Build the "Back to" URL with profileUrl param if we have a user
+        if (_integrationRef != null)
+        {
+            var backUrl = _integrationRef.Url;
+            if (_isAuthorized && !string.IsNullOrEmpty(_currentUserSlug))
+            {
+                var httpContext = HttpContextAccessor.HttpContext;
+                var domain = httpContext?.Request.Host.ToString() ?? "localhost";
+                var scheme = domain.Contains("localhost") ? "http" : "https";
+                var profileUrl = $"{scheme}://{domain}/{_currentUserSlug}";
+                // Only append if not already present
+                if (!backUrl.Contains("profileUrl=", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sep = backUrl.Contains('?') ? "&" : "?";
+                    backUrl = $"{backUrl}{sep}profileUrl={Uri.EscapeDataString(profileUrl)}";
+                }
+            }
+            _backToUrl = backUrl;
         }
     }
 }

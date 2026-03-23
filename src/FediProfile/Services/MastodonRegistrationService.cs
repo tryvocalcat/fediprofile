@@ -27,6 +27,7 @@ namespace FediProfile.Services
 
         public async Task<JsonDocument> RegisterApplicationAsync(string instanceUrl)
         {
+            Console.WriteLine($"{string.Join(", ", _redirectUris)}");
             var content = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("client_name", _clientName),

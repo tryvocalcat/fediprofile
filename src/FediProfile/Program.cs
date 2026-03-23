@@ -57,13 +57,18 @@ builder.Services.AddSingleton<ProfileHtmlService>();
 builder.Services.AddScoped<JobProcessor>();
 builder.Services.AddHostedService<JobExecutor>();
 
+// Detect listen port for localhost fallback domain
+var listenUrl = builder.Configuration["urls"] ?? builder.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5000";
+var listenUri = new Uri(listenUrl.Split(';')[0]);
+var fallbackDomain = listenUri.Port is 80 or 443 ? "localhost" : $"localhost:{listenUri.Port}";
+
 // Add Mastodon registration service
 builder.Services.AddScoped<MastodonRegistrationService>(provider =>
 {
     var httpClient = provider.GetRequiredService<HttpClient>();
     var config = provider.GetRequiredService<IConfiguration>();
     var domains = config.GetSection("Domains").Get<string[]>()
-        ?? new[] { "localhost" };
+        ?? new[] { fallbackDomain };
 
     var primaryDomain = domains.First();
     var primaryScheme = primaryDomain.Contains("localhost") ? "http" : "https";
@@ -183,7 +188,7 @@ app.UseStaticFiles();
 
 // Initialize all domains from configuration
 var config = builder.Configuration;
-var domains = config.GetSection("Domains").Get<string[]>() ?? new[] { "localhost" };
+var domains = config.GetSection("Domains").Get<string[]>() ?? new[] { fallbackDomain };
 
 foreach (var domain in domains)
 {
