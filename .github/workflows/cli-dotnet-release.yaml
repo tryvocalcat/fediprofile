@@ -1,0 +1,52 @@
+name: FediProfile .NET Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    permissions: write-all
+    name: Release
+    strategy:
+      matrix:
+        kind: ["linux", "windows"]
+        include:
+          - kind: linux
+            os: ubuntu-latest
+            target: linux-x64
+          - kind: windows
+            os: windows-latest
+            target: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build
+        shell: bash
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          release_name="fediprofile-$tag-${{ matrix.target }}"
+
+          dotnet publish src/FediProfile/FediProfile.csproj --runtime "${{ matrix.target }}" -c Release -o "$release_name" -p:PublishSingleFile=false --self-contained true
+
+          if [ "${{ matrix.target }}" == "win-x64" ]; then
+            7z a -tzip "${release_name}.zip" "./${release_name}/*"
+          else
+            tar czvf "${release_name}.tar.gz" "$release_name"
+          fi
+
+          rm -r "$release_name"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "fediprofile-*"
