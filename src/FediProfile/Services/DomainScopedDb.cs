@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using FediProfile.Models;
+using Microsoft.Extensions.Configuration;
 
 /// <summary>
 /// DomainScopedDb provides scoped database access for domain-level operations.
@@ -37,10 +38,13 @@ public class DomainScopedDb : LocalDbService
     /// 
     /// Scope: Injected as scoped in DI, one instance per HTTP request.
     /// </summary>
-    public DomainScopedDb(IHttpContextAccessor httpContextAccessor)
+    public DomainScopedDb(IHttpContextAccessor httpContextAccessor, IConfiguration? configuration = null)
         : base(BuildDbPath(httpContextAccessor))
     {
         _domain = ExtractDomain(httpContextAccessor);
+        var configuredBio = configuration?["DefaultInstanceBio"];
+        if (!string.IsNullOrWhiteSpace(configuredBio))
+            DefaultInstanceBio = configuredBio;
         EnsureCreated();
     }
 

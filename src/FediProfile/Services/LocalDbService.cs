@@ -16,6 +16,12 @@ public class LocalDbService
     public readonly string DbPath;
 
     /// <summary>
+    /// Default bio used when a user has no ActorBio set. Can be overridden by derived classes
+    /// to pull from application configuration (e.g., the "InstanceBio" appsettings key).
+    /// </summary>
+    protected string DefaultInstanceBio { get; set; } = "A FediProfile instance";
+
+    /// <summary>
     /// Constructs a database file path using the DB_DATA environment variable if set,
     /// otherwise uses the current directory.
     /// </summary>
@@ -239,7 +245,7 @@ public class LocalDbService
     public async Task<string> GetActorBioAsync()
     {
         var settings = await GetSettingsAsync();
-        return settings?.ActorBio ?? "A FediProfile instance";
+        return settings?.ActorBio ?? DefaultInstanceBio;
     }
 
     public async Task<string> GetActorAvatarUrlAsync()

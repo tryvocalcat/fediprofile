@@ -32,8 +32,21 @@
         else
         {
             <div class="form-group">
-                <label>Mastodon Account</label>
-                <div class="pill">@(_mastodonUser)@@@(_mastodonDomain ?? "unknown")</div>
+                @if (_mastodonDomain == "linkedin.com")
+                {
+                    <label>LinkedIn Account</label>
+                    <div class="pill">@(_linkedInDisplayName ?? _mastodonUser) &mdash; LinkedIn</div>
+                }
+                else if (_mastodonDomain == "github.com")
+                {
+                    <label>GitHub Account</label>
+                    <div class="pill">@(_gitHubDisplayName ?? _mastodonUser) &mdash; GitHub</div>
+                }
+                else
+                {
+                    <label>Mastodon Account</label>
+                    <div class="pill">@(_mastodonUser)@@@(_mastodonDomain ?? "unknown")</div>
+                }
             </div>
 
             @if (!string.IsNullOrEmpty(_message))
@@ -83,6 +96,11 @@
 @code {
     private string? _mastodonUser;
     private string? _mastodonDomain;
+    private string? _linkedInDisplayName;
+    private string? _linkedInPicture;
+    private string? _linkedInProfileUrl;
+    private string? _gitHubDisplayName;
+    private string? _gitHubAvatarUrl;
     private string? _userSlug;
     private string? _domain;
     private string? _message;
@@ -142,6 +160,18 @@
             var state = await AuthStateProvider.GetAuthenticationStateAsync();
             _mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
             _mastodonDomain = state.User.FindFirst("urn:mastodon:hostname")?.Value;
+
+            if (_mastodonDomain == "linkedin.com")
+            {
+                _linkedInDisplayName = state.User.FindFirst("urn:linkedin:display_name")?.Value;
+                _linkedInPicture     = state.User.FindFirst("urn:linkedin:picture")?.Value;
+                _linkedInProfileUrl  = state.User.FindFirst("urn:linkedin:profile_url")?.Value;
+            }
+            else if (_mastodonDomain == "github.com")
+            {
+                _gitHubDisplayName = state.User.FindFirst("urn:github:display_name")?.Value;
+                _gitHubAvatarUrl   = state.User.FindFirst("urn:github:avatar_url")?.Value;
+            }
 
             if (string.IsNullOrWhiteSpace(_mastodonUser) || string.IsNullOrWhiteSpace(_mastodonDomain))
             {
@@ -289,9 +319,69 @@
 
             var domain = _domain?.Split(':')[0] ?? "localhost";
 
-            // Create the user and their database
-            var displayName = $"{_mastodonUser} ({_mastodonDomain})";
-            var (userId, slug) = await DomainDb.InitializeNewUserAsync(domain, _userSlug.ToLowerInvariant(), displayName, _mastodonUser, _mastodonDomain);
+            bool isLinkedIn = _mastodonDomain == "linkedin.com";
+            bool isGitHub   = _mastodonDomain == "github.com";
+            bool isExternal = isLinkedIn || isGitHub;
+
+            // Use the provider's full display name when available; fall back to username
+            var displayName = isLinkedIn
+                ? (_linkedInDisplayName ?? _mastodonUser ?? "LinkedIn User")
+                : isGitHub
+                    ? (_gitHubDisplayName ?? _mastodonUser ?? "GitHub User")
+                    : $"{_mastodonUser} ({_mastodonDomain})";
+
+            // Skip AP auto-population for non-Fediverse providers
+            var (userId, slug) = await DomainDb.InitializeNewUserAsync(
+                domain, _userSlug.ToLowerInvariant(), displayName, _mastodonUser, _mastodonDomain,
+                autoPopulate: !isExternal);
+
+            if (isLinkedIn)
+            {
+                // Use the profileUrl from the API response when available;
+                // fall back to constructing it from the login name (which is sanitised full name)
+                var profileUrl = !string.IsNullOrWhiteSpace(_linkedInProfileUrl)
+                    ? _linkedInProfileUrl
+                    : $"https://www.linkedin.com/in/{Uri.EscapeDataString(_mastodonUser!)}";
+
+                var userDb = new FediProfile.Services.UserScopedDb(domain, slug, autoCreate: false);
+
+                await userDb.UpsertSettingsAsync(
+                    actorUsername: _linkedInDisplayName ?? _mastodonUser,
+                    actorAvatarUrl: !string.IsNullOrWhiteSpace(_linkedInPicture) ? _linkedInPicture : null);
+
+                await userDb.UpsertLinkAsync(
+                    name: "LinkedIn",
+                    url: profileUrl,
+                    icon: "/assets/icons/linkedin.svg",
+                    autoBoost: false,
+                    hidden: false,
+                    isActivityPub: false,
+                    sortOrder: 0);
+
+                await DomainDb.AddVerifiedUriAsync(slug, profileUrl);
+            }
+            else if (isGitHub)
+            {
+                // _mastodonUser is the GitHub login (username), profile URL is just github.com/{login}
+                var profileUrl = $"https://github.com/{Uri.EscapeDataString(_mastodonUser!)}";
+
+                var userDb = new FediProfile.Services.UserScopedDb(domain, slug, autoCreate: false);
+
+                await userDb.UpsertSettingsAsync(
+                    actorUsername: _gitHubDisplayName ?? _mastodonUser,
+                    actorAvatarUrl: !string.IsNullOrWhiteSpace(_gitHubAvatarUrl) ? _gitHubAvatarUrl : null);
+
+                await userDb.UpsertLinkAsync(
+                    name: "GitHub",
+                    url: profileUrl,
+                    icon: "/assets/icons/github.svg",
+                    autoBoost: false,
+                    hidden: false,
+                    isActivityPub: false,
+                    sortOrder: 0);
+
+                await DomainDb.AddVerifiedUriAsync(slug, profileUrl);
+            }
 
             _message = $"Welcome, {slug}! Redirecting to your profile...";
             _isError = false;

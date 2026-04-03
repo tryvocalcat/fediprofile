@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.Extensions.Options;
@@ -58,9 +59,13 @@ builder.Services.AddScoped<JobProcessor>();
 builder.Services.AddHostedService<JobExecutor>();
 
 // Detect listen port for localhost fallback domain
-var listenUrl = builder.Configuration["urls"] ?? builder.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5000";
-var listenUri = new Uri(listenUrl.Split(';')[0]);
-var fallbackDomain = listenUri.Port is 80 or 443 ? "localhost" : $"localhost:{listenUri.Port}";
+var listenUrl = (builder.Configuration["urls"] ?? builder.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5000")
+    .Split(';')[0];
+// Kestrel allows http://+:80, http://*:5000, http://0.0.0.0:5000 etc. — normalise to a parseable URI
+var normalisedUrl = listenUrl.Replace("://+", "://localhost").Replace("://*", "://localhost").Replace("://0.0.0.0", "://localhost");
+var fallbackDomain = Uri.TryCreate(normalisedUrl, UriKind.Absolute, out var listenUri) && listenUri.Port is not (80 or 443)
+    ? $"localhost:{listenUri.Port}"
+    : "localhost";
 
 // Add Mastodon registration service
 builder.Services.AddScoped<MastodonRegistrationService>(provider =>
@@ -131,11 +136,22 @@ if (!string.IsNullOrEmpty(ghClientId) && !string.IsNullOrEmpty(ghClientSecret))
                 var response = await context.Backchannel.SendAsync(request, context.HttpContext.RequestAborted);
                 response.EnsureSuccessStatusCode();
 
-                var user = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                using var user = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                 context.RunClaimActions(user.RootElement);
 
-                // Add hostname claim for compatibility with existing auth flow
-                context.Identity?.AddClaim(new System.Security.Claims.Claim("urn:mastodon:hostname", "github.com"));
+                var ghName      = user.RootElement.TryGetProperty("name",       out var ghNameEl)   ? ghNameEl.GetString()   : null;
+                var ghAvatarUrl = user.RootElement.TryGetProperty("avatar_url", out var ghAvatarEl) ? ghAvatarEl.GetString() : null;
+
+                var ghClaims = new List<System.Security.Claims.Claim>
+                {
+                    new("urn:mastodon:hostname", "github.com"),
+                };
+                if (!string.IsNullOrWhiteSpace(ghName))
+                    ghClaims.Add(new("urn:github:display_name", ghName));
+                if (!string.IsNullOrWhiteSpace(ghAvatarUrl))
+                    ghClaims.Add(new("urn:github:avatar_url", ghAvatarUrl));
+
+                context.Identity?.AddClaims(ghClaims);
             }
         };
     });
@@ -152,30 +168,102 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
         o.ClientSecret = liClientSecret;
         o.AuthorizationEndpoint = "https://www.linkedin.com/oauth/v2/authorization";
         o.TokenEndpoint = "https://www.linkedin.com/oauth/v2/accessToken";
-        o.UserInformationEndpoint = "https://api.linkedin.com/v2/userinfo";
+        o.UserInformationEndpoint = "https://api.linkedin.com/rest/identityMe";
         o.CallbackPath = "/signin-linkedin";
         o.SaveTokens = true;
         o.Scope.Add("openid");
         o.Scope.Add("profile");
 
-        o.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "sub");
-        o.ClaimActions.MapJsonKey(ClaimTypes.Name, "name");
+        // All claims set manually in OnCreatingTicket — identityMe response is not OIDC userinfo.
 
         o.Events = new OAuthEvents
         {
             OnCreatingTicket = async context =>
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
+                // Fetch identityMe — returns basicInfo with localized name, picture, and profileUrl
+                var uiReq = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
+                uiReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
+                uiReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                // LinkedIn REST APIs require a version header
+                uiReq.Headers.Add("LinkedIn-Version", "202504");
 
-                var response = await context.Backchannel.SendAsync(request, context.HttpContext.RequestAborted);
-                response.EnsureSuccessStatusCode();
+                var uiResp = await context.Backchannel.SendAsync(uiReq, context.HttpContext.RequestAborted);
+                uiResp.EnsureSuccessStatusCode();
 
-                var user = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                context.RunClaimActions(user.RootElement);
+                using var uiDoc = JsonDocument.Parse(await uiResp.Content.ReadAsStringAsync());
+                var root = uiDoc.RootElement;
 
-                // Add hostname claim for compatibility with existing auth flow
-                context.Identity?.AddClaim(new System.Security.Claims.Claim("urn:mastodon:hostname", "linkedin.com"));
+                // Helper: extract the preferred-locale value from a LinkedIn localized field
+                // Structure: { "localized": { "en_US": "John" }, "preferredLocale": { "language": "en", "country": "US" } }
+                Func<JsonElement, string?> getLocalized = field =>
+                {
+                    if (field.ValueKind != JsonValueKind.Object) return null;
+                    if (!field.TryGetProperty("localized", out var localizedEl)) return null;
+                    if (field.TryGetProperty("preferredLocale", out var localeEl))
+                    {
+                        var lang    = localeEl.TryGetProperty("language", out var langEl)    ? langEl.GetString()    : null;
+                        var country = localeEl.TryGetProperty("country",  out var countryEl) ? countryEl.GetString() : null;
+                        if (!string.IsNullOrEmpty(lang) && !string.IsNullOrEmpty(country))
+                        {
+                            var key = $"{lang}_{country}";
+                            if (localizedEl.TryGetProperty(key, out var locVal) && locVal.ValueKind == JsonValueKind.String)
+                                return locVal.GetString();
+                        }
+                    }
+                    // Fall back to the first available locale value
+                    foreach (var prop in localizedEl.EnumerateObject())
+                        if (prop.Value.ValueKind == JsonValueKind.String) return prop.Value.GetString();
+                    return null;
+                };
+
+                var id       = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                string? fullName   = null;
+                string? picture    = null;
+                string? profileUrl = null;
+
+                if (root.TryGetProperty("basicInfo", out var basicInfo))
+                {
+                    var firstName = basicInfo.TryGetProperty("firstName", out var fnEl) ? getLocalized(fnEl) : null;
+                    var lastName  = basicInfo.TryGetProperty("lastName",  out var lnEl) ? getLocalized(lnEl) : null;
+
+                    if (!string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName))
+                        fullName = $"{firstName} {lastName}".Trim();
+
+                    if (basicInfo.TryGetProperty("profilePicture", out var picEl) &&
+                        picEl.TryGetProperty("croppedImage", out var croppedEl) &&
+                        croppedEl.TryGetProperty("downloadUrl", out var dlUrl))
+                        picture = dlUrl.GetString();
+
+                    if (basicInfo.TryGetProperty("profileUrl", out var urlEl))
+                        profileUrl = urlEl.GetString();
+                }
+
+                // Build loginName: sanitised full name > id
+                string loginName;
+                if (!string.IsNullOrWhiteSpace(fullName))
+                {
+                    loginName = System.Text.RegularExpressions.Regex.Replace(
+                        fullName.Trim().ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+                }
+                else
+                {
+                    loginName = id ?? "linkedin-user";
+                }
+
+                var claims = new List<System.Security.Claims.Claim>
+                {
+                    new(ClaimTypes.NameIdentifier, id ?? loginName),
+                    new(ClaimTypes.Name, loginName),
+                    new("urn:mastodon:hostname", "linkedin.com"),
+                };
+                if (!string.IsNullOrWhiteSpace(fullName))
+                    claims.Add(new("urn:linkedin:display_name", fullName));
+                if (!string.IsNullOrWhiteSpace(picture))
+                    claims.Add(new("urn:linkedin:picture", picture));
+                if (!string.IsNullOrWhiteSpace(profileUrl))
+                    claims.Add(new("urn:linkedin:profile_url", profileUrl));
+
+                context.Identity?.AddClaims(claims);
             }
         };
     });
@@ -208,27 +296,57 @@ IResult NotFoundPage(IWebHostEnvironment env)
     return Results.NotFound("Not found");
 }
 
-// Root landing page (/) - modern static page
-app.MapGet("/", async (IWebHostEnvironment env) =>
+// Root landing page (/) - multitenant static page with memory + browser cache.
+// Lookup order: wwwroot/{domain}/landing.html → wwwroot/landing.html → hardcoded fallback.
+// Domain directories use _ instead of : so the path is valid on all platforms
+// (e.g. localhost_5000, hub.badgefed.org).
+app.MapGet("/", async (HttpRequest request, HttpResponse response, IWebHostEnvironment env, IMemoryCache cache) =>
 {
-    var filePath = Path.Combine(env.WebRootPath, "landing.html");
-    if (!File.Exists(filePath))
+    var host = request.Host.Host;
+    if (request.Host.Port.HasValue && request.Host.Port != 80 && request.Host.Port != 443)
+        host = $"{request.Host.Host}:{request.Host.Port}";
+
+    // Replace colon with underscore — colon is illegal in Windows directory names
+    var domainDir = host.Replace(":", "_");
+    var cacheKey  = $"landing:{host}";
+
+    if (!cache.TryGetValue<(string Content, string Etag)>(cacheKey, out var cached))
     {
-        return Results.Content(@"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>FediProfile</title>
-    <meta charset='utf-8' />
-    <meta name='viewport' content='width=device-width, initial-scale=1' />
-</head>
-<body>
-    <h1>FediProfile</h1>
-    <p>A federated profile system.</p>
-</body>
-</html>", "text/html");
+        var domainPath   = Path.Combine(env.WebRootPath, domainDir, "landing.html");
+        var fallbackPath = Path.Combine(env.WebRootPath, "landing.html");
+
+        var filePath = File.Exists(domainPath)   ? domainPath
+                     : File.Exists(fallbackPath) ? fallbackPath
+                     : null;
+
+        string content, etag;
+
+        if (filePath is null)
+        {
+            content = "<!DOCTYPE html><html><head><title>FediProfile</title><meta charset='utf-8'/><meta name='viewport' content='width=device-width,initial-scale=1'/></head><body><h1>FediProfile</h1><p>A federated profile system.</p></body></html>";
+            etag    = "\"default\"";
+        }
+        else
+        {
+            content = await File.ReadAllTextAsync(filePath);
+            etag    = $"\"{new FileInfo(filePath).LastWriteTimeUtc.Ticks:x}\"";
+        }
+
+        cached = (content, etag);
+        cache.Set(cacheKey, cached, TimeSpan.FromMinutes(5));
     }
-    return Results.File(filePath, "text/html");
+
+    // Honour conditional GET — avoids re-sending unchanged content
+    if (request.Headers.IfNoneMatch.ToString() == cached.Etag)
+    {
+        response.StatusCode = StatusCodes.Status304NotModified;
+        return;
+    }
+
+    response.Headers.CacheControl = "public, max-age=300";
+    response.Headers.ETag         = cached.Etag;
+    response.ContentType          = "text/html; charset=utf-8";
+    await response.WriteAsync(cached.Content);
 });
 
 // Map ActivityPub actor endpoint: /{user} or /{user}/ 
