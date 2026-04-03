@@ -94,9 +94,9 @@ Prerequisites:
 
 ```sh
 docker run -d -p 8080:8080 --name fediprofile \
-  -v $(pwd)/fediprofile/data:/app/data \
+  -v $(pwd)/fediprofile/data:/app/App_Data \
   -v $(pwd)/fediprofile/appsettings.json:/app/appsettings.json \
-  -v $(pwd)/fediprofile/profiles:/app/wwwroot/profiles \
+  -v $(pwd)/fediprofile/uploads:/app/wwwroot/uploads \
   -e DB_DATA="/app/data" \
   -e ASPNETCORE_URLS="http://+:8080" \
   ghcr.io/tryvocalcat/fediprofile:latest
