@@ -674,7 +674,7 @@ app.MapGet("/{userSlug}/outbox", async (HttpRequest request) =>
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     }, contentType: "application/activity+json");
 });
-/*
+
 
 // Add middleware to handle dynamic Mastodon OAuth endpoints
 app.Use(async (context, next) =>
@@ -713,7 +713,7 @@ app.Use(async (context, next) =>
     }
 
     await next();
-});*/
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
