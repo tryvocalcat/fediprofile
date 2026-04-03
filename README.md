@@ -31,12 +31,49 @@ It's designed for two audiences:
 
 ## Getting Started
 
-### Prerequisites
+Choose one of the following ways to start FediProfile.
+
+### Run a Precompiled .NET Build
+
+Use this if you want to run FediProfile without building from source.
+
+Prerequisites:
+
+- A Mastodon account (on any instance) for authentication
+
+Download the latest Windows or Linux release from:
+
+https://github.com/tryvocalcat/fediprofile/releases/
+
+Then extract the archive and run the app.
+
+Windows:
+
+```powershell
+Expand-Archive .\fediprofile-windows.zip .\fediprofile-windows
+cd .\fediprofile-windows
+.\FediProfile.exe
+```
+
+Linux:
+
+```bash
+tar -xzf fediprofile-linux.tar.gz
+cd fediprofile-linux
+chmod +x ./FediProfile
+./FediProfile
+```
+
+The precompiled app listens on `http://localhost:5000` by default unless you set `ASPNETCORE_URLS`.
+
+### Clone, Build, and Run from Source
+
+Use this if you want to develop locally or build the app yourself.
+
+Prerequisites:
 
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 - A Mastodon account (on any instance) for authentication
-
-### Clone & Run
 
 ```bash
 git clone https://github.com/tryvocalcat/fediprofile.git
@@ -44,7 +81,28 @@ cd fediprofile/src/FediProfile
 dotnet run
 ```
 
-The app will start at `http://localhost:5099` by default.
+When started with `dotnet run`, the app uses `http://localhost:5099` by default.
+
+### Run with Docker
+
+Use this if you want an isolated deployment with persistent data and generated profile files.
+
+Prerequisites:
+
+- [Docker](https://www.docker.com/)
+- A local `appsettings.json` file based on `src/FediProfile/appsettings.json.example`
+
+```sh
+docker run -d -p 8080:8080 --name fediprofile \
+  -v $(pwd)/fediprofile/data:/app/data \
+  -v $(pwd)/fediprofile/appsettings.json:/app/appsettings.json \
+  -v $(pwd)/fediprofile/profiles:/app/wwwroot/profiles \
+  -e DB_DATA="/app/data" \
+  -e ASPNETCORE_URLS="http://+:8080" \
+  ghcr.io/tryvocalcat/fediprofile:latest
+```
+
+This publishes FediProfile at `http://localhost:8080`, stores SQLite databases under `/app/data`, and persists generated profile pages under `/app/wwwroot/profiles`.
 
 ### Configuration
 
