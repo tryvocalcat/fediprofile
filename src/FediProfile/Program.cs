@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -171,8 +172,14 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
         o.UserInformationEndpoint = "https://api.linkedin.com/rest/identityMe";
         o.CallbackPath = "/signin-linkedin";
         o.SaveTokens = true;
+        o.UsePkce = false;
         o.Scope.Add("openid");
         o.Scope.Add("profile");
+        o.Scope.Add("r_profile_basicinfo");
+
+        o.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "id");
+        o.ClaimActions.MapJsonKey(ClaimTypes.Name, "localizedFirstName");
+        o.ClaimActions.MapJsonKey(ClaimTypes.Surname, "localizedLastName");
 
         // All claims set manually in OnCreatingTicket — identityMe response is not OIDC userinfo.
 
@@ -185,7 +192,7 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
                 uiReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
                 uiReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
                 // LinkedIn REST APIs require a version header
-                uiReq.Headers.Add("LinkedIn-Version", "202504");
+                uiReq.Headers.Add("LinkedIn-Version", "202510");
 
                 var uiResp = await context.Backchannel.SendAsync(uiReq, context.HttpContext.RequestAborted);
                 uiResp.EnsureSuccessStatusCode();
@@ -216,13 +223,16 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
                     return null;
                 };
 
-                var id       = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                // identityMe response: id and all profile fields are inside basicInfo, not at root
+                string? id         = null;
                 string? fullName   = null;
                 string? picture    = null;
                 string? profileUrl = null;
 
                 if (root.TryGetProperty("basicInfo", out var basicInfo))
                 {
+                    id = basicInfo.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+
                     var firstName = basicInfo.TryGetProperty("firstName", out var fnEl) ? getLocalized(fnEl) : null;
                     var lastName  = basicInfo.TryGetProperty("lastName",  out var lnEl) ? getLocalized(lnEl) : null;
 
@@ -270,6 +280,11 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
 }
 
 var app = builder.Build();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.UseRouting();
 app.UseStaticFiles();
@@ -659,6 +674,7 @@ app.MapGet("/{userSlug}/outbox", async (HttpRequest request) =>
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     }, contentType: "application/activity+json");
 });
+/*
 
 // Add middleware to handle dynamic Mastodon OAuth endpoints
 app.Use(async (context, next) =>
@@ -697,7 +713,7 @@ app.Use(async (context, next) =>
     }
 
     await next();
-});
+});*/
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -36,6 +36,7 @@ public static class Themes
         new("theme-professional.css", "Professional"),
        
         new("theme-mahodev.css",      "GreenTypo"),
+        new("theme-baddie.css",       "Baddie"),
     };
 
     /// <summary>
