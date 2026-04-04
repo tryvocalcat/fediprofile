@@ -763,7 +763,6 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
     var adminMastodonDomain = config["AdminAuthentication:MastodonDomain"];
 
     // 2. Initialize admin user in the linktree system
-    // The admin linktree user is always "root", matching CONTEXT.md specification
     const string adminUserSlug = "root";
 
     string adminDisplayName = !string.IsNullOrWhiteSpace(adminMastodonUser) && !string.IsNullOrWhiteSpace(adminMastodonDomain)
@@ -772,6 +771,20 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
 
     try
     {
+        if (string.IsNullOrWhiteSpace(adminMastodonUser) || string.IsNullOrWhiteSpace(adminMastodonDomain))
+        {
+            logger.LogWarning("Admin Mastodon credentials not fully configured. Admin user will be created without Mastodon authentication.");
+        }
+
+        // check if admin user already exists
+        var existingAdmin = await mainDb.GetUserBySlugAsync(adminUserSlug);
+        if (existingAdmin != null)
+        {
+            logger.LogInformation("Admin user '{AdminSlug}' already exists on domain {Domain} with ID {AdminUserId}",
+                adminUserSlug, domain, existingAdmin.UserId);
+            return;
+        }
+
         // InitializeNewUserAsync creates:
         // - User entry in main database (domain.db)
         // - User-specific database (domain_root.db) with all default tables
