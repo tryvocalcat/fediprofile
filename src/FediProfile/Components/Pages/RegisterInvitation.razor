@@ -1,10 +1,10 @@
 @page "/register/invitation"
-@using Microsoft.AspNetCore.Components
 @layout FediProfile.Components.Layouts.MinimalLayout
 @rendermode InteractiveServer
 
 @inject NavigationManager NavigationManager
 @inject IConfiguration Configuration
+@inject DomainScopedDb DomainDb
 
 <section class="login-shell">
     <div class="login-card">
@@ -14,6 +14,11 @@
         @if (!string.IsNullOrEmpty(_errorMessage))
         {
             <div class="alert alert-error">@_errorMessage</div>
+        }
+
+        @if (!_registrationAllowed)
+        {
+            <div class="alert alert-info">@_registrationMessage</div>
         }
 
         <div class="form-group" style="margin: 1.5rem 0;">
@@ -29,7 +34,7 @@
                    spellcheck="false" />
         </div>
 
-        <button class="button button-primary" @onclick="SubmitCode" disabled="@(string.IsNullOrWhiteSpace(_code) || _code.Length < 6)">
+        <button class="button button-primary" @onclick="SubmitCode" disabled="@(!_registrationAllowed || string.IsNullOrWhiteSpace(_code) || _code.Length < 6)">
             Continue
         </button>
 
@@ -41,12 +46,24 @@
     private string? _code;
     private string? _errorMessage;
     private string? _refParam;
+    private bool _registrationAllowed = true;
+    private string? _registrationMessage;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         var uri = new Uri(NavigationManager.Uri);
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
         _refParam = qs.ContainsKey("ref") ? qs["ref"].ToString() : null;
+
+        var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
+        var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+        _registrationAllowed = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
+        if (!_registrationAllowed)
+        {
+            _registrationMessage = singleUserInstance
+                ? "This single-user instance has already been claimed."
+                : "Registration is currently closed.";
+        }
     }
 
     private void OnCodeChanged()
@@ -56,6 +73,12 @@
 
     private void SubmitCode()
     {
+        if (!_registrationAllowed)
+        {
+            _errorMessage = _registrationMessage ?? "Registration is currently closed.";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_code))
         {
             _errorMessage = "Please enter your invitation code.";

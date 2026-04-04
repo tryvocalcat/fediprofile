@@ -317,6 +317,30 @@ IResult NotFoundPage(IWebHostEnvironment env)
 // (e.g. localhost_5000, hub.badgefed.org).
 app.MapGet("/", async (HttpRequest request, HttpResponse response, IWebHostEnvironment env, IMemoryCache cache) =>
 {
+    var singleUserInstance = config.GetValue<bool>("SingleUserInstance", false);
+    if (singleUserInstance)
+    {
+        var mainDb = localDbFactory.GetInstance(request.HttpContext);
+        var rootUser = await mainDb.GetRootUserAsync();
+        if (rootUser.HasValue)
+        {
+            response.Redirect($"/{rootUser.Value.Slug}", permanent: false);
+            return;
+        }
+
+        var firstUser = await mainDb.GetFirstActiveUserAsync();
+        if (firstUser.HasValue)
+        {
+            app.Logger.LogWarning("Single-user instance has users but no RootUserId configured for domain {Domain}. Redirecting to first user slug {Slug}.",
+                mainDb.GetDomain(), firstUser.Value.Slug);
+            response.Redirect($"/{firstUser.Value.Slug}", permanent: false);
+            return;
+        }
+
+        response.Redirect("/login", permanent: false);
+        return;
+    }
+
     var host = request.Host.Host;
     if (request.Host.Port.HasValue && request.Host.Port != 80 && request.Host.Port != 443)
         host = $"{request.Host.Host}:{request.Host.Port}";
@@ -759,6 +783,12 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
     // 1. Get or create main database for this domain
     var mainDb = factory.GetInstance(domain);
 
+    var singleUserInstance = config.GetValue<bool>("SingleUserInstance", false);
+    if (singleUserInstance)
+    {
+        logger.LogInformation("Single-user mode enabled for domain {Domain}; skipping hardcoded root user bootstrap.", domain);
+    }
+
     var adminMastodonUser = config["AdminAuthentication:MastodonUser"];
     var adminMastodonDomain = config["AdminAuthentication:MastodonDomain"];
 
@@ -769,33 +799,37 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
         ? $"Admin ({adminMastodonUser}@{adminMastodonDomain})"
         : "Administrator";
 
-    try
+    if (!singleUserInstance)
     {
-        if (string.IsNullOrWhiteSpace(adminMastodonUser) || string.IsNullOrWhiteSpace(adminMastodonDomain))
+        try
         {
-            logger.LogWarning("Admin Mastodon credentials not fully configured. Admin user will be created without Mastodon authentication.");
-        }
+            if (string.IsNullOrWhiteSpace(adminMastodonUser) || string.IsNullOrWhiteSpace(adminMastodonDomain))
+            {
+                logger.LogWarning("Admin Mastodon credentials not fully configured. Admin user will be created without Mastodon authentication.");
+            }
 
-        // check if admin user already exists
-        var existingAdmin = await mainDb.GetUserBySlugAsync(adminUserSlug);
-        if (existingAdmin != null)
+            // check if admin user already exists
+            var existingAdmin = await mainDb.GetUserBySlugAsync(adminUserSlug);
+            if (existingAdmin != null)
+            {
+                logger.LogInformation("Admin user '{AdminSlug}' already exists on domain {Domain} with ID {AdminUserId}",
+                    adminUserSlug, domain, existingAdmin.Value.Id);
+                return;
+            }
+
+            // InitializeNewUserAsync creates:
+            // - User entry in main database (domain.db)
+            // - User-specific database (domain_root.db) with all default tables
+            var (adminUserId, slug) = await mainDb.InitializeNewUserAsync(domain, adminUserSlug, adminDisplayName, adminMastodonUser, adminMastodonDomain, false);
+            await mainDb.TrySetRootUserIdAsync(adminUserId);
+            
+            logger.LogInformation("Initialized admin user '{AdminSlug}' (ID: {AdminUserId}) on domain {Domain} authenticated as {MastodonUser}@{MastodonDomain}",
+                slug, adminUserId, domain, adminMastodonUser ?? "unconfigured", adminMastodonDomain ?? "unconfigured");
+        }
+        catch (Exception ex)
         {
-            logger.LogInformation("Admin user '{AdminSlug}' already exists on domain {Domain} with ID {AdminUserId}",
-                adminUserSlug, domain, existingAdmin.UserId);
-            return;
+            logger.LogError(ex, "Failed to initialize admin user '{AdminUserSlug}' on domain {Domain}", adminUserSlug, domain);
         }
-
-        // InitializeNewUserAsync creates:
-        // - User entry in main database (domain.db)
-        // - User-specific database (domain_root.db) with all default tables
-        var (adminUserId, slug) = await mainDb.InitializeNewUserAsync(domain, adminUserSlug, adminDisplayName, adminMastodonUser, adminMastodonDomain, false);
-        
-        logger.LogInformation("Initialized admin user '{AdminSlug}' (ID: {AdminUserId}) on domain {Domain} authenticated as {MastodonUser}@{MastodonDomain}",
-            slug, adminUserId, domain, adminMastodonUser ?? "unconfigured", adminMastodonDomain ?? "unconfigured");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Failed to initialize admin user '{AdminUserSlug}' on domain {Domain}", adminUserSlug, domain);
     }
 
     // 3. Apply pending migrations to ALL existing user databases for this domain

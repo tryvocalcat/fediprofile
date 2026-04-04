@@ -12,6 +12,7 @@
   "Domains": [
     "localhost", "localhost:5099"
   ],
+  "SingleUserInstance": false,
   "RegistrationOpen": true,
   "InvitationCode": "",
   "Authentication": {

@@ -1,6 +1,4 @@
 @page "/login/check"
-@using Microsoft.AspNetCore.Components
-@using System.Security.Claims
 @using FediProfile.Services
 @layout FediProfile.Components.Layouts.MinimalLayout
 @rendermode InteractiveServer
@@ -64,6 +62,19 @@
             }
             else
             {
+                var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
+                var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+                var canRegister = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
+
+                if (!canRegister)
+                {
+                    _message = singleUserInstance
+                        ? "This single-user instance has already been claimed. Registration is closed."
+                        : "Registration is currently closed.";
+                    _isError = true;
+                    return;
+                }
+
                 // New user — check if invitation code is required
                 var invitationCode = Configuration.GetValue<string>("InvitationCode") ?? "";
                 if (!string.IsNullOrEmpty(invitationCode))

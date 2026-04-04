@@ -32,6 +32,25 @@ CREATE TABLE IF NOT EXISTS Following (
 
 CREATE INDEX IF NOT EXISTS IX_Following_ActorUrl ON Following (ActorUrl);
 
+-- ============================================================================== 
+-- Settings table: Domain-level configuration and single-user ownership
+-- ============================================================================== 
+CREATE TABLE IF NOT EXISTS Settings (
+    Id INTEGER PRIMARY KEY,
+    ActorUsername TEXT NOT NULL DEFAULT 'profile',
+    ActorBio TEXT,
+    ActorAvatarUrl TEXT,
+    UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
+    AdminMastodonUser TEXT,
+    AdminMastodonDomain TEXT,
+    RootUserId INTEGER,
+    CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme)
+VALUES (1, 'profile', 'theme-classic.css');
+
 -- ==============================================================================
 -- Jobs table: Simple generic job queue for background processing
 -- ==============================================================================

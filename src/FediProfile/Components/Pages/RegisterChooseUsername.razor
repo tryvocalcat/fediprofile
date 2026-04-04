@@ -1,7 +1,4 @@
 @page "/register/choose-username"
-@using Microsoft.AspNetCore.Components
-@using Microsoft.AspNetCore.WebUtilities
-@using System.Security.Claims
 @using FediProfile.Services
 @layout FediProfile.Components.Layouts.MinimalLayout
 @rendermode InteractiveServer
@@ -118,10 +115,12 @@
         {
             // Parse ref param from URL
             var refUri = new Uri(NavigationManager.Uri);
-            var refQs = QueryHelpers.ParseQuery(refUri.Query);
+            var refQs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(refUri.Query);
             _refParam = refQs.ContainsKey("ref") ? refQs["ref"].ToString() : null;
 
-            _registrationOpen = Configuration.GetValue<bool>("RegistrationOpen", true);
+            var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
+            var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+            _registrationOpen = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
             if (!_registrationOpen) return;
 
             // Validate invitation code if one is configured
@@ -131,7 +130,7 @@
                 // Use NavigationManager.Uri instead of HttpContext.Request.Query
                 // because HttpContext is null during interactive (SignalR) rendering
                 var uri = new Uri(NavigationManager.Uri);
-                var queryParams = QueryHelpers.ParseQuery(uri.Query);
+                var queryParams = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
                 var providedCode = queryParams.ContainsKey("code") ? queryParams["code"].ToString() : "";
                 if (!providedCode.Equals(expectedCode, StringComparison.OrdinalIgnoreCase))
                 {
@@ -308,6 +307,18 @@
 
         try
         {
+            var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
+            var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+            var canRegister = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
+            if (!canRegister)
+            {
+                _message = singleUserInstance
+                    ? "This single-user instance has already been claimed."
+                    : "Registration is currently closed.";
+                _isError = true;
+                return;
+            }
+
             // Get domain
             var httpContext = HttpContextAccessor.HttpContext;
             if (httpContext == null)
@@ -334,6 +345,20 @@
             var (userId, slug) = await DomainDb.InitializeNewUserAsync(
                 domain, _userSlug.ToLowerInvariant(), displayName, _mastodonUser, _mastodonDomain,
                 autoPopulate: !isExternal);
+
+            if (singleUserInstance)
+            {
+                var assignedAsRoot = await DomainDb.TrySetRootUserIdAsync(userId);
+                if (!assignedAsRoot)
+                {
+                    var rootUserId = await DomainDb.GetRootUserIdAsync();
+                    if (!rootUserId.HasValue || rootUserId.Value != userId)
+                    {
+                        await DomainDb.HardDeleteUserAsync(slug);
+                        throw new ArgumentException("This single-user instance has already been claimed.");
+                    }
+                }
+            }
 
             if (isLinkedIn)
             {
