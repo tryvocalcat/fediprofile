@@ -5,16 +5,23 @@
 @rendermode InteractiveServer
 
 @inject NavigationManager NavigationManager
+@inject DomainScopedDb DomainDb
+@inject IConfiguration Configuration
 
 <section class="login-shell">
     <div class="login-card">
         <h1 class="admin-title">Create Your FediProfile</h1>
         <p class="admin-subtitle">Register with your Mastodon account.</p>
 
+        @if (!_registrationAllowed)
+        {
+            <div class="alert alert-info">@_registrationMessage</div>
+        }
+
         <label class="field-label" for="mastodonServer">Mastodon server</label>
         <input id="mastodonServer" class="input" placeholder="mastodon.social" @bind="server" />
 
-        <button class="button button-primary" @onclick="StartRegistration" disabled="@string.IsNullOrWhiteSpace(server)">
+        <button class="button button-primary" @onclick="StartRegistration" disabled="@(!_registrationAllowed || string.IsNullOrWhiteSpace(server))">
             Continue
         </button>
 
@@ -26,17 +33,29 @@
 @code {
     private string? server;
     private string? _refParam;
+    private bool _registrationAllowed = true;
+    private string? _registrationMessage;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         var uri = new Uri(NavigationManager.Uri);
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
         _refParam = qs.ContainsKey("ref") ? qs["ref"].ToString() : null;
+
+        var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
+        var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+        _registrationAllowed = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
+        if (!_registrationAllowed)
+        {
+            _registrationMessage = singleUserInstance
+                ? "This single-user instance has already been claimed."
+                : "Registration is currently closed.";
+        }
     }
 
     private void StartRegistration()
     {
-        if (string.IsNullOrWhiteSpace(server))
+        if (!_registrationAllowed || string.IsNullOrWhiteSpace(server))
         {
             return;
         }

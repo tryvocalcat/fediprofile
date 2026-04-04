@@ -33,6 +33,15 @@ It's designed for two audiences:
 
 Choose one of the following ways to start FediProfile.
 
+If you want admin access, set these environment variables before starting the app:
+
+```bash
+export AdminAuthentication__MastodonUser=mapache
+export AdminAuthentication__MastodonDomain=hachyderm.io
+```
+
+After signing in with that Mastodon account, the hidden admin page is available at `/admin/root`.
+
 ### Run a Precompiled .NET Build
 
 Use this if you want to run FediProfile without building from source.
@@ -115,6 +124,7 @@ Edit `appsettings.json` to configure your instance:
     "MastodonDomain": "your-instance.social"
   },
   "Domains": ["localhost", "localhost:5099"],
+  "SingleUserInstance": false,
   "RegistrationOpen": true,
   "InvitationCode": ""
 }
@@ -124,6 +134,7 @@ Edit `appsettings.json` to configure your instance:
 |---|---|
 | `AdminAuthentication` | Mastodon account that has admin access to the instance |
 | `Domains` | Domains this instance will respond to |
+| `SingleUserInstance` | Allow exactly one bootstrap registration, then lock the instance to that owner |
 | `RegistrationOpen` | Set to `true` to allow new sign-ups |
 | `InvitationCode` | Optional invite code required for registration |
 

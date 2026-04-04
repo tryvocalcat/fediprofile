@@ -76,8 +76,16 @@ internal static class LoginLogoutEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/register");
 
-        group.MapGet("/oauth/{server}", (string server, string? returnUrl, string? @ref) =>
+        group.MapGet("/oauth/{server}", async (string server, string? returnUrl, string? @ref, IConfiguration config, DomainScopedDb domainDb) =>
         {
+            var singleUserInstance = config.GetValue<bool>("SingleUserInstance", false);
+            var registrationOpenConfigured = config.GetValue<bool>("RegistrationOpen", true);
+            var canRegister = await domainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
+            if (!canRegister)
+            {
+                return Results.Redirect("/login");
+            }
+
             var authProps = GetAuthProperties(returnUrl ?? "/register/choose-username");
             authProps.Items["mastodon_server"] = server;
             authProps.Items["registration_flow"] = "true";

@@ -1141,10 +1141,9 @@
             {
                 _currentUserSlug = dbUser.Value.Slug;
                 _isAuthorized = true;
+                _isRootUser = await DomainDb.IsRootUserAsync(dbUser.Value.Id);
             }
         }
-
-        _isRootUser = _currentUserSlug?.Equals("root", StringComparison.OrdinalIgnoreCase) ?? false;
 
         // Impersonation: if root and ?impersonate=slug is set, switch to that user
         _impersonating = false;

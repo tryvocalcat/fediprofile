@@ -16,7 +16,7 @@
     <header class="admin-header">
         <div>
             <h1 class="admin-title">Root Administration</h1>
-            <p class="admin-subtitle">Domain-level management for root users.</p>
+            <p class="admin-subtitle">Domain-level management for the instance owner.</p>
         </div>
         <div style="display:flex;gap:0.5rem;align-items:center">
             <a class="button button-ghost" href="/admin/">Back to Admin</a>
@@ -29,7 +29,7 @@
         <div class="admin-section">
             <article class="card">
                 <div class="alert alert-error">
-                    You do not have permission to access this page. Only the root user can manage domain settings.
+                    You do not have permission to access this page. Only the instance owner can manage domain settings.
                 </div>
             </article>
         </div>
@@ -114,7 +114,7 @@
                                             <td>
                                                 <a href="/@user.Slug" target="_blank" class="button button-small">View</a>
                                                 <a href="/admin/?impersonate=@user.Slug" class="button button-small button-secondary">Edit</a>
-                                                @if (user.Slug != "root")
+                                                @if (!IsOwnerUser(user.Id))
                                                 {
                                                     <button @onclick="() => CreateUserDatabase(user.Slug)"
                                                             class="button button-small button-secondary"
@@ -707,6 +707,7 @@
 @code {
     private bool _isAuthorized;
     private bool _isRootUser;
+    private int? _rootUserId;
     private string? _currentUserSlug;
     private string _activeTab = "users";
     private bool _isProcessing;
@@ -744,9 +745,11 @@
             {
                 _currentUserSlug = dbUser.Value.Slug;
                 _isAuthorized = true;
-                _isRootUser = _currentUserSlug.Equals("root", StringComparison.OrdinalIgnoreCase);
+                _isRootUser = await DomainDb.IsRootUserAsync(dbUser.Value.Id);
             }
         }
+
+        _rootUserId = await DomainDb.GetRootUserIdAsync();
 
         if (_isRootUser)
         {
@@ -761,6 +764,11 @@
         if (tab == "jobs") LoadJobs();
         if (tab == "sql") LoadAvailableDbs();
         if (tab == "badges") _ = LoadBadgeIssuers();
+    }
+
+    private bool IsOwnerUser(int userId)
+    {
+        return _rootUserId.HasValue && _rootUserId.Value == userId;
     }
 
     // ===== Users =====

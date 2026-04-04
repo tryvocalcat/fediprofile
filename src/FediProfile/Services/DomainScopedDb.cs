@@ -133,9 +133,12 @@ public class DomainScopedDb : LocalDbService
                 UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
                 AdminMastodonUser TEXT,
                 AdminMastodonDomain TEXT,
+                RootUserId INTEGER,
                 CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme)
+            VALUES (1, 'profile', 'theme-classic.css');
         ";
         command.ExecuteNonQuery();
     }
@@ -183,6 +186,27 @@ public class DomainScopedDb : LocalDbService
             using var connection = GetConnection();
             connection.Open();
 
+            using (var ensureSettingsTable = connection.CreateCommand())
+            {
+                ensureSettingsTable.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS Settings (
+                        Id INTEGER PRIMARY KEY,
+                        ActorUsername TEXT NOT NULL DEFAULT 'profile',
+                        ActorBio TEXT,
+                        ActorAvatarUrl TEXT,
+                        UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
+                        AdminMastodonUser TEXT,
+                        AdminMastodonDomain TEXT,
+                        RootUserId INTEGER,
+                        CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme)
+                    VALUES (1, 'profile', 'theme-classic.css');
+                ";
+                ensureSettingsTable.ExecuteNonQuery();
+            }
+
             var settingsColumns = GetTableColumns(connection, "Settings");
 
             if (!settingsColumns.Contains("AdminMastodonUser"))
@@ -196,6 +220,13 @@ public class DomainScopedDb : LocalDbService
             {
                 using var alterCommand = connection.CreateCommand();
                 alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN AdminMastodonDomain TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("RootUserId"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN RootUserId INTEGER;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
@@ -334,6 +365,160 @@ public class DomainScopedDb : LocalDbService
         }
 
         return null;
+    }
+
+    public async Task<int> GetActiveUserCountAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(1) FROM Users WHERE DeletedUtc IS NULL";
+
+        var count = await command.ExecuteScalarAsync();
+        return count == null ? 0 : Convert.ToInt32(count);
+    }
+
+    public async Task<bool> HasAnyUsersAsync()
+    {
+        return await GetActiveUserCountAsync() > 0;
+    }
+
+    public async Task<(int Id, string Slug, string? DisplayName, string? MastodonUser, string? MastodonServer)?> GetFirstActiveUserAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT Id, Slug, DisplayName, MastodonUser, MastodonServer
+            FROM Users
+            WHERE DeletedUtc IS NULL
+            ORDER BY CreatedUtc ASC, Id ASC
+            LIMIT 1
+        ";
+
+        using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return (
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)
+            );
+        }
+
+        return null;
+    }
+
+    private async Task EnsureSettingsRowAsync(SQLiteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme, CreatedUtc, UpdatedUtc)
+            VALUES (1, 'profile', 'theme-classic.css', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ";
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<int?> GetRootUserIdAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT RootUserId FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<bool> TrySetRootUserIdAsync(int userId)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET RootUserId = @UserId,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1 AND RootUserId IS NULL
+        ";
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        var affected = await command.ExecuteNonQueryAsync();
+        return affected > 0;
+    }
+
+    public async Task SetRootUserIdAsync(int userId)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET RootUserId = @UserId,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<(int Id, string Slug, string? DisplayName, string? MastodonUser, string? MastodonServer)?> GetRootUserAsync()
+    {
+        var rootUserId = await GetRootUserIdAsync();
+        if (!rootUserId.HasValue)
+            return null;
+
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT Id, Slug, DisplayName, MastodonUser, MastodonServer
+            FROM Users
+            WHERE Id = @Id AND DeletedUtc IS NULL
+        ";
+        command.Parameters.AddWithValue("@Id", rootUserId.Value);
+
+        using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return (
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)
+            );
+        }
+
+        return null;
+    }
+
+    public async Task<bool> IsRootUserAsync(int userId)
+    {
+        var rootUserId = await GetRootUserIdAsync();
+        return rootUserId.HasValue && rootUserId.Value == userId;
+    }
+
+    public async Task<bool> CanAcceptRegistrationsAsync(bool singleUserInstance, bool registrationOpenConfigured)
+    {
+        if (!singleUserInstance)
+            return registrationOpenConfigured;
+
+        return !await HasAnyUsersAsync();
     }
 
     /// <summary>
@@ -779,7 +964,11 @@ public class DomainScopedDb : LocalDbService
             return false;
         }
 
-        return username == "root";
+        var user = await GetUserByMastodonAsync(username, domain);
+        if (!user.HasValue)
+            return false;
+
+        return await IsRootUserAsync(user.Value.Id);
     }
 
     // ===== FOLLOWING INDEX METHODS =====
