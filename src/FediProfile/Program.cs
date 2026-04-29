@@ -36,6 +36,7 @@ var localDbFactory = new LocalDbFactory();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<LocalDbFactory>(localDbFactory);
 builder.Services.AddScoped<UserContextAccessor>();
+builder.Services.AddSingleton<DomainConfigurationResolver>();
 
 // Register split scoped databases
 // DomainScopedDb: One domain database per domain (e.g., localhost.db, example.com.db)
@@ -161,6 +162,7 @@ if (!string.IsNullOrEmpty(ghClientId) && !string.IsNullOrEmpty(ghClientSecret))
 // Conditionally add LinkedIn OAuth if credentials are configured
 var liClientId = builder.Configuration["Authentication:LinkedIn:ClientId"];
 var liClientSecret = builder.Configuration["Authentication:LinkedIn:ClientSecret"];
+var liUseProfileBasicInfo = builder.Configuration.GetValue("Authentication:LinkedIn:UseProfileBasicInfo", false);
 if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
 {
     auth.AddOAuth("LinkedIn", o =>
@@ -175,7 +177,10 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
         o.UsePkce = false;
         o.Scope.Add("openid");
         o.Scope.Add("profile");
-        o.Scope.Add("r_profile_basicinfo");
+        if (liUseProfileBasicInfo)
+        {
+            o.Scope.Add("r_profile_basicinfo");
+        }
 
         o.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "id");
         o.ClaimActions.MapJsonKey(ClaimTypes.Name, "localizedFirstName");
@@ -187,77 +192,83 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
         {
             OnCreatingTicket = async context =>
             {
-                // Fetch identityMe — returns basicInfo with localized name, picture, and profileUrl
-                var uiReq = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
-                uiReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
-                uiReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                // LinkedIn REST APIs require a version header
-                uiReq.Headers.Add("LinkedIn-Version", "202510");
-
-                var uiResp = await context.Backchannel.SendAsync(uiReq, context.HttpContext.RequestAborted);
-                uiResp.EnsureSuccessStatusCode();
-
-                using var uiDoc = JsonDocument.Parse(await uiResp.Content.ReadAsStringAsync());
-                var root = uiDoc.RootElement;
-
-                // Helper: extract the preferred-locale value from a LinkedIn localized field
-                // Structure: { "localized": { "en_US": "John" }, "preferredLocale": { "language": "en", "country": "US" } }
-                Func<JsonElement, string?> getLocalized = field =>
-                {
-                    if (field.ValueKind != JsonValueKind.Object) return null;
-                    if (!field.TryGetProperty("localized", out var localizedEl)) return null;
-                    if (field.TryGetProperty("preferredLocale", out var localeEl))
-                    {
-                        var lang    = localeEl.TryGetProperty("language", out var langEl)    ? langEl.GetString()    : null;
-                        var country = localeEl.TryGetProperty("country",  out var countryEl) ? countryEl.GetString() : null;
-                        if (!string.IsNullOrEmpty(lang) && !string.IsNullOrEmpty(country))
-                        {
-                            var key = $"{lang}_{country}";
-                            if (localizedEl.TryGetProperty(key, out var locVal) && locVal.ValueKind == JsonValueKind.String)
-                                return locVal.GetString();
-                        }
-                    }
-                    // Fall back to the first available locale value
-                    foreach (var prop in localizedEl.EnumerateObject())
-                        if (prop.Value.ValueKind == JsonValueKind.String) return prop.Value.GetString();
-                    return null;
-                };
-
-                // identityMe response: id and all profile fields are inside basicInfo, not at root
                 string? id         = null;
                 string? fullName   = null;
                 string? picture    = null;
                 string? profileUrl = null;
 
-                if (root.TryGetProperty("basicInfo", out var basicInfo))
+                var idToken = context.TokenResponse.Response?.RootElement.TryGetProperty("id_token", out var idTokenEl) == true
+                    ? idTokenEl.GetString()
+                    : null;
+
+                if (TryReadJwtPayload(idToken, out var jwtPayload))
                 {
-                    id = basicInfo.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                    id = GetJwtStringClaim(jwtPayload, "sub");
+                    fullName = GetJwtStringClaim(jwtPayload, "name");
+                    picture = GetJwtStringClaim(jwtPayload, "picture");
+                }
 
-                    var firstName = basicInfo.TryGetProperty("firstName", out var fnEl) ? getLocalized(fnEl) : null;
-                    var lastName  = basicInfo.TryGetProperty("lastName",  out var lnEl) ? getLocalized(lnEl) : null;
+                if (liUseProfileBasicInfo)
+                {
+                    try
+                    {
+                        var uiReq = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
+                        uiReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
+                        uiReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                        uiReq.Headers.Add("LinkedIn-Version", "202510");
 
-                    if (!string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName))
-                        fullName = $"{firstName} {lastName}".Trim();
+                        var uiResp = await context.Backchannel.SendAsync(uiReq, context.HttpContext.RequestAborted);
+                        if (uiResp.IsSuccessStatusCode)
+                        {
+                            using var uiDoc = JsonDocument.Parse(await uiResp.Content.ReadAsStringAsync());
+                            var root = uiDoc.RootElement;
 
-                    if (basicInfo.TryGetProperty("profilePicture", out var picEl) &&
-                        picEl.TryGetProperty("croppedImage", out var croppedEl) &&
-                        croppedEl.TryGetProperty("downloadUrl", out var dlUrl))
-                        picture = dlUrl.GetString();
+                            if (root.TryGetProperty("basicInfo", out var basicInfo))
+                            {
+                                id ??= basicInfo.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
 
-                    if (basicInfo.TryGetProperty("profileUrl", out var urlEl))
-                        profileUrl = urlEl.GetString();
+                                var firstName = basicInfo.TryGetProperty("firstName", out var fnEl) ? GetLinkedInLocalizedValue(fnEl) : null;
+                                var lastName  = basicInfo.TryGetProperty("lastName",  out var lnEl) ? GetLinkedInLocalizedValue(lnEl) : null;
+
+                                if (string.IsNullOrWhiteSpace(fullName) && (!string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName)))
+                                {
+                                    fullName = $"{firstName} {lastName}".Trim();
+                                }
+
+                                if (string.IsNullOrWhiteSpace(picture) &&
+                                    basicInfo.TryGetProperty("profilePicture", out var picEl) &&
+                                    picEl.TryGetProperty("croppedImage", out var croppedEl) &&
+                                    croppedEl.TryGetProperty("downloadUrl", out var dlUrl))
+                                {
+                                    picture = dlUrl.GetString();
+                                }
+
+                                if (basicInfo.TryGetProperty("profileUrl", out var urlEl))
+                                {
+                                    profileUrl = urlEl.GetString();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"LinkedIn identityMe request failed with status {(int)uiResp.StatusCode}; continuing with ID token claims only.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"LinkedIn identityMe request failed; continuing with ID token claims only. {ex.Message}");
+                    }
                 }
 
                 // Build loginName: sanitised full name > id
                 string loginName;
                 if (!string.IsNullOrWhiteSpace(fullName))
                 {
-                    loginName = System.Text.RegularExpressions.Regex.Replace(
-                        fullName.Trim().ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+                    loginName = SanitizeExternalLoginName(fullName) ?? "linkedin-user";
                 }
                 else
                 {
-                    loginName = id ?? "linkedin-user";
+                    loginName = SanitizeExternalLoginName(id) ?? "linkedin-user";
                 }
 
                 var claims = new List<System.Security.Claims.Claim>
@@ -315,9 +326,10 @@ IResult NotFoundPage(IWebHostEnvironment env)
 // Lookup order: wwwroot/{domain}/landing.html → wwwroot/landing.html → hardcoded fallback.
 // Domain directories use _ instead of : so the path is valid on all platforms
 // (e.g. localhost_5000, hub.badgefed.org).
-app.MapGet("/", async (HttpRequest request, HttpResponse response, IWebHostEnvironment env, IMemoryCache cache) =>
+app.MapGet("/", async (HttpRequest request, HttpResponse response, IWebHostEnvironment env, IMemoryCache cache, DomainConfigurationResolver domainConfigurationResolver) =>
 {
-    var singleUserInstance = config.GetValue<bool>("SingleUserInstance", false);
+    var registrationSettings = domainConfigurationResolver.GetRegistrationSettings(request.Host.Value);
+    var singleUserInstance = registrationSettings.SingleUserInstance;
     if (singleUserInstance)
     {
         var mainDb = localDbFactory.GetInstance(request.HttpContext);
@@ -413,7 +425,7 @@ app.MapGet("/{userSlug}", async (HttpRequest request, string userSlug, LocalDbFa
     {
         // Serve pre-generated static actor JSON if available.
         // The file is regenerated when the user saves their profile/links (same pattern as profiles/{userSlug}.html).
-        var actorJsonPath = Path.Combine(env.WebRootPath, "profiles", $"{userSlug}.json");
+        var actorJsonPath = Path.Combine(env.WebRootPath, "profiles", $"{domain}_{userSlug}.json");
         if (File.Exists(actorJsonPath))
         {
             var jsonString = await File.ReadAllTextAsync(actorJsonPath);
@@ -445,7 +457,7 @@ app.MapGet("/{userSlug}", async (HttpRequest request, string userSlug, LocalDbFa
     // Serve pre-generated static profile if available (includes rel="me" links,
     // OpenGraph meta, theme). Falls back to generic profile.html for new users
     // whose profile hasn't been saved yet.
-    var staticPath = Path.Combine(env.WebRootPath, "profiles", $"{userSlug}.html");
+    var staticPath = Path.Combine(env.WebRootPath, "profiles", $"{domain}_{userSlug}.html");
     var filePath = File.Exists(staticPath) ? staticPath : Path.Combine(env.WebRootPath, "profile.html");
     return Results.File(filePath, "text/html");
 });
@@ -783,7 +795,8 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
     // 1. Get or create main database for this domain
     var mainDb = factory.GetInstance(domain);
 
-    var singleUserInstance = config.GetValue<bool>("SingleUserInstance", false);
+    var registrationSettings = new DomainConfigurationResolver(config).GetRegistrationSettings(domain);
+    var singleUserInstance = registrationSettings.SingleUserInstance;
     if (singleUserInstance)
     {
         logger.LogInformation("Single-user mode enabled for domain {Domain}; skipping hardcoded root user bootstrap.", domain);
@@ -857,4 +870,92 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
 }
 
 app.Run();
+
+static string? GetLinkedInLocalizedValue(JsonElement field)
+{
+    if (field.ValueKind != JsonValueKind.Object) return null;
+    if (!field.TryGetProperty("localized", out var localizedEl)) return null;
+    if (field.TryGetProperty("preferredLocale", out var localeEl))
+    {
+        var lang = localeEl.TryGetProperty("language", out var langEl) ? langEl.GetString() : null;
+        var country = localeEl.TryGetProperty("country", out var countryEl) ? countryEl.GetString() : null;
+        if (!string.IsNullOrEmpty(lang) && !string.IsNullOrEmpty(country))
+        {
+            var key = $"{lang}_{country}";
+            if (localizedEl.TryGetProperty(key, out var locVal) && locVal.ValueKind == JsonValueKind.String)
+            {
+                return locVal.GetString();
+            }
+        }
+    }
+
+    foreach (var prop in localizedEl.EnumerateObject())
+    {
+        if (prop.Value.ValueKind == JsonValueKind.String)
+        {
+            return prop.Value.GetString();
+        }
+    }
+
+    return null;
+}
+
+static string? SanitizeExternalLoginName(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        return null;
+    }
+
+    var sanitized = System.Text.RegularExpressions.Regex.Replace(
+        value.Trim().ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+
+    return string.IsNullOrWhiteSpace(sanitized) ? null : sanitized;
+}
+
+static bool TryReadJwtPayload(string? jwt, out JsonElement payload)
+{
+    payload = default;
+
+    if (string.IsNullOrWhiteSpace(jwt))
+    {
+        return false;
+    }
+
+    var parts = jwt.Split('.');
+    if (parts.Length < 2)
+    {
+        return false;
+    }
+
+    try
+    {
+        var base64 = parts[1].Replace('-', '+').Replace('_', '/');
+        switch (base64.Length % 4)
+        {
+            case 2:
+                base64 += "==";
+                break;
+            case 3:
+                base64 += "=";
+                break;
+        }
+
+        var bytes = Convert.FromBase64String(base64);
+        using var doc = JsonDocument.Parse(bytes);
+        payload = doc.RootElement.Clone();
+        return true;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+static string? GetJwtStringClaim(JsonElement payload, string claimName)
+{
+    return payload.TryGetProperty(claimName, out var claim) && claim.ValueKind == JsonValueKind.String
+        ? claim.GetString()
+        : null;
+}
 
