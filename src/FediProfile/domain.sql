@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS Settings (
     ActorUsername TEXT NOT NULL DEFAULT 'profile',
     ActorBio TEXT,
     ActorAvatarUrl TEXT,
+    InstanceName TEXT,
     UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
     AdminMastodonUser TEXT,
     AdminMastodonDomain TEXT,
