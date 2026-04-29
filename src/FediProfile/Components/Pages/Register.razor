@@ -7,10 +7,11 @@
 @inject NavigationManager NavigationManager
 @inject DomainScopedDb DomainDb
 @inject IConfiguration Configuration
+@inject DomainConfigurationResolver DomainConfigurationResolver
 
 <section class="login-shell">
     <div class="login-card">
-        <h1 class="admin-title">Create Your FediProfile</h1>
+        <h1 class="admin-title">Create Your Profile</h1>
         <p class="admin-subtitle">Register with your Mastodon account.</p>
 
         @if (!_registrationAllowed)
@@ -42,8 +43,9 @@
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
         _refParam = qs.ContainsKey("ref") ? qs["ref"].ToString() : null;
 
-        var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
-        var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+        var registrationSettings = DomainConfigurationResolver.GetRegistrationSettings(DomainDb.GetDomain());
+        var singleUserInstance = registrationSettings.SingleUserInstance;
+        var registrationOpenConfigured = registrationSettings.RegistrationOpen;
         _registrationAllowed = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
         if (!_registrationAllowed)
         {

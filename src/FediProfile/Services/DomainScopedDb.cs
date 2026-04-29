@@ -19,6 +19,7 @@ using Microsoft.Extensions.Configuration;
 public class DomainScopedDb : LocalDbService
 {
     private readonly string _domain;
+    private readonly string _defaultInstanceName = "FediProfile";
 
     /// <summary>
     /// Constructor that accepts a domain name.
@@ -42,6 +43,9 @@ public class DomainScopedDb : LocalDbService
         : base(BuildDbPath(httpContextAccessor))
     {
         _domain = ExtractDomain(httpContextAccessor);
+        var configuredInstanceName = configuration?["DefaultInstanceName"] ?? configuration?["InstanceName"];
+        if (!string.IsNullOrWhiteSpace(configuredInstanceName))
+            _defaultInstanceName = configuredInstanceName.Trim();
         var configuredBio = configuration?["DefaultInstanceBio"];
         if (!string.IsNullOrWhiteSpace(configuredBio))
             DefaultInstanceBio = configuredBio;
@@ -130,6 +134,7 @@ public class DomainScopedDb : LocalDbService
                 ActorUsername TEXT NOT NULL DEFAULT 'profile',
                 ActorBio TEXT,
                 ActorAvatarUrl TEXT,
+                InstanceName TEXT,
                 UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
                 AdminMastodonUser TEXT,
                 AdminMastodonDomain TEXT,
@@ -194,6 +199,7 @@ public class DomainScopedDb : LocalDbService
                         ActorUsername TEXT NOT NULL DEFAULT 'profile',
                         ActorBio TEXT,
                         ActorAvatarUrl TEXT,
+                        InstanceName TEXT,
                         UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
                         AdminMastodonUser TEXT,
                         AdminMastodonDomain TEXT,
@@ -213,6 +219,13 @@ public class DomainScopedDb : LocalDbService
             {
                 using var alterCommand = connection.CreateCommand();
                 alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN AdminMastodonUser TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("InstanceName"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN InstanceName TEXT;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
@@ -420,6 +433,49 @@ public class DomainScopedDb : LocalDbService
             INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme, CreatedUtc, UpdatedUtc)
             VALUES (1, 'profile', 'theme-classic.css', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ";
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<string?> GetStoredInstanceNameAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT InstanceName FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        var instanceName = Convert.ToString(result)?.Trim();
+        return string.IsNullOrWhiteSpace(instanceName) ? null : instanceName;
+    }
+
+    public async Task<string> GetInstanceNameAsync()
+    {
+        var instanceName = await GetStoredInstanceNameAsync();
+        return string.IsNullOrWhiteSpace(instanceName) ? _defaultInstanceName : instanceName;
+    }
+
+    public async Task SetInstanceNameAsync(string? instanceName)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET InstanceName = @InstanceName,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue(
+            "@InstanceName",
+            string.IsNullOrWhiteSpace(instanceName) ? DBNull.Value : instanceName.Trim());
+
         await command.ExecuteNonQueryAsync();
     }
 

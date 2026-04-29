@@ -142,11 +142,11 @@ public class ActorService
 
     /// <summary>
     /// (Re)generates the static actor JSON file for the given user.
-    /// Stored at wwwroot/profiles/{userSlug}.json.
+    /// Stored at wwwroot/profiles/{domain}_{userSlug}.json.
     /// Called when the user saves their profile or changes links,
     /// mirroring the ProfileHtmlService pattern.
     /// </summary>
-    public async Task GenerateActorJsonAsync(UserScopedDb userDb, string userSlug, string baseDomain, List<string>? verifiedUris = null)
+    public async Task GenerateActorJsonAsync(UserScopedDb userDb, string userSlug, string baseDomain, string domain, List<string>? verifiedUris = null)
     {
         try
         {
@@ -156,7 +156,7 @@ public class ActorService
             var profilesDir = Path.Combine(_env.WebRootPath, "profiles");
             Directory.CreateDirectory(profilesDir);
 
-            var outputPath = Path.Combine(profilesDir, $"{userSlug}.json");
+            var outputPath = Path.Combine(profilesDir, $"{domain}_{userSlug}.json");
             await File.WriteAllTextAsync(outputPath, json, new UTF8Encoding(false));
 
             _logger.LogInformation("Generated static actor JSON for {UserSlug} at {Path}", userSlug, outputPath);
@@ -170,9 +170,9 @@ public class ActorService
     /// <summary>
     /// Deletes the static actor JSON for the given user (e.g. on account deletion).
     /// </summary>
-    public void DeleteActorJson(string userSlug)
+    public void DeleteActorJson(string userSlug, string domain)
     {
-        var path = Path.Combine(_env.WebRootPath, "profiles", $"{userSlug}.json");
+        var path = Path.Combine(_env.WebRootPath, "profiles", $"{domain}_{userSlug}.json");
         if (File.Exists(path))
         {
             File.Delete(path);

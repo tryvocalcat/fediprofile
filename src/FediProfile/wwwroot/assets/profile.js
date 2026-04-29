@@ -153,31 +153,41 @@ async function loadBadges() {
     const badges = await response.json();
     if (!badges || badges.length === 0) return;
 
-    const section = document.getElementById('badges-section');
-    const container = document.getElementById('badges-container');
+    const { section, container } = ensureBadgesSection();
     if (!section || !container) return;
 
     let html = '';
     badges.forEach(badge => {
-      const title = escapeHtml(badge.title || 'Badge');
+      const rawTitle = badge.title || 'Badge';
+      const title = escapeHtml(rawTitle);
       const image = badge.image;
-      const description = badge.description ? escapeHtml(badge.description) : '';
-      const issuedOn = badge.issuedOn ? escapeHtml(badge.issuedOn) : '';
+      const rawDescription = badge.description || '';
+      const rawIssuedOn = badge.issuedOn || '';
+      const description = rawDescription ? escapeHtml(rawDescription) : '';
+      const issuedOn = rawIssuedOn ? escapeHtml(rawIssuedOn) : '';
       const noteId = badge.noteId || '';
+      const badgeSummary = escapeHtml(buildBadgeSummary(rawTitle, rawDescription, rawIssuedOn, !!noteId));
 
       const imgHtml = image
         ? `<img src="${escapeHtml(image)}" alt="${title}" class="badge-image" />`
         : `<div class="badge-image badge-placeholder">\uD83C\uDFC5</div>`;
 
-      const linkOpen = noteId ? `<a href="${escapeHtml(noteId)}" target="_blank" rel="noopener" class="badge-card">` : '<div class="badge-card">';
+      const linkOpen = noteId
+        ? `<a href="${escapeHtml(noteId)}" target="_blank" rel="noopener" class="badge-card" aria-label="${badgeSummary}" title="${badgeSummary}">`
+        : `<div class="badge-card" tabindex="0" aria-label="${badgeSummary}" title="${badgeSummary}">`;
       const linkClose = noteId ? '</a>' : '</div>';
 
       html += `
         ${linkOpen}
-          ${imgHtml}
-          <div class="badge-info">
+          <span class="badge-media">
+            ${imgHtml}
+          </span>
+          <span class="badge-sr-only">${badgeSummary}</span>
+          <div class="badge-info" aria-hidden="true">
             <strong class="badge-title">${title}</strong>
-            ${issuedOn ? `<span class="badge-date">${issuedOn}</span>` : ''}
+            ${issuedOn ? `<span class="badge-date">Issued ${issuedOn}</span>` : ''}
+            ${description ? `<p class="badge-description">${description}</p>` : ''}
+            ${noteId ? '<span class="badge-link-hint">Open badge</span>' : ''}
           </div>
         ${linkClose}
       `;
@@ -188,6 +198,73 @@ async function loadBadges() {
   } catch (err) {
     // Badges are optional — silently ignore errors
   }
+}
+
+function buildBadgeSummary(title, description, issuedOn, hasLink) {
+  const parts = [title || 'Badge'];
+
+  if (issuedOn) {
+    parts.push('Issued ' + issuedOn);
+  }
+
+  if (description) {
+    parts.push(description);
+  }
+
+  if (hasLink) {
+    parts.push('Open badge');
+  }
+
+  return parts.join('. ');
+}
+
+function ensureBadgesSection() {
+  let section = document.getElementById('badges-section');
+  let container = document.getElementById('badges-container');
+
+  if (section) {
+    section.classList.add('badges-section');
+  }
+
+  if (container) {
+    container.className = 'badges-container';
+  }
+
+  if (section && container) {
+    return { section, container };
+  }
+
+  if (!section) {
+    section = document.createElement('div');
+    section.id = 'badges-section';
+    section.className = 'badges-section';
+    section.style.display = 'none';
+
+    const heading = document.createElement('h2');
+    heading.className = 'badges-heading';
+    heading.textContent = 'Badges';
+    section.appendChild(heading);
+  }
+
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'badges-container';
+    container.className = 'badges-container';
+    section.appendChild(container);
+  }
+
+  const recentPostsSection = document.getElementById('recent-posts-section');
+  const profileContainer = document.getElementById('profile-container');
+
+  if (recentPostsSection?.parentNode) {
+    recentPostsSection.parentNode.insertBefore(section, recentPostsSection);
+  } else if (profileContainer?.parentNode) {
+    profileContainer.parentNode.insertBefore(section, profileContainer.nextSibling);
+  } else {
+    document.body.appendChild(section);
+  }
+
+  return { section, container };
 }
 
 function escapeHtml(text) {
@@ -289,6 +366,7 @@ function formatRelativeDate(isoString) {
 // Apply theme CSS overlay from the actor's _fediprofile.theme setting
 function applyTheme(themeName) {
   if (!themeName || themeName === 'theme.css') return;
+
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = '/assets/' + themeName;

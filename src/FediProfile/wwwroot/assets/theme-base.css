@@ -221,37 +221,49 @@ h2 {
 }
 
 .badges-container {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(115px, 139px));
   justify-content: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .badge-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 120px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--card, #fff);
+  position: relative;
+  display: block;
+  width: 100%;
   text-decoration: none;
   color: inherit;
-  transition: transform 200ms ease, box-shadow 200ms ease;
+  outline: none;
 }
 
-.badge-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px var(--shadow, rgba(0,0,0,0.08));
+.badge-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 10px;
+  border-radius: 18px;
+  border: 1px solid var(--badge-tile-border, var(--border));
+  background: var(--badge-tile-bg, var(--card, #fff));
+  box-shadow: 0 8px 22px var(--badge-tile-shadow, transparent);
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.badge-card:hover .badge-media,
+.badge-card:focus-visible .badge-media,
+.badge-card:focus-within .badge-media,
+.badge-card:active .badge-media {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 16px 32px var(--badge-hover-shadow, var(--shadow, rgba(0,0,0,0.12)));
 }
 
 .badge-image {
-  width: 64px;
-  height: 64px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  border-radius: 8px;
-  margin-bottom: 8px;
+  border-radius: 12px;
 }
 
 .badge-placeholder {
@@ -263,37 +275,102 @@ h2 {
 }
 
 .badge-info {
-  text-align: center;
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  z-index: 5;
+  width: min(240px, calc(100vw - 48px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--badge-tooltip-border, var(--border));
+  background: var(--badge-tooltip-bg, var(--card, #fff));
+  box-shadow: 0 18px 40px var(--badge-tooltip-shadow, var(--shadow, rgba(0,0,0,0.14)));
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.badge-info::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-right: 1px solid var(--badge-tooltip-border, var(--border));
+  border-bottom: 1px solid var(--badge-tooltip-border, var(--border));
+  transform: translate(-50%, -6px) rotate(45deg);
+}
+
+.badge-card:hover .badge-info,
+.badge-card:focus-visible .badge-info,
+.badge-card:focus-within .badge-info,
+.badge-card:active .badge-info {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.badge-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .badge-title {
   display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
   line-height: 1.3;
   color: var(--ink);
 }
 
 .badge-date {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--muted, #888);
-  margin-top: 2px;
+  margin-top: 4px;
+}
+
+.badge-description {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.badge-link-hint {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 @media (max-width: 480px) {
+  .badges-container {
+    grid-template-columns: repeat(auto-fit, minmax(98px, 120px));
+    gap: 12px;
+  }
+
   .badge-card {
-    width: 100px;
+    max-width: 120px;
+  }
+
+  .badge-media {
     padding: 10px;
   }
 
-  .badge-image {
-    width: 48px;
-    height: 48px;
-  }
-
-  .badge-title {
-    font-size: 0.75rem;
+  .badge-info {
+    width: min(210px, calc(100vw - 32px));
   }
 }
 
@@ -372,6 +449,7 @@ h2 {
   color: var(--ink);
   overflow: hidden;
   display: -webkit-box;
+  line-clamp: 4;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   word-break: break-word;

@@ -38,6 +38,8 @@
     {
         <!-- Tabs -->
         <div class="admin-tabs">
+            <button class="admin-tab @(_activeTab == "settings" ? "admin-tab-active" : "")"
+                    @onclick='() => SetTab("settings")'>Settings</button>
             <button class="admin-tab @(_activeTab == "users" ? "admin-tab-active" : "")"
                     @onclick='() => SetTab("users")'>Users</button>
             <button class="admin-tab @(_activeTab == "jobs" ? "admin-tab-active" : "")"
@@ -47,6 +49,36 @@
             <button class="admin-tab @(_activeTab == "badges" ? "admin-tab-active" : "")"
                     @onclick='() => SetTab("badges")'>Badge Issuers</button>
         </div>
+
+        @if (_activeTab == "settings")
+        {
+            <div class="admin-section">
+                @if (!string.IsNullOrEmpty(_message))
+                {
+                    <div class="alert @(_isError ? "alert-error" : "alert-success")">
+                        @_message
+                    </div>
+                }
+
+                <article class="card">
+                    <h2>Instance Settings</h2>
+                    <p class="muted">Customize the name shown in the app header for this domain.</p>
+
+                    <form @onsubmit="SaveInstanceSettings" class="admin-form">
+                        <div class="form-group">
+                            <label for="instanceName">Instance Name</label>
+                            <input type="text" id="instanceName" @bind="_instanceName"
+                                   placeholder="FediProfile" class="form-control" />
+                            <small>Leave blank to fall back to the configured default name.</small>
+                        </div>
+
+                        <button type="submit" class="button button-primary" disabled="@_isProcessing">
+                            @(_isProcessing ? "Saving..." : "Save Instance Settings")
+                        </button>
+                    </form>
+                </article>
+            </div>
+        }
 
         <!-- Users Tab -->
         @if (_activeTab == "users")
@@ -711,6 +743,7 @@
     private string? _currentUserSlug;
     private string _activeTab = "users";
     private bool _isProcessing;
+    private string? _instanceName;
 
     // Users tab
     private string? _newUserSlug;
@@ -753,6 +786,7 @@
 
         if (_isRootUser)
         {
+            await LoadInstanceSettings();
             await LoadUsers();
             LoadJobs();
         }
@@ -769,6 +803,37 @@
     private bool IsOwnerUser(int userId)
     {
         return _rootUserId.HasValue && _rootUserId.Value == userId;
+    }
+
+    private async Task LoadInstanceSettings()
+    {
+        _instanceName = await DomainDb.GetStoredInstanceNameAsync();
+    }
+
+    private async Task SaveInstanceSettings()
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            var requestedName = string.IsNullOrWhiteSpace(_instanceName) ? null : _instanceName.Trim();
+            await DomainDb.SetInstanceNameAsync(requestedName);
+            await LoadInstanceSettings();
+            _message = requestedName == null
+                ? "Instance name cleared. The UI will use the configured default name."
+                : $"Instance name saved as '{requestedName}'.";
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error saving instance settings: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
     }
 
     // ===== Users =====

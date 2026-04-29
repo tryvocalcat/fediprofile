@@ -8,6 +8,7 @@
 @inject DomainScopedDb DomainDb
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IConfiguration Configuration
+@inject DomainConfigurationResolver DomainConfigurationResolver
 
 <section class="login-shell">
     <div class="login-card">
@@ -118,8 +119,9 @@
             var refQs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(refUri.Query);
             _refParam = refQs.ContainsKey("ref") ? refQs["ref"].ToString() : null;
 
-            var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
-            var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+            var registrationSettings = DomainConfigurationResolver.GetRegistrationSettings(DomainDb.GetDomain());
+            var singleUserInstance = registrationSettings.SingleUserInstance;
+            var registrationOpenConfigured = registrationSettings.RegistrationOpen;
             _registrationOpen = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
             if (!_registrationOpen) return;
 
@@ -307,8 +309,9 @@
 
         try
         {
-            var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
-            var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+            var registrationSettings = DomainConfigurationResolver.GetRegistrationSettings(DomainDb.GetDomain());
+            var singleUserInstance = registrationSettings.SingleUserInstance;
+            var registrationOpenConfigured = registrationSettings.RegistrationOpen;
             var canRegister = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
             if (!canRegister)
             {
@@ -362,28 +365,25 @@
 
             if (isLinkedIn)
             {
-                // Use the profileUrl from the API response when available;
-                // fall back to constructing it from the login name (which is sanitised full name)
-                var profileUrl = !string.IsNullOrWhiteSpace(_linkedInProfileUrl)
-                    ? _linkedInProfileUrl
-                    : $"https://www.linkedin.com/in/{Uri.EscapeDataString(_mastodonUser!)}";
-
                 var userDb = new FediProfile.Services.UserScopedDb(domain, slug, autoCreate: false);
 
                 await userDb.UpsertSettingsAsync(
                     actorUsername: _linkedInDisplayName ?? _mastodonUser,
                     actorAvatarUrl: !string.IsNullOrWhiteSpace(_linkedInPicture) ? _linkedInPicture : null);
 
-                await userDb.UpsertLinkAsync(
-                    name: "LinkedIn",
-                    url: profileUrl,
-                    icon: "/assets/icons/linkedin.svg",
-                    autoBoost: false,
-                    hidden: false,
-                    isActivityPub: false,
-                    sortOrder: 0);
+                if (!string.IsNullOrWhiteSpace(_linkedInProfileUrl))
+                {
+                    await userDb.UpsertLinkAsync(
+                        name: "LinkedIn",
+                        url: _linkedInProfileUrl,
+                        icon: "/assets/icons/linkedin.svg",
+                        autoBoost: false,
+                        hidden: false,
+                        isActivityPub: false,
+                        sortOrder: 0);
 
-                await DomainDb.AddVerifiedUriAsync(slug, profileUrl);
+                    await DomainDb.AddVerifiedUriAsync(slug, _linkedInProfileUrl);
+                }
             }
             else if (isGitHub)
             {
