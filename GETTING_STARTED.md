@@ -1,136 +1,136 @@
-# Cómo usar FediProfile
+# Getting Started with FediProfile
 
-## Requisitos previos
+## Prerequisites
 
-Antes de comenzar a usar **FediProfile**, es necesario instalar las siguientes herramientas:
+Before using **FediProfile**, make sure you have the following tools installed:
 
 - Git
 - .NET 9
 
 ---
 
-# Paso 1: Instalar Git
+# Step 1: Install Git
 
-> Si ya tienes Git instalado, puedes omitir este paso.
+> If you already have Git installed, you can skip this step.
 
-1. Ve a la página oficial de Git:
+1. Go to the official Git website:
 
 ```txt
 https://git-scm.com/install/windows
 ```
 
-2. Descarga la versión correspondiente a tu sistema operativo.
+2. Download the version that matches your operating system.
 
-3. Ejecuta el instalador como administrador.
+3. Run the installer as administrator.
 
-4. Sigue el asistente de instalación:
-   - Haz clic en **Next**
-   - Puedes dejar la ruta por defecto
-   - Opcionalmente selecciona **Create Desktop Icon**
-   - Continúa dando clic en **Next** hasta llegar a **Install**
+4. Follow the installation wizard:
+   - Click **Next**
+   - You can keep the default installation path
+   - Optionally select **Create Desktop Icon**
+   - Continue clicking **Next** until you reach **Install**
 
-5. Una vez finalizada la instalación, haz clic en **Finish**.
+5. Once the installation is complete, click **Finish**.
 
 ---
 
-# Paso 2: Instalar .NET 9
+# Step 2: Install .NET 9
 
-> Si ya tienes .NET 9 instalado, puedes omitir este paso.
+> If you already have .NET 9 installed, you can skip this step.
 
-1. Ve a la página oficial de .NET 9:
+1. Go to the official .NET 9 website:
 
 ```txt
-https://dotnet.microsoft.com/es-es/download/dotnet/9.0
+https://dotnet.microsoft.com/en-us/download/dotnet/9.0
 ```
 
-2. Descarga la versión correspondiente a tu sistema operativo.
+2. Download the version that matches your operating system.
 
-3. Ejecuta el instalador como administrador.
+3. Run the installer as administrator.
 
-4. Haz clic en **Install** y espera a que termine el proceso.
+4. Click **Install** and wait for the process to finish.
 
-5. Cuando finalice, haz clic en **Close**.
+5. Once completed, click **Close**.
 
 ---
 
-# Paso 3: Verificar instalación de Git y .NET
+# Step 3: Verify Git and .NET Installation
 
-1. Presiona:
+1. Press:
 
 ```bash
 Windows + R
 ```
 
-2. Escribe:
+2. Type:
 
 ```bash
 cmd
 ```
 
-3. Ejecuta los siguientes comandos:
+3. Run the following commands:
 
 ```bash
 dotnet --version
 git --version
 ```
 
-Si ambos comandos muestran una versión, la instalación fue correcta.
+If both commands display a version number, the installation was successful.
 
 ---
 
-# Paso 4: Clonar el repositorio
+# Step 4: Clone the Repository
 
-1. Accede al repositorio de FediProfile:
+1. Open the FediProfile repository:
 
 ```txt
 https://github.com/tryvocalcat/fediprofile/tree/main
 ```
 
-2. Haz clic en el botón **Code** y copia el enlace del repositorio.
+2. Click the **Code** button and copy the repository URL.
 
-3. Crea una carpeta llamada:
+3. Create a folder named:
 
 ```txt
 fediprofile
 ```
 
-4. Dentro de la carpeta:
-   - Haz clic derecho
-   - Selecciona **Open Git Bash here**
+4. Inside the folder:
+   - Right-click
+   - Select **Open Git Bash here**
 
-5. Inicializa Git:
+5. Initialize Git:
 
 ```bash
 git init
 ```
 
-6. Clona el repositorio:
+6. Clone the repository:
 
 ```bash
-git clone <URL_DEL_REPOSITORIO>
+git clone <REPOSITORY_URL>
 ```
 
-Ejemplo:
+Example:
 
 ```bash
 git clone https://github.com/tryvocalcat/fediprofile.git
 ```
 
-7. Espera a que termine la clonación.
+7. Wait for the cloning process to finish.
 
 ---
 
-# Paso 5: Ejecutar el proyecto
+# Step 5: Run the Project
 
-1. Entra a la carpeta del proyecto:
+1. Enter the project folder:
 
 ```bash
 cd fediprofile
 ```
 
-2. Abre nuevamente **Git Bash** dentro de la carpeta.
+2. Open **Git Bash** again inside the folder.
 
-3. Ejecuta el proyecto:
+3. Run the project:
 
 ```bash
 dotnet run
@@ -138,18 +138,18 @@ dotnet run
 
 ---
 
-# Paso 6: Abrir la aplicación
+# Step 6: Open the Application
 
-Cuando el proyecto esté en ejecución, aparecerá una dirección local en la terminal, por ejemplo:
+Once the project is running, a local address will appear in the terminal, for example:
 
 ```txt
 http://localhost:5000
 ```
 
-Abre esa dirección en tu navegador.
+Open that address in your browser.
 
 ---
 
-# ¡Listo!
+# Done!
 
-Ya puedes comenzar a usar **FediProfile**
+You are now ready to use **FediProfile** 
