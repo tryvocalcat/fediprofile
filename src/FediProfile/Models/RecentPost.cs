@@ -21,6 +21,8 @@ public class RecentPost
     public string? Summary { get; set; }
     /// <summary>URL to the post on the original instance.</summary>
     public string? Url { get; set; }
+    /// <summary>Comma-separated attachment URLs extracted from the Note attachment array.</summary>
+    public string? MediaUrls { get; set; }
     /// <summary>Timestamp when the post was originally published.</summary>
     public string? PublishedUtc { get; set; }
     /// <summary>Timestamp when the post was boosted/stored locally.</summary>

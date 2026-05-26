@@ -55,6 +55,7 @@ builder.Services.AddSingleton<ActorService>();
 builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<AnnounceService>();
 builder.Services.AddSingleton<ProfileHtmlService>();
+builder.Services.AddSingleton<LandingPageService>();
 
 // Register job processing services
 builder.Services.AddScoped<JobProcessor>();
@@ -177,6 +178,7 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
         o.UsePkce = false;
         o.Scope.Add("openid");
         o.Scope.Add("profile");
+      
         if (liUseProfileBasicInfo)
         {
             o.Scope.Add("r_profile_basicinfo");
@@ -208,56 +210,54 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
                     picture = GetJwtStringClaim(jwtPayload, "picture");
                 }
 
-                if (liUseProfileBasicInfo)
+                // Always try identityMe — it may return profileUrl even with just openid+profile scopes
+                try
                 {
-                    try
+                    var uiReq = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
+                    uiReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
+                    uiReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                    uiReq.Headers.Add("LinkedIn-Version", "202510");
+
+                    var uiResp = await context.Backchannel.SendAsync(uiReq, context.HttpContext.RequestAborted);
+                    if (uiResp.IsSuccessStatusCode)
                     {
-                        var uiReq = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
-                        uiReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
-                        uiReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                        uiReq.Headers.Add("LinkedIn-Version", "202510");
+                        using var uiDoc = JsonDocument.Parse(await uiResp.Content.ReadAsStringAsync());
+                        var root = uiDoc.RootElement;
 
-                        var uiResp = await context.Backchannel.SendAsync(uiReq, context.HttpContext.RequestAborted);
-                        if (uiResp.IsSuccessStatusCode)
+                        if (root.TryGetProperty("basicInfo", out var basicInfo))
                         {
-                            using var uiDoc = JsonDocument.Parse(await uiResp.Content.ReadAsStringAsync());
-                            var root = uiDoc.RootElement;
+                            id ??= basicInfo.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
 
-                            if (root.TryGetProperty("basicInfo", out var basicInfo))
+                            var firstName = basicInfo.TryGetProperty("firstName", out var fnEl) ? GetLinkedInLocalizedValue(fnEl) : null;
+                            var lastName  = basicInfo.TryGetProperty("lastName",  out var lnEl) ? GetLinkedInLocalizedValue(lnEl) : null;
+
+                            if (string.IsNullOrWhiteSpace(fullName) && (!string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName)))
                             {
-                                id ??= basicInfo.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                                fullName = $"{firstName} {lastName}".Trim();
+                            }
 
-                                var firstName = basicInfo.TryGetProperty("firstName", out var fnEl) ? GetLinkedInLocalizedValue(fnEl) : null;
-                                var lastName  = basicInfo.TryGetProperty("lastName",  out var lnEl) ? GetLinkedInLocalizedValue(lnEl) : null;
+                            if (string.IsNullOrWhiteSpace(picture) &&
+                                basicInfo.TryGetProperty("profilePicture", out var picEl) &&
+                                picEl.TryGetProperty("croppedImage", out var croppedEl) &&
+                                croppedEl.TryGetProperty("downloadUrl", out var dlUrl))
+                            {
+                                picture = dlUrl.GetString();
+                            }
 
-                                if (string.IsNullOrWhiteSpace(fullName) && (!string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName)))
-                                {
-                                    fullName = $"{firstName} {lastName}".Trim();
-                                }
-
-                                if (string.IsNullOrWhiteSpace(picture) &&
-                                    basicInfo.TryGetProperty("profilePicture", out var picEl) &&
-                                    picEl.TryGetProperty("croppedImage", out var croppedEl) &&
-                                    croppedEl.TryGetProperty("downloadUrl", out var dlUrl))
-                                {
-                                    picture = dlUrl.GetString();
-                                }
-
-                                if (basicInfo.TryGetProperty("profileUrl", out var urlEl))
-                                {
-                                    profileUrl = urlEl.GetString();
-                                }
+                            if (basicInfo.TryGetProperty("profileUrl", out var urlEl))
+                            {
+                                profileUrl = urlEl.GetString();
                             }
                         }
-                        else
-                        {
-                            Console.WriteLine($"LinkedIn identityMe request failed with status {(int)uiResp.StatusCode}; continuing with ID token claims only.");
-                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Console.WriteLine($"LinkedIn identityMe request failed; continuing with ID token claims only. {ex.Message}");
+                        Console.WriteLine($"LinkedIn identityMe request failed with status {(int)uiResp.StatusCode}; continuing with ID token claims only.");
                     }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"LinkedIn identityMe request failed; continuing with ID token claims only. {ex.Message}");
                 }
 
                 // Build loginName: sanitised full name > id
@@ -282,7 +282,39 @@ if (!string.IsNullOrEmpty(liClientId) && !string.IsNullOrEmpty(liClientSecret))
                 if (!string.IsNullOrWhiteSpace(picture))
                     claims.Add(new("urn:linkedin:picture", picture));
                 if (!string.IsNullOrWhiteSpace(profileUrl))
+                {
+                    // The LinkedIn API often returns a redirect URL like
+                    // /profile-thirdparty-redirect/… – follow it to get the
+                    // real vanity profile URL (e.g. /in/username/).
+                    if (profileUrl.Contains("/profile-thirdparty-redirect/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            Console.WriteLine($"Following LinkedIn profile URL redirect: {profileUrl}");
+                            using var redirectHandler = new HttpClientHandler { AllowAutoRedirect = false };
+                            using var redirectClient = new HttpClient(redirectHandler);
+                            var redirectResp = await redirectClient.GetAsync(profileUrl, context.HttpContext.RequestAborted);
+                            if ((int)redirectResp.StatusCode is >= 300 and < 400 &&
+                                redirectResp.Headers.Location is { } location)
+                            {
+                                var resolved = location.IsAbsoluteUri
+                                    ? location.AbsoluteUri
+                                    : new Uri(new Uri(profileUrl), location).AbsoluteUri;
+                                // Strip any query string / fragment the redirect may carry
+                                var cleanUri = new UriBuilder(resolved) { Query = "", Fragment = "" }.Uri.AbsoluteUri;
+                                profileUrl = cleanUri.TrimEnd('/') + "/";
+                            }
+                            Console.WriteLine($"Resolved LinkedIn profile URL: {profileUrl}");
+                        }
+                        catch (Exception ex)
+                        {
+                            // If following the redirect fails, keep the original URL
+                            Console.WriteLine($"Failed to resolve LinkedIn profile URL: {ex.Message}"); 
+                        }
+                    }
+
                     claims.Add(new("urn:linkedin:profile_url", profileUrl));
+                }
 
                 context.Identity?.AddClaims(claims);
             }
@@ -343,7 +375,7 @@ app.MapGet("/", async (HttpRequest request, HttpResponse response, IWebHostEnvir
         var firstUser = await mainDb.GetFirstActiveUserAsync();
         if (firstUser.HasValue)
         {
-            app.Logger.LogWarning("Single-user instance has users but no RootUserId configured for domain {Domain}. Redirecting to first user slug {Slug}.",
+            app.Logger.LogWarning("Single-user instance has users but no admin flagged on domain {Domain}. Redirecting to first user slug {Slug}.",
                 mainDb.GetDomain(), firstUser.Value.Slug);
             response.Redirect($"/{firstUser.Value.Slug}", permanent: false);
             return;
@@ -353,13 +385,11 @@ app.MapGet("/", async (HttpRequest request, HttpResponse response, IWebHostEnvir
         return;
     }
 
-    var host = request.Host.Host;
-    if (request.Host.Port.HasValue && request.Host.Port != 80 && request.Host.Port != 443)
-        host = $"{request.Host.Host}:{request.Host.Port}";
+    var host = LandingPageService.ResolveHost(request);
 
     // Replace colon with underscore — colon is illegal in Windows directory names
-    var domainDir = host.Replace(":", "_");
-    var cacheKey  = $"landing:{host}";
+    var domainDir = LandingPageService.ToDomainDirectory(host);
+    var cacheKey  = LandingPageService.BuildCacheKey(host);
 
     if (!cache.TryGetValue<(string Content, string Etag)>(cacheKey, out var cached))
     {
@@ -576,6 +606,7 @@ app.MapGet("/{userSlug}/recent-posts", async (UserScopedDb db) =>
         p.Content,
         p.Summary,
         p.Url,
+        p.MediaUrls,
         p.PublishedUtc,
         p.BoostedUtc
     });
@@ -825,19 +856,21 @@ async Task InitializeDomainAsync(string domain, IConfiguration config, LocalDbFa
             var existingAdmin = await mainDb.GetUserBySlugAsync(adminUserSlug);
             if (existingAdmin != null)
             {
+                await mainDb.TrySetRootUserIdAsync(existingAdmin.Value.Id);
                 logger.LogInformation("Admin user '{AdminSlug}' already exists on domain {Domain} with ID {AdminUserId}",
                     adminUserSlug, domain, existingAdmin.Value.Id);
-                return;
             }
+            else
+            {
+                // InitializeNewUserAsync creates:
+                // - User entry in main database (domain.db)
+                // - User-specific database (domain_root.db) with all default tables
+                var (adminUserId, slug) = await mainDb.InitializeNewUserAsync(domain, adminUserSlug, adminDisplayName, adminMastodonUser, adminMastodonDomain, false);
+                await mainDb.TrySetRootUserIdAsync(adminUserId);
 
-            // InitializeNewUserAsync creates:
-            // - User entry in main database (domain.db)
-            // - User-specific database (domain_root.db) with all default tables
-            var (adminUserId, slug) = await mainDb.InitializeNewUserAsync(domain, adminUserSlug, adminDisplayName, adminMastodonUser, adminMastodonDomain, false);
-            await mainDb.TrySetRootUserIdAsync(adminUserId);
-            
-            logger.LogInformation("Initialized admin user '{AdminSlug}' (ID: {AdminUserId}) on domain {Domain} authenticated as {MastodonUser}@{MastodonDomain}",
-                slug, adminUserId, domain, adminMastodonUser ?? "unconfigured", adminMastodonDomain ?? "unconfigured");
+                logger.LogInformation("Initialized admin user '{AdminSlug}' (ID: {AdminUserId}) on domain {Domain} authenticated as {MastodonUser}@{MastodonDomain}",
+                    slug, adminUserId, domain, adminMastodonUser ?? "unconfigured", adminMastodonDomain ?? "unconfigured");
+            }
         }
         catch (Exception ex)
         {

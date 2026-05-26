@@ -365,6 +365,7 @@
 
             if (isLinkedIn)
             {
+                Console.WriteLine("[Information] Creating profile for LinkedIn user '{0}' with display name '{1}'", _mastodonUser, displayName);
                 var userDb = new FediProfile.Services.UserScopedDb(domain, slug, autoCreate: false);
 
                 await userDb.UpsertSettingsAsync(
@@ -404,7 +405,7 @@
                     hidden: false,
                     isActivityPub: false,
                     sortOrder: 0);
-
+    
                 await DomainDb.AddVerifiedUriAsync(slug, profileUrl);
             }
 

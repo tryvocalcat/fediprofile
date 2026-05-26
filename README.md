@@ -124,9 +124,21 @@ Edit `appsettings.json` to configure your instance:
     "MastodonDomain": "your-instance.social"
   },
   "Domains": ["localhost", "localhost:5099"],
+  "DomainConfig": {
+    "localhost": {
+      "SingleUserInstance": false
+    }
+  },
   "SingleUserInstance": false,
   "RegistrationOpen": true,
-  "InvitationCode": ""
+  "InvitationCode": "",
+  "Authentication": {
+    "LinkedIn": {
+      "ClientId": "",
+      "ClientSecret": "",
+      "UseProfileBasicInfo": false
+    }
+  }
 }
 ```
 
@@ -134,9 +146,11 @@ Edit `appsettings.json` to configure your instance:
 |---|---|
 | `AdminAuthentication` | Mastodon account that has admin access to the instance |
 | `Domains` | Domains this instance will respond to |
-| `SingleUserInstance` | Allow exactly one bootstrap registration, then lock the instance to that owner |
+| `DomainConfig.{domain}.SingleUserInstance` | Optional per-domain override; falls back to the root-level `SingleUserInstance` value |
+| `SingleUserInstance` | Default for all domains. If omitted it is treated as `false` |
 | `RegistrationOpen` | Set to `true` to allow new sign-ups |
 | `InvitationCode` | Optional invite code required for registration |
+| `Authentication.LinkedIn.UseProfileBasicInfo` | Enable `r_profile_basicinfo` and the `identityMe` fetch only after LinkedIn has approved that scope |
 
 ### Self-Hosting in Production
 

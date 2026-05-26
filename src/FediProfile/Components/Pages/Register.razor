@@ -27,7 +27,7 @@
         </button>
 
         <p class="muted small">You'll create your own unique profile URL based on your username.</p>
-        <p class="muted small">Not on Mastodon? <a href="https://joinmastodon.org" target="_blank" rel="noopener noreferrer">Join here</a></p>
+        <p class="muted small">Not on Mastodon? <a href="@_joinMastodonUrl" target="_blank" rel="noopener noreferrer">Join here</a></p>
     </div>
 </section>
 
@@ -37,8 +37,11 @@
     private bool _registrationAllowed = true;
     private string? _registrationMessage;
 
+    private string? _joinMastodonUrl;
+
     protected override async Task OnInitializedAsync()
     {
+        _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
         var uri = new Uri(NavigationManager.Uri);
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
         _refParam = qs.ContainsKey("ref") ? qs["ref"].ToString() : null;

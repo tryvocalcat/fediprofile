@@ -34,6 +34,7 @@ public static class Themes
         new("theme-ocean.css",        "Ocean"),
         new("theme-sunset.css",       "Sunset"),
         new("theme-professional.css", "Professional"),
+        new("theme-snapgrid.css",     "SnapGrid"),
        
         new("theme-mahodev.css",      "GreenTypo"),
         new("theme-baddie.css",       "Baddie"),

@@ -11,6 +11,11 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ILogger<AdminRoot> Logger
 @inject NavigationManager Navigation
+@inject LandingPageService LandingPageService
+@inject IHttpContextAccessor HttpContextAccessor
+@inject Microsoft.Extensions.Caching.Memory.IMemoryCache MemoryCache
+@inject ProfileHtmlService ProfileHtml
+@inject ActorService ActorService
 
 <section class="admin-shell">
     <header class="admin-header">
@@ -72,10 +77,68 @@
                             <small>Leave blank to fall back to the configured default name.</small>
                         </div>
 
+                        <div class="form-group">
+                            <label for="joinMastodonUrl">Join Mastodon URL</label>
+                            <input type="url" id="joinMastodonUrl" @bind="_joinMastodonUrl"
+                                   placeholder="https://joinmastodon.org" class="form-control" />
+                            <small>The link shown to users who aren't on the Fediverse yet. Default: https://joinmastodon.org</small>
+                        </div>
+
                         <button type="submit" class="button button-primary" disabled="@_isProcessing">
                             @(_isProcessing ? "Saving..." : "Save Instance Settings")
                         </button>
                     </form>
+                </article>
+
+                @if (!string.IsNullOrEmpty(_landingMessage))
+                {
+                    <div class="alert @(_landingIsError ? "alert-error" : "alert-success")">
+                        @_landingMessage
+                    </div>
+                }
+
+                <article class="card">
+                    <h2>Landing Page Content</h2>
+                    <p class="muted">Write markdown to generate a static domain landing page at <code>wwwroot/{domain}/landing.html</code>.</p>
+                    <p class="muted">If this field is empty, the default shared <code>wwwroot/landing.html</code> is used.</p>
+
+                    <form @onsubmit="SaveLandingPage" class="admin-form">
+                        <div class="form-group">
+                            <label for="landingMarkdown">Landing Markdown</label>
+                            <textarea id="landingMarkdown"
+                                      class="form-control sql-textarea"
+                                      rows="16"
+                                      placeholder="## Welcome\n\nIntroduce your instance and community here."
+                                      @bind="_landingMarkdown"></textarea>
+                            <small>Supports headings, links, lists, quotes, and code blocks.</small>
+                        </div>
+
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                            <button type="submit" class="button button-primary" disabled="@_isProcessing">
+                                @(_isProcessing ? "Saving..." : "Save & Generate Static Landing")
+                            </button>
+                            <button type="button" class="button button-secondary" disabled="@_isProcessing" @onclick="ResetLandingPage">
+                                @(_isProcessing ? "Resetting..." : "Restore Default Landing")
+                            </button>
+                            <a class="button button-ghost" href="/" target="_blank">Open Landing Page</a>
+                        </div>
+                    </form>
+                </article>
+
+                <article class="card">
+                    <h2>Regenerate All Profiles</h2>
+                    <p class="muted">Rebuild the static HTML and ActivityPub JSON for every user on this instance. Useful after template or settings changes.</p>
+
+                    @if (!string.IsNullOrEmpty(_regenMessage))
+                    {
+                        <div class="alert @(_regenIsError ? "alert-error" : "alert-success")">
+                            @_regenMessage
+                        </div>
+                    }
+
+                    <button type="button" class="button button-primary" disabled="@_isProcessing" @onclick="RegenerateAllProfiles">
+                        @(_isProcessing ? $"Regenerating... ({_regenProgress})" : "Regenerate All Profiles")
+                    </button>
                 </article>
             </div>
         }
@@ -132,6 +195,7 @@
                                     <tr>
                                         <th>Slug</th>
                                         <th>Display Name</th>
+                                        <th>Admin</th>
                                         <th>Created</th>
                                         <th>Actions</th>
                                     </tr>
@@ -142,22 +206,56 @@
                                         <tr>
                                             <td><strong>@user.Slug</strong></td>
                                             <td>@(user.DisplayName ?? "-")</td>
+                                            <td>
+                                                @if (user.IsAdmin)
+                                                {
+                                                    <span class="job-status job-status-completed">Admin</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="job-status job-status-pending">User</span>
+                                                }
+                                            </td>
                                             <td>@user.CreatedUtc</td>
                                             <td>
                                                 <a href="/@user.Slug" target="_blank" class="button button-small">View</a>
                                                 <a href="/admin/?impersonate=@user.Slug" class="button button-small button-secondary">Edit</a>
-                                                @if (!IsOwnerUser(user.Id))
+                                                <button @onclick="() => ToggleAdmin(user)"
+                                                        class="button button-small button-secondary"
+                                                        disabled="@(_isProcessing || (_currentUserId.HasValue && _currentUserId.Value == user.Id && user.IsAdmin))"
+                                                        title="@(_currentUserId.HasValue && _currentUserId.Value == user.Id && user.IsAdmin ? "You cannot remove your own admin access" : null)">
+                                                    @(user.IsAdmin ? "Turn Off Admin" : "Turn Admin On")
+                                                </button>
+                                                @if (!IsOwnerUser(user.IsAdmin))
                                                 {
                                                     <button @onclick="() => CreateUserDatabase(user.Slug)"
                                                             class="button button-small button-secondary"
                                                             disabled="@_isProcessing">
                                                         Init DB
                                                     </button>
-                                                    <button @onclick="() => DeleteUser(user.Slug)"
-                                                            class="button button-small button-danger"
-                                                            disabled="@_isProcessing">
-                                                        Delete
-                                                    </button>
+                                                    @if (_confirmDeleteUserSlug == user.Slug)
+                                                    {
+                                                        <span class="confirm-inline">
+                                                            <span>Delete <strong>@user.Slug</strong>?</span>
+                                                            <button @onclick="() => DeleteUser(user.Slug)"
+                                                                    class="button button-small button-danger"
+                                                                    disabled="@_isProcessing">
+                                                                Confirm
+                                                            </button>
+                                                            <button @onclick="() => _confirmDeleteUserSlug = null"
+                                                                    class="button button-small button-ghost">
+                                                                Cancel
+                                                            </button>
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button @onclick="() => _confirmDeleteUserSlug = user.Slug"
+                                                                class="button button-small button-danger"
+                                                                disabled="@_isProcessing">
+                                                            Delete
+                                                        </button>
+                                                    }
                                                 }
                                             </td>
                                         </tr>
@@ -235,14 +333,29 @@
                             <h2 style="margin:0">Job Queue</h2>
                             <p class="muted" style="margin:0.25rem 0 0">Background ActivityPub job processing</p>
                         </div>
-                        <div style="display:flex;gap:0.5rem">
+                        <div style="display:flex;gap:0.5rem;align-items:center">
                             <button class="button button-ghost button-small" @onclick="LoadJobs">
                                 Refresh
                             </button>
-                            <button class="button button-small button-danger" @onclick="CleanJobs" disabled="@_isProcessing"
-                                    title="Remove old completed/failed jobs when there are more than 100">
-                                @(_isProcessing ? "Cleaning..." : "Clean Old Jobs")
-                            </button>
+                            @if (_confirmCleanJobs)
+                            {
+                                <span class="confirm-inline">
+                                    <span>Clean old jobs?</span>
+                                    <button class="button button-small button-danger" @onclick="ConfirmCleanJobs" disabled="@_isProcessing">
+                                        @(_isProcessing ? "Cleaning..." : "Confirm")
+                                    </button>
+                                    <button class="button button-small button-ghost" @onclick="() => _confirmCleanJobs = false">
+                                        Cancel
+                                    </button>
+                                </span>
+                            }
+                            else
+                            {
+                                <button class="button button-small button-danger" @onclick="() => _confirmCleanJobs = true" disabled="@_isProcessing"
+                                        title="Remove old completed/failed jobs when there are more than 100">
+                                    Clean Old Jobs
+                                </button>
+                            }
                         </div>
                     </div>
                     @if (!string.IsNullOrEmpty(_cleanJobsMessage))
@@ -436,17 +549,55 @@
 
                     <div class="admin-form">
                         <div class="form-group">
+                            <label for="dbFilter">Filter</label>
+                            <div style="display:flex;gap:0.5rem;align-items:center">
+                                <input type="text" id="dbFilter" class="form-control" @bind="_dbFilter"
+                                       placeholder="e.g. mydomain*" style="flex:1" />
+                                <button class="button button-small button-secondary" @onclick="LoadAvailableDbs">Apply</button>
+                                <button class="button button-small button-ghost" @onclick="ClearDbFilter">All</button>
+                            </div>
+                            <small>Glob-style filter for database names. Default: <code>@(_defaultDbFilter)*</code></small>
+                        </div>
+
+                        <div class="form-group">
                             <label for="dbSelect">Database</label>
                             <select id="dbSelect" class="form-control" @bind="_selectedDb">
                                 <option value="">— Select a database —</option>
-                                @if (_availableDbs != null)
+                                @if (_filteredDbs != null)
                                 {
-                                    @foreach (var db in _availableDbs)
+                                    @foreach (var db in _filteredDbs)
                                     {
                                         <option value="@db">@Path.GetFileName(db)</option>
                                     }
                                 }
                             </select>
+                        </div>
+
+                        <!-- Common Queries -->
+                        <div class="form-group">
+                            <label>Common Queries</label>
+                            <div class="common-queries-buttons">
+                                <button class="button button-small button-ghost" @onclick="() => SetSqlQuery(_queryShowTables)"
+                                        title="List all tables in the database">
+                                    Show Tables
+                                </button>
+                                <button class="button button-small button-ghost" @onclick="() => SetSqlQuery(_queryTableNames)"
+                                        title="List table names only">
+                                    Table Names
+                                </button>
+                                <button class="button button-small button-ghost" @onclick="() => SetSqlQuery(_queryTableSchema)"
+                                        title="Get schema for a specific table (replace &lt;table_name&gt; with actual table name)">
+                                    Table Schema
+                                </button>
+                                <button class="button button-small button-ghost" @onclick="() => SetSqlQuery(_queryCreateStatement)"
+                                        title="Get CREATE TABLE statement">
+                                    Create Statement
+                                </button>
+                                <button class="button button-small button-ghost" @onclick="() => SetSqlQuery(_queryMigrateRecentPostsMedia)"
+                                        title="Add MediaUrls column to RecentPosts (for existing user databases)">
+                                    Migrate Recent Media
+                                </button>
+                            </div>
                         </div>
 
                         <div class="form-group">
@@ -455,7 +606,7 @@
                                       rows="6" placeholder="SELECT * FROM sqlite_master WHERE type='table';"></textarea>
                         </div>
 
-                        <div style="display:flex;gap:0.5rem">
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
                             <button class="button button-primary" @onclick="ExecuteSql" disabled="@_isSqlRunning">
                                 @(_isSqlRunning ? "Running..." : "Execute")
                             </button>
@@ -464,6 +615,27 @@
                                 @(_isSqlRunning ? "Running..." : "Execute on All DBs")
                             </button>
                             <button class="button button-ghost" @onclick="ClearSqlResults">Clear</button>
+                            @if (_confirmDeleteDb && !string.IsNullOrEmpty(_selectedDb))
+                            {
+                                <span class="confirm-inline">
+                                    <span>Delete <strong>@Path.GetFileName(_selectedDb)</strong>?</span>
+                                    <button class="button button-small button-danger" @onclick="ConfirmDeleteSelectedDb"
+                                            disabled="@_isSqlRunning">
+                                        Confirm
+                                    </button>
+                                    <button class="button button-small button-ghost" @onclick="() => _confirmDeleteDb = false">
+                                        Cancel
+                                    </button>
+                                </span>
+                            }
+                            else
+                            {
+                                <button class="button button-small button-danger" @onclick="() => _confirmDeleteDb = true"
+                                        disabled="@(_isSqlRunning || string.IsNullOrEmpty(_selectedDb))"
+                                        title="Permanently delete the selected database file">
+                                    Delete DB
+                                </button>
+                            }
                         </div>
                     </div>
 
@@ -508,7 +680,8 @@
                                         <tr>
                                             @foreach (var col in _sqlColumns)
                                             {
-                                                <td>@(row.ContainsKey(col) ? row[col]?.ToString() ?? "NULL" : "")</td>
+                                                var value = (row.ContainsKey(col) ? row[col]?.ToString() ?? "NULL" : "");
+                                                <td title="@value" class="sql-cell">@TruncateForDisplay(value, 60)</td>
                                             }
                                         </tr>
                                     }
@@ -724,6 +897,16 @@
         resize: vertical;
         min-height: 100px;
     }
+    .common-queries-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.5rem;
+    }
+    .common-queries-buttons .button {
+        font-size: 0.82rem;
+        padding: 0.35rem 0.75rem;
+    }
     .sql-results-wrap {
         overflow-x: auto;
     }
@@ -734,23 +917,54 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .sql-cell {
+        cursor: help;
+        border-bottom: 1px dotted var(--text-muted, #aaa);
+    }
+    .sql-cell:hover {
+        background-color: var(--bg-secondary, #f9f9f9);
+    }
+
+    /* Confirm inline */
+    .confirm-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 6px;
+        padding: 0.25rem 0.6rem;
+        font-size: 0.82rem;
+    }
 </style>
 
 @code {
     private bool _isAuthorized;
     private bool _isRootUser;
-    private int? _rootUserId;
+    private int? _currentUserId;
     private string? _currentUserSlug;
-    private string _activeTab = "users";
+    private string _activeTab = "settings";
     private bool _isProcessing;
     private string? _instanceName;
+    private string? _joinMastodonUrl;
+    private string? _landingMarkdown;
+    private string? _landingMessage;
+    private bool _landingIsError;
+    private string? _regenMessage;
+    private bool _regenIsError;
+    private string _regenProgress = "";
+
+    // Confirmation state
+    private string? _confirmDeleteUserSlug;
+    private bool _confirmDeleteDb;
+    private bool _confirmCleanJobs;
 
     // Users tab
     private string? _newUserSlug;
     private string? _newDisplayName;
     private string? _message;
     private bool _isError;
-    private List<(int Id, string Slug, string? DisplayName, string CreatedUtc)>? _users;
+    private List<(int Id, string Slug, string? DisplayName, string CreatedUtc, bool IsAdmin)>? _users;
 
     // Jobs tab
     private List<SimpleJob>? _jobs;
@@ -776,17 +990,17 @@
             var dbUser = await DomainDb.GetUserByMastodonAsync(mastodonUser, mastodonHost);
             if (dbUser.HasValue)
             {
+                _currentUserId = dbUser.Value.Id;
                 _currentUserSlug = dbUser.Value.Slug;
                 _isAuthorized = true;
                 _isRootUser = await DomainDb.IsRootUserAsync(dbUser.Value.Id);
             }
         }
 
-        _rootUserId = await DomainDb.GetRootUserIdAsync();
-
         if (_isRootUser)
         {
             await LoadInstanceSettings();
+            await LoadLandingSettings();
             await LoadUsers();
             LoadJobs();
         }
@@ -795,19 +1009,21 @@
     private void SetTab(string tab)
     {
         _activeTab = tab;
+        if (tab == "settings") _ = LoadLandingSettings();
         if (tab == "jobs") LoadJobs();
         if (tab == "sql") LoadAvailableDbs();
         if (tab == "badges") _ = LoadBadgeIssuers();
     }
 
-    private bool IsOwnerUser(int userId)
+    private bool IsOwnerUser(bool isAdmin)
     {
-        return _rootUserId.HasValue && _rootUserId.Value == userId;
+        return isAdmin;
     }
 
     private async Task LoadInstanceSettings()
     {
         _instanceName = await DomainDb.GetStoredInstanceNameAsync();
+        _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
     }
 
     private async Task SaveInstanceSettings()
@@ -820,6 +1036,7 @@
         {
             var requestedName = string.IsNullOrWhiteSpace(_instanceName) ? null : _instanceName.Trim();
             await DomainDb.SetInstanceNameAsync(requestedName);
+            await DomainDb.SetJoinMastodonUrlAsync(_joinMastodonUrl);
             await LoadInstanceSettings();
             _message = requestedName == null
                 ? "Instance name cleared. The UI will use the configured default name."
@@ -836,18 +1053,204 @@
         }
     }
 
+    private async Task LoadLandingSettings()
+    {
+        _landingMarkdown = await DomainDb.GetLandingMarkdownAsync();
+    }
+
+    private async Task SaveLandingPage()
+    {
+        _landingMessage = null;
+        _landingIsError = false;
+        _isProcessing = true;
+
+        try
+        {
+            var host = ResolveCurrentHostForLanding();
+            var markdown = string.IsNullOrWhiteSpace(_landingMarkdown) ? null : _landingMarkdown.Trim();
+
+            await DomainDb.SetLandingMarkdownAsync(markdown);
+
+            if (markdown == null)
+            {
+                await LandingPageService.DeleteDomainLandingAsync(host);
+                _landingMessage = "Landing markdown cleared. Restored default shared landing page.";
+            }
+            else
+            {
+                var instanceName = await DomainDb.GetInstanceNameAsync();
+                await LandingPageService.GenerateDomainLandingAsync(host, instanceName, markdown);
+                _landingMessage = "Landing page saved and static file regenerated for this domain.";
+            }
+
+            InvalidateLandingCache(host);
+            await LoadLandingSettings();
+        }
+        catch (Exception ex)
+        {
+            _landingMessage = $"Error saving landing page: {ex.Message}";
+            _landingIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task ResetLandingPage()
+    {
+        _landingMessage = null;
+        _landingIsError = false;
+        _isProcessing = true;
+
+        try
+        {
+            var host = ResolveCurrentHostForLanding();
+            await DomainDb.SetLandingMarkdownAsync(null);
+            await LandingPageService.DeleteDomainLandingAsync(host);
+            _landingMarkdown = null;
+            InvalidateLandingCache(host);
+
+            _landingMessage = "Landing page reset. Default shared landing page is now active.";
+        }
+        catch (Exception ex)
+        {
+            _landingMessage = $"Error resetting landing page: {ex.Message}";
+            _landingIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task RegenerateAllProfiles()
+    {
+        _regenMessage = null;
+        _regenIsError = false;
+        _isProcessing = true;
+        _regenProgress = "";
+        StateHasChanged();
+
+        try
+        {
+            var domain = DomainDb.GetDomain();
+            var httpContext = HttpContextAccessor.HttpContext;
+            var scheme = httpContext?.Request.Scheme ?? "https";
+            var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
+            var baseDomain = $"{scheme}://{fullDomain}";
+            var joinUrl = await DomainDb.GetJoinMastodonUrlAsync();
+
+            var users = await DomainDb.GetAllUsersAsync();
+            var total = users.Count;
+            var done = 0;
+            var failed = 0;
+
+            foreach (var user in users)
+            {
+                try
+                {
+                    var userDb = DbFactory.GetInstance(domain, user.Slug);
+                    var verifiedUris = (await DomainDb.GetVerifiedUrisAsync(user.Slug)).Select(v => v.Uri).ToList();
+                    await ProfileHtml.GenerateAsync(userDb, user.Slug, baseDomain, fullDomain, joinUrl);
+                    await ActorService.GenerateActorJsonAsync(userDb, user.Slug, baseDomain, fullDomain, verifiedUris);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Failed to regenerate profile for {User}", user.Slug);
+                    failed++;
+                }
+
+                done++;
+                _regenProgress = $"{done}/{total}";
+                StateHasChanged();
+            }
+
+            _regenMessage = failed == 0
+                ? $"Successfully regenerated {total} profile(s)."
+                : $"Regenerated {total - failed}/{total} profiles. {failed} failed (check logs).";
+            _regenIsError = failed > 0;
+        }
+        catch (Exception ex)
+        {
+            _regenMessage = $"Error: {ex.Message}";
+            _regenIsError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private string ResolveCurrentHostForLanding()
+    {
+        var request = HttpContextAccessor.HttpContext?.Request;
+        if (request != null)
+        {
+            return LandingPageService.ResolveHost(request);
+        }
+
+        return DomainDb.GetDomain() ?? "localhost";
+    }
+
+    private void InvalidateLandingCache(string host)
+    {
+        MemoryCache.Remove(LandingPageService.BuildCacheKey(host));
+    }
+
     // ===== Users =====
 
     private async Task LoadUsers()
     {
         try
         {
-            _users = await DomainDb.GetAllUsersAsync();
+            _users = await DomainDb.GetAllUsersWithAdminAsync();
         }
         catch (Exception ex)
         {
             _message = $"Error loading users: {ex.Message}";
             _isError = true;
+        }
+    }
+
+    private async Task ToggleAdmin((int Id, string Slug, string? DisplayName, string CreatedUtc, bool IsAdmin) user)
+    {
+        _message = null;
+        _isError = false;
+        _isProcessing = true;
+
+        try
+        {
+            if (!_currentUserId.HasValue)
+            {
+                _message = "Unable to determine current user identity.";
+                _isError = true;
+                return;
+            }
+
+            var makeAdmin = !user.IsAdmin;
+            var result = await DomainDb.SetUserAdminAsync(user.Id, makeAdmin, _currentUserId.Value);
+            if (!result.Success)
+            {
+                _message = result.Error ?? "Unable to update admin status.";
+                _isError = true;
+                return;
+            }
+
+            _message = makeAdmin
+                ? $"User '{user.Slug}' is now an admin."
+                : $"User '{user.Slug}' is no longer an admin.";
+            _isError = false;
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Error updating admin status: {ex.Message}";
+            _isError = true;
+        }
+        finally
+        {
+            _isProcessing = false;
         }
     }
 
@@ -928,13 +1331,14 @@
         _message = null;
         _isError = false;
         _isProcessing = true;
+        _confirmDeleteUserSlug = null;
 
         try
         {
-            var success = await DomainDb.DeleteUserAsync(userSlug);
+            var success = await DomainDb.HardDeleteUserAsync(userSlug);
             if (success)
             {
-                _message = $"User '{userSlug}' has been deleted.";
+                _message = $"User '{userSlug}' has been hard-deleted (user row, following entries, and database file removed).";
                 _isError = false;
                 await LoadUsers();
             }
@@ -1218,6 +1622,12 @@
     private string? _cleanJobsMessage;
     private bool _cleanJobsIsError;
 
+    private void ConfirmCleanJobs()
+    {
+        _confirmCleanJobs = false;
+        CleanJobs();
+    }
+
     private void CleanJobs()
     {
         _cleanJobsMessage = null;
@@ -1337,13 +1747,23 @@
     // ===== SQL =====
 
     private List<string>? _availableDbs;
+    private List<string>? _filteredDbs;
     private string? _selectedDb;
+    private string? _dbFilter;
+    private string _defaultDbFilter = "";
     private string? _sqlQuery;
     private bool _isSqlRunning;
     private string? _sqlError;
     private string? _sqlSuccess;
     private List<string>? _sqlColumns;
     private List<Dictionary<string, object?>>? _sqlRows;
+
+    // Common query templates
+    private const string _queryShowTables = "SELECT * FROM sqlite_master WHERE type='table';";
+    private const string _queryTableNames = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;";
+    private const string _queryTableSchema = "PRAGMA table_info(<table_name>);";
+    private const string _queryCreateStatement = "SELECT sql FROM sqlite_master WHERE type='table' AND name='';";
+    private const string _queryMigrateRecentPostsMedia = "ALTER TABLE RecentPosts ADD COLUMN MediaUrls TEXT;";
 
     private void LoadAvailableDbs()
     {
@@ -1363,12 +1783,124 @@
             {
                 _availableDbs = new List<string>();
             }
+
+            // Set default filter to domain* on first load
+            if (string.IsNullOrEmpty(_defaultDbFilter))
+            {
+                _defaultDbFilter = DomainDb.GetDomain() ?? "localhost";
+                if (string.IsNullOrEmpty(_dbFilter))
+                    _dbFilter = _defaultDbFilter;
+            }
+
+            ApplyDbFilter();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error listing databases");
             _availableDbs = new List<string>();
+            _filteredDbs = new List<string>();
         }
+    }
+
+    private void ApplyDbFilter()
+    {
+        if (_availableDbs == null)
+        {
+            _filteredDbs = new List<string>();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_dbFilter))
+        {
+            _filteredDbs = _availableDbs;
+            return;
+        }
+
+        var filter = _dbFilter.Trim().ToLowerInvariant();
+        _filteredDbs = _availableDbs
+            .Where(db =>
+            {
+                var name = Path.GetFileName(db).ToLowerInvariant();
+                if (filter.Contains('*'))
+                {
+                    // Simple glob: split on * and check starts/ends
+                    var parts = filter.Split('*');
+                    if (parts.Length == 2)
+                        return name.StartsWith(parts[0]) && name.EndsWith(parts[1]);
+                    // Fallback: contains each part in order
+                    int pos = 0;
+                    foreach (var part in parts)
+                    {
+                        if (string.IsNullOrEmpty(part)) continue;
+                        var idx = name.IndexOf(part, pos);
+                        if (idx < 0) return false;
+                        pos = idx + part.Length;
+                    }
+                    return true;
+                }
+                return name.Contains(filter);
+            })
+            .ToList();
+    }
+
+    private void ClearDbFilter()
+    {
+        _dbFilter = null;
+        ApplyDbFilter();
+    }
+
+    private void ConfirmDeleteSelectedDb()
+    {
+        _confirmDeleteDb = false;
+        DeleteSelectedDb();
+    }
+
+    private void DeleteSelectedDb()
+    {
+        _sqlError = null;
+        _sqlSuccess = null;
+
+        if (string.IsNullOrWhiteSpace(_selectedDb))
+        {
+            _sqlError = "Please select a database first.";
+            return;
+        }
+
+        try
+        {
+            var dbName = Path.GetFileName(_selectedDb);
+
+            if (!File.Exists(_selectedDb))
+            {
+                _sqlError = $"Database file '{dbName}' not found.";
+                return;
+            }
+
+            File.Delete(_selectedDb);
+            _sqlSuccess = $"Database '{dbName}' has been deleted.";
+            _selectedDb = null;
+            _sqlColumns = null;
+            _sqlRows = null;
+            LoadAvailableDbs();
+        }
+        catch (Exception ex)
+        {
+            _sqlError = $"Error deleting database: {ex.Message}";
+        }
+    }
+
+    private void SetSqlQuery(string query)
+    {
+        _sqlQuery = query;
+        StateHasChanged();
+    }
+
+    private string TruncateForDisplay(string value, int maxLength = 60)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        if (value.Length > maxLength)
+            return value.Substring(0, maxLength) + "...";
+        return value;
     }
 
     private async Task ExecuteSql()

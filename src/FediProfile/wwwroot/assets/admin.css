@@ -193,7 +193,7 @@ a:hover {
 
 .login-card {
   width: 100%;
-  max-width: 440px;
+  max-width: 540px;
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);

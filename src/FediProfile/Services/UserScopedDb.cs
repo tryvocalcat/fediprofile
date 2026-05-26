@@ -311,6 +311,7 @@ public class UserScopedDb : LocalDbService
                     Content TEXT,
                     Summary TEXT,
                     Url TEXT,
+                    MediaUrls TEXT,
                     PublishedUtc TEXT,
                     BoostedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
@@ -438,11 +439,21 @@ public class UserScopedDb : LocalDbService
                         Content TEXT,
                         Summary TEXT,
                         Url TEXT,
+                        MediaUrls TEXT,
                         PublishedUtc TEXT,
                         BoostedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                 ";
                 try { createCmd.ExecuteNonQuery(); } catch { }
+            }
+
+            // RecentPosts column migration
+            var recentPostColumns = GetTableColumns(connection, "RecentPosts");
+            if (recentPostColumns.Count > 0 && !recentPostColumns.Contains("MediaUrls"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE RecentPosts ADD COLUMN MediaUrls TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
             connection.Close();
@@ -970,21 +981,22 @@ public class UserScopedDb : LocalDbService
     /// After inserting, trims the table to keep only the last <see cref="MaxRecentPosts"/> entries.
     /// </summary>
     public async Task StoreRecentPostAsync(string noteId, string actorUri, string? actorName,
-        string? actorAvatar, string? content, string? summary, string? url, string? publishedUtc)
+        string? actorAvatar, string? content, string? summary, string? url, string? mediaUrls, string? publishedUtc)
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
 
         using var upsert = connection.CreateCommand();
         upsert.CommandText = @"
-            INSERT INTO RecentPosts (NoteId, ActorUri, ActorName, ActorAvatar, Content, Summary, Url, PublishedUtc, BoostedUtc)
-            VALUES (@NoteId, @ActorUri, @ActorName, @ActorAvatar, @Content, @Summary, @Url, @PublishedUtc, CURRENT_TIMESTAMP)
+            INSERT INTO RecentPosts (NoteId, ActorUri, ActorName, ActorAvatar, Content, Summary, Url, MediaUrls, PublishedUtc, BoostedUtc)
+            VALUES (@NoteId, @ActorUri, @ActorName, @ActorAvatar, @Content, @Summary, @Url, @MediaUrls, @PublishedUtc, CURRENT_TIMESTAMP)
             ON CONFLICT(NoteId) DO UPDATE SET
                 ActorName   = @ActorName,
                 ActorAvatar = @ActorAvatar,
                 Content     = @Content,
                 Summary     = @Summary,
                 Url         = @Url,
+                MediaUrls   = @MediaUrls,
                 PublishedUtc = @PublishedUtc,
                 BoostedUtc  = CURRENT_TIMESTAMP;
         ";
@@ -996,6 +1008,7 @@ public class UserScopedDb : LocalDbService
         upsert.Parameters.AddWithValue("@Content", (object?)content ?? DBNull.Value);
         upsert.Parameters.AddWithValue("@Summary", (object?)summary ?? DBNull.Value);
         upsert.Parameters.AddWithValue("@Url", (object?)url ?? DBNull.Value);
+        upsert.Parameters.AddWithValue("@MediaUrls", (object?)mediaUrls ?? DBNull.Value);
         upsert.Parameters.AddWithValue("@PublishedUtc", (object?)publishedUtc ?? DBNull.Value);
 
         await upsert.ExecuteNonQueryAsync();
@@ -1023,7 +1036,7 @@ public class UserScopedDb : LocalDbService
 
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            SELECT Id, NoteId, ActorUri, ActorName, ActorAvatar, Content, Summary, Url, PublishedUtc, BoostedUtc
+            SELECT Id, NoteId, ActorUri, ActorName, ActorAvatar, Content, Summary, Url, MediaUrls, PublishedUtc, BoostedUtc
             FROM RecentPosts
             ORDER BY BoostedUtc DESC
             LIMIT @Limit;
@@ -1043,8 +1056,9 @@ public class UserScopedDb : LocalDbService
                 Content = reader.IsDBNull(5) ? null : reader.GetString(5),
                 Summary = reader.IsDBNull(6) ? null : reader.GetString(6),
                 Url = reader.IsDBNull(7) ? null : reader.GetString(7),
-                PublishedUtc = reader.IsDBNull(8) ? null : reader.GetString(8),
-                BoostedUtc = reader.GetString(9)
+                MediaUrls = reader.IsDBNull(8) ? null : reader.GetString(8),
+                PublishedUtc = reader.IsDBNull(9) ? null : reader.GetString(9),
+                BoostedUtc = reader.GetString(10)
             });
         }
 

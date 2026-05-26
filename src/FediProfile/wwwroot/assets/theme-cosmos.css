@@ -453,6 +453,10 @@ h2::after {
   min-width: 70px;
 }
 
+.rp-body {
+  flex: 1;
+}
+
 .rp-date {
   font-size: 0.72rem;
   color: var(--muted);

@@ -1,3 +1,6 @@
+// ...existing code...
+
+
 namespace FediProfile.Services;
 
 using System.Data.SQLite;
@@ -119,6 +122,7 @@ public class DomainScopedDb : LocalDbService
                 DisplayName TEXT,
                 MastodonUser TEXT NOT NULL,
                 MastodonServer TEXT NOT NULL,
+                IsAdmin INTEGER NOT NULL DEFAULT 0,
                 CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 DeletedUtc TEXT
@@ -135,15 +139,16 @@ public class DomainScopedDb : LocalDbService
                 ActorBio TEXT,
                 ActorAvatarUrl TEXT,
                 InstanceName TEXT,
+                LandingMarkdown TEXT,
                 UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
                 AdminMastodonUser TEXT,
                 AdminMastodonDomain TEXT,
-                RootUserId INTEGER,
+                JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org',
                 CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
-            INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme)
-            VALUES (1, 'profile', 'theme-classic.css');
+            INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme, JoinMastodonUrl)
+            VALUES (1, 'profile', 'theme-classic.css', 'https://joinmastodon.org');
         ";
         command.ExecuteNonQuery();
     }
@@ -200,10 +205,10 @@ public class DomainScopedDb : LocalDbService
                         ActorBio TEXT,
                         ActorAvatarUrl TEXT,
                         InstanceName TEXT,
+                        LandingMarkdown TEXT,
                         UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
                         AdminMastodonUser TEXT,
                         AdminMastodonDomain TEXT,
-                        RootUserId INTEGER,
                         CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
@@ -214,6 +219,14 @@ public class DomainScopedDb : LocalDbService
             }
 
             var settingsColumns = GetTableColumns(connection, "Settings");
+            var usersColumns = GetTableColumns(connection, "Users");
+
+            if (!settingsColumns.Contains("JoinMastodonUrl"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org';";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
 
             if (!settingsColumns.Contains("AdminMastodonUser"))
             {
@@ -229,6 +242,13 @@ public class DomainScopedDb : LocalDbService
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
+            if (!settingsColumns.Contains("LandingMarkdown"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN LandingMarkdown TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
             if (!settingsColumns.Contains("AdminMastodonDomain"))
             {
                 using var alterCommand = connection.CreateCommand();
@@ -236,12 +256,14 @@ public class DomainScopedDb : LocalDbService
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
-            if (!settingsColumns.Contains("RootUserId"))
+            if (!usersColumns.Contains("IsAdmin"))
             {
                 using var alterCommand = connection.CreateCommand();
-                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN RootUserId INTEGER;";
+                alterCommand.CommandText = "ALTER TABLE Users ADD COLUMN IsAdmin INTEGER NOT NULL DEFAULT 0;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
+
+            EnsureAtLeastOneAdmin(connection);
 
             // Ensure the Following index table exists
             EnsureFollowingTable();
@@ -344,6 +366,35 @@ public class DomainScopedDb : LocalDbService
             var displayName = reader.IsDBNull(2) ? null : reader.GetString(2);
             var createdUtc = reader.GetString(3);
             users.Add((id, slug, displayName, createdUtc));
+        }
+
+        return users;
+    }
+
+    public async Task<List<(int Id, string Slug, string? DisplayName, string CreatedUtc, bool IsAdmin)>> GetAllUsersWithAdminAsync()
+    {
+        var users = new List<(int, string, string?, string, bool)>();
+
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT Id, Slug, DisplayName, CreatedUtc, IsAdmin
+            FROM Users
+            WHERE DeletedUtc IS NULL
+            ORDER BY CreatedUtc DESC
+        ";
+
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var id = reader.GetInt32(0);
+            var slug = reader.GetString(1);
+            var displayName = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var createdUtc = reader.GetString(3);
+            var isAdmin = !reader.IsDBNull(4) && reader.GetInt64(4) == 1;
+            users.Add((id, slug, displayName, createdUtc, isAdmin));
         }
 
         return users;
@@ -479,14 +530,99 @@ public class DomainScopedDb : LocalDbService
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<int?> GetRootUserIdAsync()
+    public async Task<string?> GetLandingMarkdownAsync()
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
         await EnsureSettingsRowAsync(connection);
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT RootUserId FROM Settings WHERE Id = 1";
+        command.CommandText = "SELECT LandingMarkdown FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        var markdown = Convert.ToString(result);
+        return string.IsNullOrWhiteSpace(markdown) ? null : markdown;
+    }
+
+    public async Task<string?> GetStoredJoinMastodonUrlAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT JoinMastodonUrl FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        var url = Convert.ToString(result)?.Trim();
+        return string.IsNullOrWhiteSpace(url) ? null : url;
+    }
+
+    public async Task<string> GetJoinMastodonUrlAsync()
+    {
+        var url = await GetStoredJoinMastodonUrlAsync();
+        return string.IsNullOrWhiteSpace(url) ? "https://joinmastodon.org" : url;
+    }
+
+    public async Task SetJoinMastodonUrlAsync(string? url)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET JoinMastodonUrl = @JoinMastodonUrl,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue(
+            "@JoinMastodonUrl",
+            string.IsNullOrWhiteSpace(url) ? "https://joinmastodon.org" : url.Trim());
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task SetLandingMarkdownAsync(string? markdown)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET LandingMarkdown = @LandingMarkdown,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue(
+            "@LandingMarkdown",
+            string.IsNullOrWhiteSpace(markdown) ? DBNull.Value : markdown.Trim());
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<int?> GetRootUserIdAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT Id
+            FROM Users
+            WHERE IsAdmin = 1 AND DeletedUtc IS NULL
+            ORDER BY CreatedUtc ASC, Id ASC
+            LIMIT 1
+        ";
 
         var result = await command.ExecuteScalarAsync();
         if (result == null || result == DBNull.Value)
@@ -499,14 +635,30 @@ public class DomainScopedDb : LocalDbService
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
-        await EnsureSettingsRowAsync(connection);
+
+        using var countAdminsCommand = connection.CreateCommand();
+        countAdminsCommand.CommandText = "SELECT COUNT(1) FROM Users WHERE IsAdmin = 1 AND DeletedUtc IS NULL";
+        var adminCount = Convert.ToInt32(await countAdminsCommand.ExecuteScalarAsync() ?? 0);
+
+        if (adminCount > 0)
+        {
+            using var alreadyAdminCommand = connection.CreateCommand();
+            alreadyAdminCommand.CommandText = @"
+                SELECT COUNT(1)
+                FROM Users
+                WHERE Id = @UserId AND IsAdmin = 1 AND DeletedUtc IS NULL
+            ";
+            alreadyAdminCommand.Parameters.AddWithValue("@UserId", userId);
+            var isAlreadyAdmin = Convert.ToInt32(await alreadyAdminCommand.ExecuteScalarAsync() ?? 0) > 0;
+            return isAlreadyAdmin;
+        }
 
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            UPDATE Settings
-            SET RootUserId = @UserId,
+            UPDATE Users
+            SET IsAdmin = 1,
                 UpdatedUtc = CURRENT_TIMESTAMP
-            WHERE Id = 1 AND RootUserId IS NULL
+            WHERE Id = @UserId AND DeletedUtc IS NULL
         ";
         command.Parameters.AddWithValue("@UserId", userId);
 
@@ -518,14 +670,13 @@ public class DomainScopedDb : LocalDbService
     {
         using var connection = GetConnection();
         await connection.OpenAsync();
-        await EnsureSettingsRowAsync(connection);
 
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            UPDATE Settings
-            SET RootUserId = @UserId,
+            UPDATE Users
+            SET IsAdmin = 1,
                 UpdatedUtc = CURRENT_TIMESTAMP
-            WHERE Id = 1
+            WHERE Id = @UserId AND DeletedUtc IS NULL
         ";
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
@@ -533,10 +684,6 @@ public class DomainScopedDb : LocalDbService
 
     public async Task<(int Id, string Slug, string? DisplayName, string? MastodonUser, string? MastodonServer)?> GetRootUserAsync()
     {
-        var rootUserId = await GetRootUserIdAsync();
-        if (!rootUserId.HasValue)
-            return null;
-
         using var connection = GetConnection();
         await connection.OpenAsync();
 
@@ -544,9 +691,10 @@ public class DomainScopedDb : LocalDbService
         command.CommandText = @"
             SELECT Id, Slug, DisplayName, MastodonUser, MastodonServer
             FROM Users
-            WHERE Id = @Id AND DeletedUtc IS NULL
+            WHERE IsAdmin = 1 AND DeletedUtc IS NULL
+            ORDER BY CreatedUtc ASC, Id ASC
+            LIMIT 1
         ";
-        command.Parameters.AddWithValue("@Id", rootUserId.Value);
 
         using var reader = await command.ExecuteReaderAsync();
         if (await reader.ReadAsync())
@@ -565,8 +713,87 @@ public class DomainScopedDb : LocalDbService
 
     public async Task<bool> IsRootUserAsync(int userId)
     {
-        var rootUserId = await GetRootUserIdAsync();
-        return rootUserId.HasValue && rootUserId.Value == userId;
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT COUNT(1)
+            FROM Users
+            WHERE Id = @UserId AND IsAdmin = 1 AND DeletedUtc IS NULL
+        ";
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync() ?? 0) > 0;
+    }
+
+    public async Task<int> GetAdminUserCountAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(1) FROM Users WHERE IsAdmin = 1 AND DeletedUtc IS NULL";
+        return Convert.ToInt32(await command.ExecuteScalarAsync() ?? 0);
+    }
+
+    public async Task<(bool Success, string? Error)> SetUserAdminAsync(int targetUserId, bool makeAdmin, int actingUserId)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var existsCommand = connection.CreateCommand();
+        existsCommand.CommandText = @"
+            SELECT COUNT(1)
+            FROM Users
+            WHERE Id = @UserId AND DeletedUtc IS NULL
+        ";
+        existsCommand.Parameters.AddWithValue("@UserId", targetUserId);
+        if (Convert.ToInt32(await existsCommand.ExecuteScalarAsync() ?? 0) == 0)
+            return (false, "User not found.");
+
+        if (makeAdmin)
+        {
+            using var makeCommand = connection.CreateCommand();
+            makeCommand.CommandText = @"
+                UPDATE Users
+                SET IsAdmin = 1,
+                    UpdatedUtc = CURRENT_TIMESTAMP
+                WHERE Id = @UserId AND DeletedUtc IS NULL
+            ";
+            makeCommand.Parameters.AddWithValue("@UserId", targetUserId);
+            await makeCommand.ExecuteNonQueryAsync();
+            return (true, null);
+        }
+
+        if (targetUserId == actingUserId)
+            return (false, "You cannot remove your own admin access.");
+
+        using var isAdminCommand = connection.CreateCommand();
+        isAdminCommand.CommandText = @"
+            SELECT COUNT(1)
+            FROM Users
+            WHERE Id = @UserId AND IsAdmin = 1 AND DeletedUtc IS NULL
+        ";
+        isAdminCommand.Parameters.AddWithValue("@UserId", targetUserId);
+        if (Convert.ToInt32(await isAdminCommand.ExecuteScalarAsync() ?? 0) == 0)
+            return (true, null);
+
+        var adminCount = await GetAdminUserCountAsync();
+        if (adminCount <= 1)
+            return (false, "At least one admin must remain.");
+
+        using var removeCommand = connection.CreateCommand();
+        removeCommand.CommandText = @"
+            UPDATE Users
+            SET IsAdmin = 0,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = @UserId AND DeletedUtc IS NULL
+        ";
+        removeCommand.Parameters.AddWithValue("@UserId", targetUserId);
+        await removeCommand.ExecuteNonQueryAsync();
+
+        return (true, null);
     }
 
     public async Task<bool> CanAcceptRegistrationsAsync(bool singleUserInstance, bool registrationOpenConfigured)
@@ -642,6 +869,14 @@ public class DomainScopedDb : LocalDbService
         using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = "DELETE FROM Following WHERE UserSlug = @Slug;";
+            cmd.Parameters.AddWithValue("@Slug", slug);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Delete verified URIs for this user
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM VerifiedUris WHERE UserSlug = @Slug;";
             cmd.Parameters.AddWithValue("@Slug", slug);
             await cmd.ExecuteNonQueryAsync();
         }
@@ -1027,6 +1262,54 @@ public class DomainScopedDb : LocalDbService
         return await IsRootUserAsync(user.Value.Id);
     }
 
+    private void EnsureAtLeastOneAdmin(SQLiteConnection connection)
+    {
+        try
+        {
+            using var countAdmins = connection.CreateCommand();
+            countAdmins.CommandText = "SELECT COUNT(1) FROM Users WHERE IsAdmin = 1 AND DeletedUtc IS NULL";
+            var adminCount = Convert.ToInt32(countAdmins.ExecuteScalar() ?? 0);
+            if (adminCount > 0)
+                return;
+
+            using var promoteRoot = connection.CreateCommand();
+            promoteRoot.CommandText = @"
+                UPDATE Users
+                SET IsAdmin = 1,
+                    UpdatedUtc = CURRENT_TIMESTAMP
+                WHERE Id = (
+                    SELECT Id
+                    FROM Users
+                    WHERE Slug = 'root' AND DeletedUtc IS NULL
+                    ORDER BY CreatedUtc ASC, Id ASC
+                    LIMIT 1
+                )
+            ";
+            var promoted = promoteRoot.ExecuteNonQuery();
+            if (promoted > 0)
+                return;
+
+            using var promoteFirst = connection.CreateCommand();
+            promoteFirst.CommandText = @"
+                UPDATE Users
+                SET IsAdmin = 1,
+                    UpdatedUtc = CURRENT_TIMESTAMP
+                WHERE Id = (
+                    SELECT Id
+                    FROM Users
+                    WHERE DeletedUtc IS NULL
+                    ORDER BY CreatedUtc ASC, Id ASC
+                    LIMIT 1
+                )
+            ";
+            promoteFirst.ExecuteNonQuery();
+        }
+        catch
+        {
+            // best-effort safeguard; do not block startup
+        }
+    }
+
     // ===== FOLLOWING INDEX METHODS =====
 
     /// <summary>
@@ -1166,6 +1449,7 @@ public class DomainScopedDb : LocalDbService
     /// </summary>
     public async Task AddVerifiedUriAsync(string userSlug, string uri)
     {
+        Console.WriteLine("[Information] Adding verified URI for user '{0}': {1}", userSlug, uri);
         using var connection = GetConnection();
         await connection.OpenAsync();
         using var cmd = connection.CreateCommand();

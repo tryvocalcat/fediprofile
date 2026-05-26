@@ -1,3 +1,4 @@
+@inject FediProfile.Services.DomainScopedDb DomainDb
 @page "/login"
 @using Microsoft.AspNetCore.Components
 @using System.Security.Claims
@@ -33,7 +34,7 @@
 
         <p class="muted small">You'll be redirected to your server to authorize.</p>
 
-        <p class="muted small">Not on the Fediverse? <a href="https://joinmastodon.org" target="_blank" rel="noopener noreferrer">Join here</a></p>
+        <p class="muted small">Not on the Fediverse? <a href="@_joinMastodonUrl" target="_blank" rel="noopener noreferrer">Join here</a></p>
 
         @if (_githubEnabled || _linkedInEnabled)
         {
@@ -65,9 +66,11 @@
     private string? _refParam;
     private bool _githubEnabled;
     private bool _linkedInEnabled;
+    private string? _joinMastodonUrl;
 
     protected override async Task OnInitializedAsync()
     {
+        _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
         // Check which OAuth providers are configured
         _githubEnabled = !string.IsNullOrEmpty(Configuration["Authentication:GitHub:ClientId"])
                       && !string.IsNullOrEmpty(Configuration["Authentication:GitHub:ClientSecret"]);

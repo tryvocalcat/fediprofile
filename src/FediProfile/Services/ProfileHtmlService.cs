@@ -26,7 +26,7 @@ public class ProfileHtmlService
     /// (Re)generates the static profile HTML for the given user.
     /// Reads data from the user's database and injects it into profile.html.
     /// </summary>
-    public async Task GenerateAsync(UserScopedDb userDb, string userSlug, string baseDomain, string domain)
+    public async Task GenerateAsync(UserScopedDb userDb, string userSlug, string baseDomain, string domain, string? joinMastodonUrl = null)
     {
         try
         {
@@ -80,6 +80,10 @@ public class ProfileHtmlService
 
             // Inject everything before </head>
             html = html.Replace("</head>", head.ToString() + "  </head>");
+
+            // Replace Join Mastodon URL placeholder
+            var resolvedJoinUrl = string.IsNullOrWhiteSpace(joinMastodonUrl) ? "https://joinmastodon.org" : joinMastodonUrl;
+            html = html.Replace("{{JOIN_MASTODON_URL}}", WebUtility.HtmlEncode(resolvedJoinUrl));
 
             // Write the generated file
             var profilesDir = Path.Combine(_env.WebRootPath, "profiles");

@@ -50,7 +50,7 @@
       <div class="info-section" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div>
           <p class="fedi-handle">Follow me in the fediverse: <strong data-fedi-address></strong> <button class="copy-fedi-btn" title="Copy to clipboard"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
-          <p class="fedi-note">Not in the fediverse? <a href="https://joinmastodon.org" target="_blank">Join now</a></p>
+          <p class="fedi-note">Not in the fediverse? <a href="{{JOIN_MASTODON_URL}}" target="_blank">Join now</a></p>
         </div>
         <button id="share-profile" class="share-btn" title="Share this profile">
           <svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
@@ -58,10 +58,14 @@
         </button>
       </div>
 
-      <div class="info-section">
-        <p>Powered by <a href="/">FediProfile</a> &mdash; <a href="/login">Create your own</a></p>
+      <div class="info-section" style="text-align:center">
+        <p>Powered by <a href="https://hub.vocalcat.com/" target="_blank" rel="noopener noreferrer">FediProfile</a></p>
       </div>
     </main>
+
+    <div style="text-align:center;padding:1rem 0;opacity:0.7">
+      <p class="muted small">Want your own profile? <a href="/login">Create yours here</a></p>
+    </div>
 
     <!-- QR Code Modal -->
     <div id="qr-modal" class="qr-modal-overlay" style="display:none">

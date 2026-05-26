@@ -324,7 +324,7 @@ public class JobProcessor
         var isReply = inboxMsg.IsReply();
 
         // Extract post metadata once from the Note object (shared across all users)
-        var (noteId, noteContent, noteSummary, noteUrl, notePublished, noteActorName, noteActorAvatar) = ExtractNoteMetadata(inboxMsg);
+        var (noteId, noteContent, noteSummary, noteUrl, noteMediaUrls, notePublished, noteActorName, noteActorAvatar) = ExtractNoteMetadata(inboxMsg);
 
         foreach (var userSlug in localFollowers)
         {
@@ -361,6 +361,7 @@ public class JobProcessor
                             content: noteContent,
                             summary: noteSummary,
                             url: noteUrl,
+                                mediaUrls: noteMediaUrls,
                             publishedUtc: notePublished);
                     }
                     catch (Exception storeEx)
@@ -380,10 +381,10 @@ public class JobProcessor
     /// <summary>
     /// Extracts metadata from a Create activity's inner Note object for storage in RecentPosts.
     /// </summary>
-    private static (string? NoteId, string? Content, string? Summary, string? Url, string? Published, string? ActorName, string? ActorAvatar) ExtractNoteMetadata(InboxMessage inboxMsg)
+    private static (string? NoteId, string? Content, string? Summary, string? Url, string? MediaUrls, string? Published, string? ActorName, string? ActorAvatar) ExtractNoteMetadata(InboxMessage inboxMsg)
     {
         if (inboxMsg.Object is not JsonElement obj || obj.ValueKind != JsonValueKind.Object)
-            return (inboxMsg.Id, null, null, null, null, null, null);
+            return (inboxMsg.Id, null, null, null, null, null, null, null);
 
         var noteId = obj.TryGetProperty("id", out var idEl) ? idEl.GetString() : inboxMsg.Id;
         var content = obj.TryGetProperty("content", out var contentEl) ? contentEl.GetString() : null;
@@ -399,6 +400,9 @@ public class JobProcessor
                 url = hrefEl.GetString();
         }
         url ??= noteId; // fallback to the Note ID which is typically a URL
+
+        var mediaUrls = ExtractAttachmentUrls(obj);
+        var mediaCsv = mediaUrls.Count > 0 ? string.Join(",", mediaUrls) : null;
 
         var published = obj.TryGetProperty("published", out var pubEl) ? pubEl.GetString() : null;
 
@@ -424,7 +428,107 @@ public class JobProcessor
             }
         }
 
-        return (noteId, content, summary, url, published, actorName, actorAvatar);
+        return (noteId, content, summary, url, mediaCsv, published, actorName, actorAvatar);
+    }
+
+    /// <summary>
+    /// Extracts attachment URLs from ActivityPub Note. Accepts strings and objects with a url/href field.
+    /// </summary>
+    private static List<string> ExtractAttachmentUrls(JsonElement noteObject)
+    {
+        var urls = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!noteObject.TryGetProperty("attachment", out var attachmentEl))
+            return urls;
+
+        if (attachmentEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in attachmentEl.EnumerateArray())
+            {
+                foreach (var attachmentUrl in ExtractUrlsFromAttachmentElement(item))
+                {
+                    if (seen.Add(attachmentUrl))
+                        urls.Add(attachmentUrl);
+                }
+            }
+        }
+        else
+        {
+            foreach (var attachmentUrl in ExtractUrlsFromAttachmentElement(attachmentEl))
+            {
+                if (seen.Add(attachmentUrl))
+                    urls.Add(attachmentUrl);
+            }
+        }
+
+        return urls;
+    }
+
+    private static IEnumerable<string> ExtractUrlsFromAttachmentElement(JsonElement attachment)
+    {
+        if (attachment.ValueKind == JsonValueKind.String)
+        {
+            var value = attachment.GetString();
+            if (IsHttpUrl(value))
+                yield return value!;
+            yield break;
+        }
+
+        if (attachment.ValueKind != JsonValueKind.Object)
+            yield break;
+
+        if (attachment.TryGetProperty("url", out var urlEl))
+        {
+            foreach (var value in ExtractUrlsFromUrlValue(urlEl))
+                yield return value;
+        }
+        else if (attachment.TryGetProperty("href", out var hrefEl))
+        {
+            var value = hrefEl.GetString();
+            if (IsHttpUrl(value))
+                yield return value!;
+        }
+    }
+
+    private static IEnumerable<string> ExtractUrlsFromUrlValue(JsonElement urlEl)
+    {
+        if (urlEl.ValueKind == JsonValueKind.String)
+        {
+            var value = urlEl.GetString();
+            if (IsHttpUrl(value))
+                yield return value!;
+            yield break;
+        }
+
+        if (urlEl.ValueKind == JsonValueKind.Object)
+        {
+            if (urlEl.TryGetProperty("href", out var hrefEl))
+            {
+                var href = hrefEl.GetString();
+                if (IsHttpUrl(href))
+                    yield return href!;
+            }
+            yield break;
+        }
+
+        if (urlEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in urlEl.EnumerateArray())
+            {
+                foreach (var value in ExtractUrlsFromUrlValue(item))
+                    yield return value;
+            }
+        }
+    }
+
+    private static bool IsHttpUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
     /// <summary>

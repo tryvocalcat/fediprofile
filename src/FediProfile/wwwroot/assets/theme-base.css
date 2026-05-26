@@ -418,6 +418,10 @@ h2 {
   margin-bottom: 8px;
 }
 
+.rp-body {
+  min-width: 0;
+}
+
 .rp-avatar {
   width: 28px;
   height: 28px;
@@ -455,6 +459,19 @@ h2 {
   word-break: break-word;
 }
 
+.rp-media-wrap {
+  margin: 0 0 8px;
+}
+
+.rp-media {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+}
+
 .rp-content p { margin: 0 0 0.4em; }
 .rp-content p:last-child { margin-bottom: 0; }
 .rp-content a { color: var(--accent); }
@@ -471,6 +488,7 @@ h2 {
 @media (max-width: 480px) {
   .rp-card { padding: 12px; }
   .rp-content { font-size: 0.82rem; }
+  .rp-media { max-height: 140px; }
 }
 
 .info-section {

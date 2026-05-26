@@ -432,7 +432,7 @@
                 <!-- Fedi handle info -->
                 <div class="pe-info-section">
                     <p class="muted">Follow me in the fediverse: @@<strong>@_currentUserSlug@@@(_currentDomain)</strong></p>
-                    <p class="muted" style="font-size:0.82rem">Not in the fediverse? <a href="https://joinmastodon.org" target="_blank" style="text-decoration:underline">Join now </a></p>
+                    <p class="muted" style="font-size:0.82rem">Not in the fediverse? <a href="@_joinMastodonUrl" target="_blank" style="text-decoration:underline">Join now </a></p>
                 </div>
 
                 <!-- Footer: Save -->
@@ -757,7 +757,7 @@
                             Your recent posts will then appear here and on your public profile automatically.
                         </p>
                         <p class="muted" style="font-size:0.8rem;margin:0">Head to the <strong>Links</strong> section above to add one.</p>
-                        <p class="muted" style="font-size:0.8rem;margin:0.5rem 0 0">Unsure where to start? <a href="https://joinmastodon.org" target="_blank" rel="noopener">Join Mastodon ↗</a></p>
+                        <p class="muted" style="font-size:0.8rem;margin:0.5rem 0 0">Unsure where to start? <a href="@_joinMastodonUrl" target="_blank" rel="noopener">Join Mastodon ↗</a></p>
                     </div>
                 }
                 else
@@ -1218,8 +1218,11 @@
         List<PendingBadgeAssertion> Assertions,
         List<string> MismatchedRecipients);
 
+    private string? _joinMastodonUrl;
+
     protected override async Task OnInitializedAsync()
     {
+        _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
         // Parse integration ref from query string
         var navUri = new Uri(Navigation.Uri);
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(navUri.Query);
@@ -2486,7 +2489,7 @@
             var scheme = httpContext?.Request.Scheme ?? "https";
             var fullDomain = httpContext?.Request.Host.ToString() ?? _currentDomain ?? "localhost";
             var baseDomain = $"{scheme}://{fullDomain}";
-            await ProfileHtml.GenerateAsync(_currentUserDb, _currentUserSlug, baseDomain, fullDomain);
+            await ProfileHtml.GenerateAsync(_currentUserDb, _currentUserSlug, baseDomain, fullDomain, _joinMastodonUrl);
             var verifiedUriList = (_verifiedUris ?? await DomainDb.GetVerifiedUrisAsync(_currentUserSlug)).Select(v => v.Uri).ToList();
             await ActorService.GenerateActorJsonAsync(_currentUserDb, _currentUserSlug, baseDomain, fullDomain, verifiedUriList);
         }
