@@ -121,7 +121,7 @@
                     </div>
                     <div class="pe-avatar-controls">
                         <input type="text" @bind="_profileAvatarUrl" placeholder="Avatar image URL..." class="form-control" />
-                        <label class="pe-upload-label" style="display: none;">
+                        <label class="pe-upload-label">
                             📷 Upload
                             <InputFile OnChange="HandleAvatarUpload" accept="image/*" style="display:none" />
                         </label>
@@ -1106,20 +1106,34 @@
     // Platform icon definitions
     private static readonly Dictionary<string, (string Name, string Path)> _platformIcons = new()
     {
+        ["badge"] = ("Badge", "/assets/icons/badge.svg"),
+        ["blog"] = ("Blog", "/assets/icons/blog.svg"),
         ["bluesky"] = ("Bluesky", "/assets/icons/bluesky.svg"),
+        ["code"] = ("Code", "/assets/icons/code.svg"),
+        ["community"] = ("Community", "/assets/icons/community.svg"),
+        ["donate"] = ("Donate", "/assets/icons/donate.svg"),
+        ["email"] = ("Email", "/assets/icons/email.svg"),
         ["fediverse"] = ("Fediverse", "/assets/icons/fediverse.svg"),
         ["github"] = ("GitHub", "/assets/icons/github.svg"),
         ["instagram"] = ("Instagram", "/assets/icons/instagram.svg"),
+        ["labs"] = ("Labs", "/assets/icons/labs.svg"),
         ["lemmy"] = ("Lemmy", "/assets/icons/lemmy.svg"),
         ["linkedin"] = ("LinkedIn", "/assets/icons/linkedin.svg"),
         ["loops"] = ("Loops", "/assets/icons/loops.svg"),
         ["mastodon"] = ("Mastodon", "/assets/icons/mastodon.svg"),
         ["matrix"] = ("Matrix", "/assets/icons/matrix.svg"),
+        ["music"] = ("Music", "/assets/icons/music.svg"),
         ["peertube"] = ("PeerTube", "/assets/icons/peertube.svg"),
         ["pixelfed"] = ("Pixelfed", "/assets/icons/pixelfed.svg"),
+        ["podcast"] = ("Podcast", "/assets/icons/podcast.svg"),
+        ["portfolio"] = ("Portfolio", "/assets/icons/portfolio.svg"),
+        ["profile"] = ("Profile", "/assets/icons/profile.svg"),
         ["rss"] = ("RSS", "/assets/icons/rss.svg"),
+        ["support"] = ("Support", "/assets/icons/support.svg"),
         ["telegram"] = ("Telegram", "/assets/icons/telegram.svg"),
         ["threads"] = ("Threads", "/assets/icons/threads.svg"),
+        ["verified"] = ("Verified", "/assets/icons/verified.svg"),
+        ["website"] = ("Website", "/assets/icons/website.svg"),
         ["youtube"] = ("YouTube", "/assets/icons/youtube.svg"),
     };
 
@@ -1439,7 +1453,15 @@
             await stream.CopyToAsync(fs);
 
             _profileAvatarUrl = $"/uploads/{_currentUserSlug}/{fileName}";
-            _profileMessage = "Avatar uploaded! Remember to save your profile.";
+
+            // Persist the new avatar URL to the database immediately
+            if (_currentUserDb != null)
+            {
+                await _currentUserDb.UpsertSettingsAsync(actorAvatarUrl: _profileAvatarUrl);
+                await RegenerateStaticProfileAsync();
+            }
+
+            _profileMessage = "Avatar uploaded and saved!";
             _profileIsError = false;
         }
         catch (Exception ex)

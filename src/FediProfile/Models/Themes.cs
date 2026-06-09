@@ -38,6 +38,7 @@ public static class Themes
        
         new("theme-mahodev.css",      "GreenTypo"),
         new("theme-baddie.css",       "Baddie"),
+        new("theme-vocalcat.css",     "Metro"),
     };
 
     /// <summary>
