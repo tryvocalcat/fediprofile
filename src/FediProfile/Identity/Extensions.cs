@@ -76,10 +76,11 @@ internal static class LoginLogoutEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/register");
 
-        group.MapGet("/oauth/{server}", async (string server, string? returnUrl, string? @ref, IConfiguration config, DomainScopedDb domainDb) =>
+        group.MapGet("/oauth/{server}", async (string server, string? returnUrl, string? @ref, DomainConfigurationResolver domainConfigurationResolver, DomainScopedDb domainDb) =>
         {
-            var singleUserInstance = config.GetValue<bool>("SingleUserInstance", false);
-            var registrationOpenConfigured = config.GetValue<bool>("RegistrationOpen", true);
+            var registrationSettings = domainConfigurationResolver.GetRegistrationSettings(domainDb.GetDomain());
+            var singleUserInstance = registrationSettings.SingleUserInstance;
+            var registrationOpenConfigured = registrationSettings.RegistrationOpen;
             var canRegister = await domainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
             if (!canRegister)
             {

@@ -7,6 +7,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject DomainScopedDb DomainDb
 @inject IConfiguration Configuration
+@inject DomainConfigurationResolver DomainConfigurationResolver
 
 <section class="login-shell">
     <div class="login-card">
@@ -62,8 +63,9 @@
             }
             else
             {
-                var singleUserInstance = Configuration.GetValue<bool>("SingleUserInstance", false);
-                var registrationOpenConfigured = Configuration.GetValue<bool>("RegistrationOpen", true);
+                var registrationSettings = DomainConfigurationResolver.GetRegistrationSettings(DomainDb.GetDomain());
+                var singleUserInstance = registrationSettings.SingleUserInstance;
+                var registrationOpenConfigured = registrationSettings.RegistrationOpen;
                 var canRegister = await DomainDb.CanAcceptRegistrationsAsync(singleUserInstance, registrationOpenConfigured);
 
                 if (!canRegister)

@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS RecentPosts (
     Content TEXT,
     Summary TEXT,
     Url TEXT,
+    MediaUrls TEXT,
     PublishedUtc TEXT,
     BoostedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

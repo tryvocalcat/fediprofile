@@ -8,7 +8,7 @@
 
 <div class="app-shell">
     <header class="topbar">
-        <a class="brand" href="/">FediProfile</a>
+        <a class="brand" href="/">@_instanceName</a>
         <nav class="topbar-nav">
             @if (_integrationRef != null)
             {
@@ -33,9 +33,12 @@
     private string? _signedInAs;
     private FediProfile.Core.IntegrationRef? _integrationRef;
     private string? _backToUrl;
+    private string _instanceName = "FediProfile";
 
     protected override async Task OnInitializedAsync()
     {
+        _instanceName = await DomainDb.GetInstanceNameAsync();
+
         // Parse integration ref from query string
         var uri = new Uri(NavigationManager.Uri);
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);

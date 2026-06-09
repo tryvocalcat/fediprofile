@@ -2,6 +2,7 @@
 
 // Derive the user base path from the current URL (e.g. "/john" -> "/john")
 const basePath = window.location.pathname.replace(/\/$/, '');
+let activeThemeName = '';
 
 async function loadProfile() {
   try {
@@ -44,6 +45,9 @@ async function loadProfile() {
 
     // Fetch and render recent posts
     await loadRecentPosts();
+
+    // Apply optional theme-specific behavior after all sections are populated.
+    initThemeEnhancements();
   } catch (error) {
     console.error(error);
     document.getElementById('profile-container').innerHTML = '<p>Error loading profile.</p>';
@@ -153,31 +157,41 @@ async function loadBadges() {
     const badges = await response.json();
     if (!badges || badges.length === 0) return;
 
-    const section = document.getElementById('badges-section');
-    const container = document.getElementById('badges-container');
+    const { section, container } = ensureBadgesSection();
     if (!section || !container) return;
 
     let html = '';
     badges.forEach(badge => {
-      const title = escapeHtml(badge.title || 'Badge');
+      const rawTitle = badge.title || 'Badge';
+      const title = escapeHtml(rawTitle);
       const image = badge.image;
-      const description = badge.description ? escapeHtml(badge.description) : '';
-      const issuedOn = badge.issuedOn ? escapeHtml(badge.issuedOn) : '';
+      const rawDescription = badge.description || '';
+      const rawIssuedOn = badge.issuedOn || '';
+      const description = rawDescription ? escapeHtml(rawDescription) : '';
+      const issuedOn = rawIssuedOn ? escapeHtml(rawIssuedOn) : '';
       const noteId = badge.noteId || '';
+      const badgeSummary = escapeHtml(buildBadgeSummary(rawTitle, rawDescription, rawIssuedOn, !!noteId));
 
       const imgHtml = image
         ? `<img src="${escapeHtml(image)}" alt="${title}" class="badge-image" />`
         : `<div class="badge-image badge-placeholder">\uD83C\uDFC5</div>`;
 
-      const linkOpen = noteId ? `<a href="${escapeHtml(noteId)}" target="_blank" rel="noopener" class="badge-card">` : '<div class="badge-card">';
+      const linkOpen = noteId
+        ? `<a href="${escapeHtml(noteId)}" target="_blank" rel="noopener" class="badge-card" aria-label="${badgeSummary}" title="${badgeSummary}">`
+        : `<div class="badge-card" tabindex="0" aria-label="${badgeSummary}" title="${badgeSummary}">`;
       const linkClose = noteId ? '</a>' : '</div>';
 
       html += `
         ${linkOpen}
-          ${imgHtml}
-          <div class="badge-info">
+          <span class="badge-media">
+            ${imgHtml}
+          </span>
+          <span class="badge-sr-only">${badgeSummary}</span>
+          <div class="badge-info" aria-hidden="true">
             <strong class="badge-title">${title}</strong>
-            ${issuedOn ? `<span class="badge-date">${issuedOn}</span>` : ''}
+            ${issuedOn ? `<span class="badge-date">Issued ${issuedOn}</span>` : ''}
+            ${description ? `<p class="badge-description">${description}</p>` : ''}
+            ${noteId ? '<span class="badge-link-hint">Open badge</span>' : ''}
           </div>
         ${linkClose}
       `;
@@ -190,6 +204,73 @@ async function loadBadges() {
   }
 }
 
+function buildBadgeSummary(title, description, issuedOn, hasLink) {
+  const parts = [title || 'Badge'];
+
+  if (issuedOn) {
+    parts.push('Issued ' + issuedOn);
+  }
+
+  if (description) {
+    parts.push(description);
+  }
+
+  if (hasLink) {
+    parts.push('Open badge');
+  }
+
+  return parts.join('. ');
+}
+
+function ensureBadgesSection() {
+  let section = document.getElementById('badges-section');
+  let container = document.getElementById('badges-container');
+
+  if (section) {
+    section.classList.add('badges-section');
+  }
+
+  if (container) {
+    container.className = 'badges-container';
+  }
+
+  if (section && container) {
+    return { section, container };
+  }
+
+  if (!section) {
+    section = document.createElement('div');
+    section.id = 'badges-section';
+    section.className = 'badges-section';
+    section.style.display = 'none';
+
+    const heading = document.createElement('h2');
+    heading.className = 'badges-heading';
+    heading.textContent = 'Badges';
+    section.appendChild(heading);
+  }
+
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'badges-container';
+    container.className = 'badges-container';
+    section.appendChild(container);
+  }
+
+  const recentPostsSection = document.getElementById('recent-posts-section');
+  const profileContainer = document.getElementById('profile-container');
+
+  if (recentPostsSection?.parentNode) {
+    recentPostsSection.parentNode.insertBefore(section, recentPostsSection);
+  } else if (profileContainer?.parentNode) {
+    profileContainer.parentNode.insertBefore(section, profileContainer.nextSibling);
+  } else {
+    document.body.appendChild(section);
+  }
+
+  return { section, container };
+}
+
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
@@ -200,6 +281,40 @@ function stripHtml(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || '';
+}
+
+function extractFirstImageUrl(html, baseUrl) {
+  if (!html) return '';
+
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const img = tmp.querySelector('img[src]');
+  if (!img) return '';
+
+  const src = (img.getAttribute('src') || '').trim();
+  if (!src) return '';
+
+  try {
+    const resolved = new URL(src, baseUrl || window.location.origin);
+    if (resolved.protocol === 'http:' || resolved.protocol === 'https:') {
+      return resolved.toString();
+    }
+  } catch {
+    // Ignore invalid image URLs from remote content.
+  }
+
+  return '';
+}
+
+function firstMediaUrlFromCsv(value) {
+  if (!value || typeof value !== 'string') return '';
+
+  const first = value
+    .split(',')
+    .map(v => v.trim())
+    .find(v => /^https?:\/\//i.test(v));
+
+  return first || '';
 }
 
 function truncateText(text, maxLen) {
@@ -234,6 +349,7 @@ async function loadRecentPosts() {
       const rawContent = post.content || '';
       const postUrl = post.url || '#';
       const date = formatRelativeDate(post.boostedUtc || post.publishedUtc);
+      const mediaUrl = firstMediaUrlFromCsv(post.mediaUrls) || extractFirstImageUrl(rawContent, postUrl);
 
       // Clean HTML and truncate to 300 chars
       let cleanText = stripHtml(rawContent).trim();
@@ -247,9 +363,15 @@ async function loadRecentPosts() {
       const favicon = faviconUrl(postUrl);
       const faviconHtml = favicon ? `<img src="${escapeHtml(favicon)}" alt="" class="rp-favicon" width="16" height="16" />` : '';
 
+      const mediaHtml = mediaUrl
+        ? `<div class="rp-media-wrap"><img src="${escapeHtml(mediaUrl)}" alt="Recent post image" class="rp-media" loading="lazy" decoding="async" referrerpolicy="no-referrer" /></div>`
+        : '';
+
+      const contentBody = `${mediaHtml}<div class="rp-content">${escapeHtml(displayText)}</div>`;
+
       const summary = post.summary
-        ? `<details class="rp-cw"><summary>${escapeHtml(post.summary)}</summary><div class="rp-content">${escapeHtml(displayText)}</div></details>`
-        : `<div class="rp-content">${escapeHtml(displayText)}</div>`;
+        ? `<details class="rp-cw"><summary>${escapeHtml(post.summary)}</summary>${contentBody}</details>`
+        : contentBody;
 
       html += `
         <a href="${escapeHtml(postUrl)}" target="_blank" rel="noopener" class="rp-card">
@@ -257,7 +379,7 @@ async function loadRecentPosts() {
             ${faviconHtml}
             <span class="rp-date">${escapeHtml(date)}</span>
           </div>
-          ${summary}
+          <div class="rp-body">${summary}</div>
         </a>
       `;
     });
@@ -289,11 +411,87 @@ function formatRelativeDate(isoString) {
 // Apply theme CSS overlay from the actor's _fediprofile.theme setting
 function applyTheme(themeName) {
   if (!themeName || themeName === 'theme.css') return;
+
+  activeThemeName = themeName;
+
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = '/assets/' + themeName;
   link.id = 'fediprofile-theme-override';
   document.head.appendChild(link);
+}
+
+function initThemeEnhancements() {
+  if (activeThemeName === 'theme-snapgrid.css') {
+    initSnapGridSectionTabs();
+  }
+}
+
+function initSnapGridSectionTabs() {
+  const mainCard = document.querySelector('main.card');
+  if (!mainCard) return;
+
+  const linksSection = document.getElementById('profile-container');
+  const badgesSection = document.getElementById('badges-section');
+  const recentPostsSection = document.getElementById('recent-posts-section');
+
+  if (!linksSection) return;
+
+  const sections = [
+    { id: 'profile-container', label: 'Socials', el: linksSection, always: true },
+    { id: 'badges-section', label: 'Badges', el: badgesSection, always: false },
+    { id: 'recent-posts-section', label: 'Activity', el: recentPostsSection, always: false }
+  ].filter(s => s.el && (s.always || s.el.style.display !== 'none'));
+
+  if (sections.length <= 1) return;
+
+  mainCard.classList.add('snapgrid-tabbed');
+
+  let tabBar = document.getElementById('snapgrid-tabs');
+  if (!tabBar) {
+    tabBar = document.createElement('div');
+    tabBar.id = 'snapgrid-tabs';
+    tabBar.className = 'snapgrid-tabs';
+
+    const subtitle = document.getElementById('profile-bio');
+    if (subtitle?.parentNode) {
+      subtitle.parentNode.insertBefore(tabBar, subtitle.nextSibling);
+    } else {
+      mainCard.prepend(tabBar);
+    }
+  }
+
+  tabBar.innerHTML = '';
+
+  const defaultId = sections.find(s => s.id === 'recent-posts-section')?.id ?? sections[0].id;
+
+  sections.forEach(section => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'snapgrid-tab';
+    btn.textContent = section.label;
+    btn.dataset.target = section.id;
+    tabBar.appendChild(btn);
+  });
+
+  const activate = (targetId) => {
+    tabBar.querySelectorAll('.snapgrid-tab').forEach(tab => {
+      const active = tab.dataset.target === targetId;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    sections.forEach(section => {
+      if (!section.el) return;
+      section.el.classList.toggle('snap-hidden', section.id !== targetId);
+    });
+  };
+
+  tabBar.querySelectorAll('.snapgrid-tab').forEach(tab => {
+    tab.addEventListener('click', () => activate(tab.dataset.target || defaultId));
+  });
+
+  activate(defaultId);
 }
 
 // Populate all fediverse handle elements

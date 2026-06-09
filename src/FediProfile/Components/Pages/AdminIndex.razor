@@ -121,7 +121,7 @@
                     </div>
                     <div class="pe-avatar-controls">
                         <input type="text" @bind="_profileAvatarUrl" placeholder="Avatar image URL..." class="form-control" />
-                        <label class="pe-upload-label" style="display: none;">
+                        <label class="pe-upload-label">
                             📷 Upload
                             <InputFile OnChange="HandleAvatarUpload" accept="image/*" style="display:none" />
                         </label>
@@ -432,7 +432,7 @@
                 <!-- Fedi handle info -->
                 <div class="pe-info-section">
                     <p class="muted">Follow me in the fediverse: @@<strong>@_currentUserSlug@@@(_currentDomain)</strong></p>
-                    <p class="muted" style="font-size:0.82rem">Not in the fediverse? <a href="https://joinmastodon.org" target="_blank" style="text-decoration:underline">Join now </a></p>
+                    <p class="muted" style="font-size:0.82rem">Not in the fediverse? <a href="@_joinMastodonUrl" target="_blank" style="text-decoration:underline">Join now </a></p>
                 </div>
 
                 <!-- Footer: Save -->
@@ -535,8 +535,36 @@
                             </div>
                         }
 
+                            @if (_pendingBadgeImport != null)
+                            {
+                                <div class="alert alert-warning" style="margin-bottom:0.75rem">
+                                    <strong>Recipient mismatch.</strong>
+                                    This import includes @(_pendingBadgeImport.Assertions.Count == 1 ? "a badge" : $"{_pendingBadgeImport.Assertions.Count} badges")
+                                    issued to @(_pendingBadgeImport.MismatchedRecipients.Count == 1 ? "a URI" : "URIs") that are not in your verified URI list.
+                                    Importing anyway will add @(_pendingBadgeImport.Assertions.Count == 1 ? "it" : "them") to your profile.
+                                </div>
+
+                                <div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg, #fff)">
+                                    <div style="font-weight:600;margin-bottom:0.35rem">Recipients not on your verified list</div>
+                                    <div style="display:flex;flex-direction:column;gap:0.35rem;margin-bottom:0.75rem">
+                                        @foreach (var recipient in _pendingBadgeImport.MismatchedRecipients)
+                                        {
+                                            <div class="muted" style="word-break:break-all">@recipient</div>
+                                        }
+                                    </div>
+                                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                                        <button class="button button-primary" @onclick="ConfirmImportBadge" disabled="@_isImportingBadge">
+                                            @(_isImportingBadge ? "Importing..." : "Import Anyway")
+                                        </button>
+                                        <button class="button button-ghost" @onclick="CancelPendingBadgeImport" disabled="@_isImportingBadge">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+
                         <div style="display:flex;gap:0.5rem;align-items:center">
-                            <input type="text" @bind="_importBadgeUrl" placeholder="https://badgefed.org/view/grant/..." class="form-control" style="flex:1" />
+                                <input type="text" @bind="_importBadgeUrl" @bind:after="OnImportBadgeUrlChanged" placeholder="https://badgefed.org/view/grant/..." class="form-control" style="flex:1" />
                             <button class="button button-primary" @onclick="ImportBadge" disabled="@(_isImportingBadge || string.IsNullOrWhiteSpace(_importBadgeUrl))">
                                 @(_isImportingBadge ? "Importing..." : "Import")
                             </button>
@@ -729,7 +757,7 @@
                             Your recent posts will then appear here and on your public profile automatically.
                         </p>
                         <p class="muted" style="font-size:0.8rem;margin:0">Head to the <strong>Links</strong> section above to add one.</p>
-                        <p class="muted" style="font-size:0.8rem;margin:0.5rem 0 0">Unsure where to start? <a href="https://joinmastodon.org" target="_blank" rel="noopener">Join Mastodon ↗</a></p>
+                        <p class="muted" style="font-size:0.8rem;margin:0.5rem 0 0">Unsure where to start? <a href="@_joinMastodonUrl" target="_blank" rel="noopener">Join Mastodon ↗</a></p>
                     </div>
                 }
                 else
@@ -995,6 +1023,69 @@
         return (profileUrl ?? actorUri, actorUri);
     }
 
+    private async Task<FediProfile.Models.ActivityPubActor?> FetchActivityPubActorAsync(string? publicUrl, string? actorUri)
+    {
+        if (_currentUserDb == null || string.IsNullOrWhiteSpace(_currentUserSlug)) return null;
+
+        var lookupUrl = !string.IsNullOrWhiteSpace(actorUri) ? actorUri : publicUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(lookupUrl)) return null;
+
+        var (_, privKey) = await _currentUserDb.GetActorKeysAsync();
+        if (string.IsNullOrEmpty(privKey)) return null;
+
+        var domain = DomainDb.GetDomain() ?? "localhost";
+        var httpContext = HttpContextAccessor.HttpContext;
+        var scheme = httpContext?.Request.Scheme ?? "https";
+        var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
+        var actorId = $"{scheme}://{fullDomain}/{_currentUserSlug}";
+        var keyId = $"{actorId}#main-key";
+
+        var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
+        return await actorHelper.FetchActorInformationAsync(lookupUrl);
+    }
+
+    private async Task<(string PublicUrl, bool IsActivityPub, string? ActorUri)> ResolveActivityPubLinkAsync(string rawUrl)
+    {
+        var publicUrl = rawUrl.Trim();
+        string? actorUri = null;
+
+        if (IsWebfingerHandle(publicUrl))
+        {
+            try
+            {
+                var (wfProfileUrl, wfActorUri) = await ResolveWebfingerAsync(publicUrl);
+                if (!string.IsNullOrWhiteSpace(wfProfileUrl))
+                    publicUrl = wfProfileUrl;
+                actorUri = wfActorUri;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogInformation("WebFinger resolve failed for {Handle}: {Message}", publicUrl, ex.Message);
+            }
+        }
+
+        try
+        {
+            var remoteActor = await FetchActivityPubActorAsync(publicUrl, actorUri);
+            if (remoteActor?.Inbox != null)
+            {
+                actorUri = remoteActor.Id;
+                if (!string.IsNullOrWhiteSpace(remoteActor.Url))
+                    publicUrl = remoteActor.Url;
+                else if (string.IsNullOrWhiteSpace(publicUrl))
+                    publicUrl = actorUri;
+
+                return (publicUrl, true, actorUri);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogInformation("ActivityPub probe failed for {Url}: {Message}", publicUrl, ex.Message);
+        }
+
+        return (publicUrl, !string.IsNullOrWhiteSpace(actorUri), actorUri);
+    }
+
     private string? GetNewLinkUrlHint()
     {
         var (_, warning) = DetectUrlHint(_selectedIconKey, _newLinkUrl, _newLinkName);
@@ -1015,20 +1106,34 @@
     // Platform icon definitions
     private static readonly Dictionary<string, (string Name, string Path)> _platformIcons = new()
     {
+        ["badge"] = ("Badge", "/assets/icons/badge.svg"),
+        ["blog"] = ("Blog", "/assets/icons/blog.svg"),
         ["bluesky"] = ("Bluesky", "/assets/icons/bluesky.svg"),
+        ["code"] = ("Code", "/assets/icons/code.svg"),
+        ["community"] = ("Community", "/assets/icons/community.svg"),
+        ["donate"] = ("Donate", "/assets/icons/donate.svg"),
+        ["email"] = ("Email", "/assets/icons/email.svg"),
         ["fediverse"] = ("Fediverse", "/assets/icons/fediverse.svg"),
         ["github"] = ("GitHub", "/assets/icons/github.svg"),
         ["instagram"] = ("Instagram", "/assets/icons/instagram.svg"),
+        ["labs"] = ("Labs", "/assets/icons/labs.svg"),
         ["lemmy"] = ("Lemmy", "/assets/icons/lemmy.svg"),
         ["linkedin"] = ("LinkedIn", "/assets/icons/linkedin.svg"),
         ["loops"] = ("Loops", "/assets/icons/loops.svg"),
         ["mastodon"] = ("Mastodon", "/assets/icons/mastodon.svg"),
         ["matrix"] = ("Matrix", "/assets/icons/matrix.svg"),
+        ["music"] = ("Music", "/assets/icons/music.svg"),
         ["peertube"] = ("PeerTube", "/assets/icons/peertube.svg"),
         ["pixelfed"] = ("Pixelfed", "/assets/icons/pixelfed.svg"),
+        ["podcast"] = ("Podcast", "/assets/icons/podcast.svg"),
+        ["portfolio"] = ("Portfolio", "/assets/icons/portfolio.svg"),
+        ["profile"] = ("Profile", "/assets/icons/profile.svg"),
         ["rss"] = ("RSS", "/assets/icons/rss.svg"),
+        ["support"] = ("Support", "/assets/icons/support.svg"),
         ["telegram"] = ("Telegram", "/assets/icons/telegram.svg"),
         ["threads"] = ("Threads", "/assets/icons/threads.svg"),
+        ["verified"] = ("Verified", "/assets/icons/verified.svg"),
+        ["website"] = ("Website", "/assets/icons/website.svg"),
         ["youtube"] = ("YouTube", "/assets/icons/youtube.svg"),
     };
 
@@ -1050,6 +1155,7 @@
     private string? _importBadgeMessage;
     private bool _importBadgeIsError;
     private bool _isImportingBadge;
+    private PendingBadgeImport? _pendingBadgeImport;
 
     // Verified URIs
     private List<(int Id, string Uri, string VerifiedUtc)>? _verifiedUris;
@@ -1107,11 +1213,30 @@
         public string? OrigCategory { get; set; }
         public bool OrigAutoBoost { get; set; }
         public bool OrigHidden { get; set; }
+        public bool OrigIsActivityPub { get; set; }
+        public string? OrigActorAPUri { get; set; }
         public int SortOrder { get; set; }
     }
 
+    private sealed record PendingBadgeAssertion(
+        string RecipientUri,
+        string BadgeTitle,
+        string? BadgeImage,
+        string? BadgeDescription,
+        string? IssuedOn);
+
+    private sealed record PendingBadgeImport(
+        string SourceUrl,
+        string NoteId,
+        ActivityPubHelper.IssuerInfo IssuerInfo,
+        List<PendingBadgeAssertion> Assertions,
+        List<string> MismatchedRecipients);
+
+    private string? _joinMastodonUrl;
+
     protected override async Task OnInitializedAsync()
     {
+        _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
         // Parse integration ref from query string
         var navUri = new Uri(Navigation.Uri);
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(navUri.Query);
@@ -1222,6 +1347,7 @@
         try
         {
             await _currentUserDb.UpsertSettingsAsync(uiTheme: _profileTheme);
+            await RegenerateStaticProfileAsync();
             _themeSaved = true;
             _ = ClearThemeSavedFlag();
         }
@@ -1327,7 +1453,15 @@
             await stream.CopyToAsync(fs);
 
             _profileAvatarUrl = $"/uploads/{_currentUserSlug}/{fileName}";
-            _profileMessage = "Avatar uploaded! Remember to save your profile.";
+
+            // Persist the new avatar URL to the database immediately
+            if (_currentUserDb != null)
+            {
+                await _currentUserDb.UpsertSettingsAsync(actorAvatarUrl: _profileAvatarUrl);
+                await RegenerateStaticProfileAsync();
+            }
+
+            _profileMessage = "Avatar uploaded and saved!";
             _profileIsError = false;
         }
         catch (Exception ex)
@@ -1413,6 +1547,8 @@
             link.OrigCategory = link.Category;
             link.OrigAutoBoost = link.AutoBoost;
             link.OrigHidden = link.Hidden;
+            link.OrigIsActivityPub = link.IsActivityPub;
+            link.OrigActorAPUri = link.ActorAPUri;
             link.IsEditing = true;
         }
     }
@@ -1426,6 +1562,8 @@
         link.Category = link.OrigCategory;
         link.AutoBoost = link.OrigAutoBoost;
         link.Hidden = link.OrigHidden;
+        link.IsActivityPub = link.OrigIsActivityPub;
+        link.ActorAPUri = link.OrigActorAPUri;
         link.SelectedIconKey = ResolveIconKeyFromPath(link.Icon);
         if (link.SelectedIconKey == "__custom__")
             link.CustomIconUrl = link.Icon;
@@ -1444,30 +1582,13 @@
         if (correctedEdit != null)
             link.Url = correctedEdit;
 
-        // Resolve @user@domain webfinger handles
-        if (IsWebfingerHandle(link.Url?.Trim() ?? ""))
-        {
-            try
-            {
-                var (wfProfileUrl, wfActorUri) = await ResolveWebfingerAsync(link.Url!.Trim());
-                if (!string.IsNullOrEmpty(wfProfileUrl))
-                {
-                    link.Url = wfProfileUrl;
-                    if (!string.IsNullOrEmpty(wfActorUri))
-                    {
-                        link.IsActivityPub = true;
-                        link.ActorAPUri = wfActorUri;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogInformation("WebFinger resolve failed for {Handle}: {Message}", link.Url, ex.Message);
-            }
-        }
-
         try
         {
+            var (resolvedPublicUrl, isActivityPub, actorUri) = await ResolveActivityPubLinkAsync(link.Url);
+            link.Url = resolvedPublicUrl;
+            link.IsActivityPub = isActivityPub;
+            link.ActorAPUri = actorUri;
+
             var effectiveCategory = link.Category == "__custom__"
                 ? link.CustomCategory?.Trim()
                 : link.Category;
@@ -1651,10 +1772,7 @@
                 var scheme = httpContext?.Request.Scheme ?? "https";
                 var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
                 var actorId = $"{scheme}://{fullDomain}/{_currentUserSlug}";
-                var keyId = $"{actorId}#main-key";
-
-                var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
-                var remoteActor = await actorHelper.FetchActorInformationAsync(link.Url);
+                var remoteActor = await FetchActivityPubActorAsync(link.Url, link.ActorAPUri);
 
                 if (remoteActor?.Inbox == null)
                 {
@@ -1665,9 +1783,12 @@
 
                 // Store the actor's AP URI (their canonical id) for matching incoming Create activities
                 link.ActorAPUri = remoteActor.Id;
+                link.IsActivityPub = true;
+                if (!string.IsNullOrWhiteSpace(remoteActor.Url))
+                    link.Url = remoteActor.Url;
 
                 var (followSuccess, followError) = await FollowService.SendFollowRequestAsync(
-                    link.Url, remoteActor.Inbox, _currentUserDb, actorId);
+                    link.ActorAPUri, remoteActor.Inbox, _currentUserDb, actorId);
 
                 if (!followSuccess)
                 {
@@ -1676,7 +1797,7 @@
                     return;
                 }
 
-                await DomainDb.AddFollowingAsync(_currentUserSlug, link.ActorAPUri ?? link.Url);
+                await DomainDb.AddFollowingAsync(_currentUserSlug, link.ActorAPUri);
             }
             catch (Exception ex)
             {
@@ -1698,17 +1819,20 @@
                     var scheme = httpContext?.Request.Scheme ?? "https";
                     var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
                     var actorId = $"{scheme}://{fullDomain}/{_currentUserSlug}";
-                    var keyId = $"{actorId}#main-key";
+                    var remoteActor = await FetchActivityPubActorAsync(link.Url, link.ActorAPUri);
+                    var followTarget = link.ActorAPUri ?? remoteActor?.Id ?? link.Url;
 
-                    var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
-                    var remoteActor = await actorHelper.FetchActorInformationAsync(link.Url);
+                    if (remoteActor?.Id != null)
+                        link.ActorAPUri = remoteActor.Id;
+                    if (!string.IsNullOrWhiteSpace(remoteActor?.Url))
+                        link.Url = remoteActor.Url;
 
                     if (remoteActor?.Inbox != null)
                     {
-                        await FollowService.SendUnfollowAsync(link.Url, remoteActor.Inbox, _currentUserDb, actorId);
+                        await FollowService.SendUnfollowAsync(followTarget, remoteActor.Inbox, _currentUserDb, actorId);
                     }
 
-                    await DomainDb.RemoveFollowingAsync(_currentUserSlug, link.ActorAPUri ?? link.Url);
+                    await DomainDb.RemoveFollowingAsync(_currentUserSlug, followTarget);
                 }
             }
             catch (Exception ex)
@@ -1942,80 +2066,17 @@
             if (correctedNew != null)
                 _newLinkUrl = correctedNew;
 
-            // Resolve @user@domain webfinger handles
-            if (IsWebfingerHandle(_newLinkUrl?.Trim() ?? ""))
-            {
-                try
-                {
-                    var (wfProfileUrl, wfActorUri) = await ResolveWebfingerAsync(_newLinkUrl!.Trim());
-                    if (!string.IsNullOrEmpty(wfProfileUrl))
-                        _newLinkUrl = wfProfileUrl;
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogInformation("WebFinger resolve failed for {Handle}: {Message}", _newLinkUrl, ex.Message);
-                }
-            }
-
             string? effectiveIcon = ResolveNewLinkIcon();
 
             var effectiveCategory = _newLinkCategory == "__custom__"
                 ? _customCategory?.Trim()
                 : _newLinkCategory;
 
-            // Probe the URL for ActivityPub actor
-            bool isActivityPub = false;
-            string? actorAPUri = null;
-            try
-            {
-                var (pubKey, privKey) = await _currentUserDb.GetActorKeysAsync();
-                if (!string.IsNullOrEmpty(privKey))
-                {
-                    var domain = DomainDb.GetDomain() ?? "localhost";
-                    var httpContext = HttpContextAccessor.HttpContext;
-                    var scheme = httpContext?.Request.Scheme ?? "https";
-                    var fullDomain = httpContext?.Request.Host.ToString() ?? domain;
-                    var actorId = $"{scheme}://{fullDomain}/{_currentUserSlug}";
-                    var keyId = $"{actorId}#main-key";
-
-                    var actorHelper = new FediProfile.Core.ActorHelper(privKey, keyId, Logger);
-                    var remoteActor = await actorHelper.FetchActorInformationAsync(_newLinkUrl.Trim());
-
-                    if (remoteActor?.Inbox != null)
-                    {
-                        isActivityPub = true;
-                        actorAPUri = remoteActor.Id;
-/*
-I don't know if this is the best UX
-                        // Auto-populate name and description from actor if not already provided
-                        if (string.IsNullOrWhiteSpace(_newLinkDescription))
-                        {
-                            var rawDesc = remoteActor.Summary ?? remoteActor.Name;
-                            if (!string.IsNullOrEmpty(rawDesc))
-                            {
-                                // Strip HTML tags and decode entities
-                                rawDesc = System.Text.RegularExpressions.Regex.Replace(rawDesc, "<[^>]+>", "");
-                                rawDesc = System.Net.WebUtility.HtmlDecode(rawDesc).Trim();
-                            }
-                            _newLinkDescription = rawDesc;
-                        }
-
-                        if (string.IsNullOrWhiteSpace(_newLinkName) || _newLinkName.Trim() == _newLinkUrl.Trim())
-                        {
-                            _newLinkName = remoteActor.Name ?? remoteActor.PreferredUsername ?? _newLinkName;
-                        }*/
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogInformation("ActivityPub probe failed for {Url}: {Message}", _newLinkUrl, ex.Message);
-                // Not an AP actor — that's fine, continue adding as a normal link
-            }
+            var (resolvedPublicUrl, isActivityPub, actorAPUri) = await ResolveActivityPubLinkAsync(_newLinkUrl.Trim());
 
             await _currentUserDb.UpsertLinkAsync(
                 _newLinkName!.Trim(), 
-                _newLinkUrl.Trim(), 
+                resolvedPublicUrl, 
                 effectiveIcon, 
                 _newLinkDescription?.Trim(),
                 autoBoost: false, 
@@ -2089,104 +2150,39 @@ I don't know if this is the best UX
 
         try
         {
-            // Fetch the badge JSON-LD from the URL
-            using var http = ActivityPubHelper.CreateActivityPubHttpClient();
+            var pendingImport = await PrepareBadgeImportAsync(_importBadgeUrl);
 
-            var response = await http.GetAsync(_importBadgeUrl);
-            if (!response.IsSuccessStatusCode)
+            if (pendingImport.MismatchedRecipients.Count > 0)
             {
-                _importBadgeMessage = $"Failed to fetch URL: HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
-                _importBadgeIsError = true;
+                _pendingBadgeImport = pendingImport;
                 return;
             }
 
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
+            await CompleteBadgeImportAsync(pendingImport);
+        }
+        catch (Exception ex)
+        {
+            _pendingBadgeImport = null;
+            _importBadgeMessage = $"Error importing badge: {ex.Message}";
+            _importBadgeIsError = true;
+        }
+        finally
+        {
+            _isImportingBadge = false;
+        }
+    }
 
-            var noteId = root.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? _importBadgeUrl : _importBadgeUrl;
+    private async Task ConfirmImportBadge()
+    {
+        if (_pendingBadgeImport == null || _currentUserDb == null) return;
 
-            // Extract all OpenBadge Assertion attachments using shared parser
-            var assertions = BadgeParser.ExtractAssertions(root);
+        _importBadgeMessage = null;
+        _importBadgeIsError = false;
+        _isImportingBadge = true;
 
-            if (assertions.Count == 0)
-            {
-                _importBadgeMessage = "No OpenBadge assertions found in the fetched data.";
-                _importBadgeIsError = true;
-                return;
-            }
-
-            // Resolve issuer details by probing the assertion's issuer and the AP actor
-            var issuerInfo = await ActivityPubHelper.ResolveIssuerAsync(root, httpClient: http);
-
-            if (string.IsNullOrEmpty(issuerInfo.ActorUrl))
-            {
-                _importBadgeMessage = "Could not determine badge issuer from the fetched data.";
-                _importBadgeIsError = true;
-                return;
-            }
-
-            // Pre-load user's verified URIs for recipient matching
-            HashSet<string>? myUriSet = null;
-            if (!string.IsNullOrEmpty(_currentUserSlug))
-            {
-                var myVerifiedUris = await DomainDb.GetVerifiedUrisAsync(_currentUserSlug);
-                myUriSet = new HashSet<string>(myVerifiedUris.Select(v => v.Uri), StringComparer.OrdinalIgnoreCase);
-            }
-
-            // Upsert issuer once for the whole batch
-            var issuerId = await DomainDb.UpsertBadgeIssuerAsync(
-                issuerInfo.Name, issuerInfo.ActorUrl, issuerInfo.Avatar, issuerInfo.Bio);
-
-            int importedCount = 0;
-            var skippedRecipients = new List<string>();
-            var importedTitles = new List<string>();
-
-            foreach (var assertion in assertions)
-            {
-                // Verify recipient matches one of the user's verified URIs
-                if (myUriSet != null && !myUriSet.Contains(assertion.RecipientUri))
-                {
-                    skippedRecipients.Add(assertion.RecipientUri);
-                    continue;
-                }
-
-                var badgeRecordId = await _currentUserDb.StoreBadgeAsync(
-                    noteId, issuerId, assertion.BadgeTitle, assertion.BadgeImage,
-                    assertion.BadgeDescription, assertion.IssuedOn);
-
-                if (badgeRecordId > 0)
-                {
-                    importedCount++;
-                    importedTitles.Add(assertion.BadgeTitle);
-                }
-            }
-
-            // Build result message
-            if (importedCount > 0)
-            {
-                var titles = string.Join(", ", importedTitles.Select(t => $"'{t}'"));
-                _importBadgeMessage = importedCount == 1
-                    ? $"Badge {titles} imported successfully!"
-                    : $"{importedCount} badges imported: {titles}";
-                _importBadgeUrl = null;
-                await LoadBadgeIssuers();
-                await LoadReceivedBadges();
-                await RegenerateStaticProfileAsync();
-                _badgeTab = "badges";
-            }
-            else if (skippedRecipients.Count > 0)
-            {
-                var recipientList = string.Join(", ", skippedRecipients);
-                _importBadgeMessage = $"This badge was issued to {recipientList} which is not one of your verified URIs. " +
-                    "Add the matching URI to your Mastodon profile and re-sync your verified URIs first.";
-                _importBadgeIsError = true;
-            }
-            else
-            {
-                _importBadgeMessage = "Badge was already imported or could not be stored.";
-                _importBadgeIsError = true;
-            }
+        try
+        {
+            await CompleteBadgeImportAsync(_pendingBadgeImport);
         }
         catch (Exception ex)
         {
@@ -2197,6 +2193,113 @@ I don't know if this is the best UX
         {
             _isImportingBadge = false;
         }
+    }
+
+    private async Task<PendingBadgeImport> PrepareBadgeImportAsync(string importUrl)
+    {
+        using var http = ActivityPubHelper.CreateActivityPubHttpClient();
+
+        var response = await http.GetAsync(importUrl);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Failed to fetch URL: HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        var noteId = root.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? importUrl : importUrl;
+
+        var parsedAssertions = BadgeParser.ExtractAssertions(root);
+        if (parsedAssertions.Count == 0)
+            throw new InvalidOperationException("No OpenBadge assertions found in the fetched data.");
+
+        var issuerInfo = await ActivityPubHelper.ResolveIssuerAsync(root, httpClient: http);
+        if (string.IsNullOrEmpty(issuerInfo.ActorUrl))
+            throw new InvalidOperationException("Could not determine badge issuer from the fetched data.");
+
+        HashSet<string>? myUriSet = null;
+        if (!string.IsNullOrEmpty(_currentUserSlug))
+        {
+            var myVerifiedUris = await DomainDb.GetVerifiedUrisAsync(_currentUserSlug);
+            myUriSet = new HashSet<string>(myVerifiedUris.Select(v => v.Uri), StringComparer.OrdinalIgnoreCase);
+        }
+
+        var assertions = parsedAssertions
+            .Select(assertion => new PendingBadgeAssertion(
+                assertion.RecipientUri,
+                assertion.BadgeTitle,
+                assertion.BadgeImage,
+                assertion.BadgeDescription,
+                assertion.IssuedOn))
+            .ToList();
+
+        var mismatchedRecipients = assertions
+            .Where(assertion => myUriSet != null && !myUriSet.Contains(assertion.RecipientUri))
+            .Select(assertion => assertion.RecipientUri)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new PendingBadgeImport(importUrl, noteId, issuerInfo, assertions, mismatchedRecipients);
+    }
+
+    private async Task CompleteBadgeImportAsync(PendingBadgeImport pendingImport)
+    {
+        if (_currentUserDb == null) return;
+
+        var issuerId = await DomainDb.UpsertBadgeIssuerAsync(
+            pendingImport.IssuerInfo.Name,
+            pendingImport.IssuerInfo.ActorUrl,
+            pendingImport.IssuerInfo.Avatar,
+            pendingImport.IssuerInfo.Bio);
+
+        int importedCount = 0;
+        var importedTitles = new List<string>();
+
+        foreach (var assertion in pendingImport.Assertions)
+        {
+            var badgeRecordId = await _currentUserDb.StoreBadgeAsync(
+                pendingImport.NoteId,
+                issuerId,
+                assertion.BadgeTitle,
+                assertion.BadgeImage,
+                assertion.BadgeDescription,
+                assertion.IssuedOn);
+
+            if (badgeRecordId > 0)
+            {
+                importedCount++;
+                importedTitles.Add(assertion.BadgeTitle);
+            }
+        }
+
+        if (importedCount == 0)
+        {
+            _importBadgeMessage = "Badge was already imported or could not be stored.";
+            _importBadgeIsError = true;
+            return;
+        }
+
+        var titles = string.Join(", ", importedTitles.Select(t => $"'{t}'"));
+        _importBadgeMessage = importedCount == 1
+            ? $"Badge {titles} imported successfully!"
+            : $"{importedCount} badges imported: {titles}";
+        _importBadgeUrl = null;
+        _pendingBadgeImport = null;
+        await LoadBadgeIssuers();
+        await LoadReceivedBadges();
+        await RegenerateStaticProfileAsync();
+        _badgeTab = "badges";
+    }
+
+    private void CancelPendingBadgeImport()
+    {
+        _pendingBadgeImport = null;
+    }
+
+    private void OnImportBadgeUrlChanged()
+    {
+        if (_pendingBadgeImport != null && !string.Equals(_pendingBadgeImport.SourceUrl, _importBadgeUrl, StringComparison.Ordinal))
+            _pendingBadgeImport = null;
     }
 
     // ===== Badge Issuers =====
@@ -2408,9 +2511,9 @@ I don't know if this is the best UX
             var scheme = httpContext?.Request.Scheme ?? "https";
             var fullDomain = httpContext?.Request.Host.ToString() ?? _currentDomain ?? "localhost";
             var baseDomain = $"{scheme}://{fullDomain}";
-            await ProfileHtml.GenerateAsync(_currentUserDb, _currentUserSlug, baseDomain);
+            await ProfileHtml.GenerateAsync(_currentUserDb, _currentUserSlug, baseDomain, fullDomain, _joinMastodonUrl);
             var verifiedUriList = (_verifiedUris ?? await DomainDb.GetVerifiedUrisAsync(_currentUserSlug)).Select(v => v.Uri).ToList();
-            await ActorService.GenerateActorJsonAsync(_currentUserDb, _currentUserSlug, baseDomain, verifiedUriList);
+            await ActorService.GenerateActorJsonAsync(_currentUserDb, _currentUserSlug, baseDomain, fullDomain, verifiedUriList);
         }
         catch (Exception ex)
         {

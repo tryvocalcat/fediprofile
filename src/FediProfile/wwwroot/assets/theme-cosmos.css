@@ -378,6 +378,12 @@ h2::after {
 
 .badges-section {
   border-top-color: rgba(124, 91, 245, 0.1);
+  --badge-tile-bg: var(--cosmos-link-bg);
+  --badge-tile-border: rgba(124, 91, 245, 0.08);
+  --badge-hover-shadow: rgba(124, 91, 245, 0.18);
+  --badge-tooltip-bg: rgba(16, 20, 39, 0.96);
+  --badge-tooltip-border: rgba(124, 91, 245, 0.18);
+  --badge-tooltip-shadow: rgba(0, 0, 0, 0.45);
 }
 
 .badges-heading {
@@ -388,14 +394,10 @@ h2::after {
   font-weight: 600;
 }
 
-.badge-card {
-  background: var(--cosmos-link-bg);
-  border-color: rgba(124, 91, 245, 0.08);
-  border-radius: 14px;
-}
-
-.badge-card:hover {
-  box-shadow: 0 6px 20px rgba(124, 91, 245, 0.12);
+.badge-card:hover .badge-media,
+.badge-card:focus-visible .badge-media,
+.badge-card:focus-within .badge-media {
+  box-shadow: 0 16px 32px rgba(124, 91, 245, 0.18);
 }
 
 .badge-title {
@@ -404,6 +406,10 @@ h2::after {
 
 .badge-date {
   color: var(--muted);
+}
+
+.badge-link-hint {
+  color: var(--accent);
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -447,6 +453,10 @@ h2::after {
   min-width: 70px;
 }
 
+.rp-body {
+  flex: 1;
+}
+
 .rp-date {
   font-size: 0.72rem;
   color: var(--muted);
@@ -462,6 +472,7 @@ h2::after {
   color: var(--ink);
   flex: 1;
   min-width: 0;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
 }
 

@@ -346,6 +346,7 @@ h2 {
   color: var(--muted);
   line-height: 1.6;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -374,6 +375,12 @@ h2 {
   margin-top: 8px;
   padding-top: 32px;
   border-top: 1px solid var(--border);
+  --badge-tile-bg: #ffffff;
+  --badge-tile-border: var(--border);
+  --badge-hover-shadow: rgba(15, 23, 42, 0.12);
+  --badge-tooltip-bg: #ffffff;
+  --badge-tooltip-border: #d7e3ea;
+  --badge-tooltip-shadow: rgba(15, 23, 42, 0.14);
 }
 
 .badges-heading {
@@ -387,38 +394,26 @@ h2 {
 
 .badges-container,
 .badges-contaImpr {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 116px));
   justify-content: flex-start;
-  gap: 16px;
+  justify-items: flex-start;
+  gap: 14px;
 }
 
 .badge-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 110px;
-  padding: 14px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  text-decoration: none;
-  color: inherit;
-  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  max-width: 116px;
 }
 
-.badge-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px var(--shadow);
+.badge-card:hover .badge-media,
+.badge-card:focus-visible .badge-media,
+.badge-card:focus-within .badge-media {
   border-color: var(--accent);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
 }
 
 .badge-image {
-  width: 56px;
-  height: 56px;
-  object-fit: contain;
-  border-radius: 8px;
-  margin-bottom: 8px;
+  border-radius: 10px;
 }
 
 .badge-placeholder {
@@ -438,6 +433,16 @@ h2 {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.badge-description {
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+
+.badge-link-hint {
+  font-family: var(--font-sans);
+  color: var(--accent);
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -853,17 +858,16 @@ h2 {
   }
 
   .badge-card {
-    width: 90px;
-    padding: 10px 8px;
+    max-width: 100px;
   }
 
-  .badge-image {
-    width: 44px;
-    height: 44px;
+  .badges-container,
+  .badges-contaImpr {
+    grid-template-columns: repeat(auto-fit, minmax(82px, 100px));
   }
 
-  .badge-title {
-    font-size: 0.72rem;
+  .badge-media {
+    padding: 10px;
   }
 }
 

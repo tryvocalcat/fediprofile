@@ -12,6 +12,12 @@
   "Domains": [
     "localhost", "localhost:5099"
   ],
+  "DomainConfig": {
+    "localhost": {
+      "SingleUserInstance": false
+    }
+  },
+  "DefaultInstanceName": "FediProfile",
   "SingleUserInstance": false,
   "RegistrationOpen": true,
   "InvitationCode": "",
@@ -22,7 +28,12 @@
     },
     "LinkedIn": {
       "ClientId": "",
-      "ClientSecret": ""
+      "ClientSecret": "",
+      "UseProfileBasicInfo": false
     }
+  }
+  ,
+  "PlatformLinks": {
+    "JoinMastodonUrl": "https://joinmastodon.org"
   }
 }

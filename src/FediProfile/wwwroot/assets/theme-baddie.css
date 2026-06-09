@@ -4,7 +4,7 @@
    Deep plum purple background, soft pink pill link buttons.
    ══════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;600;700;800;900&display=swap');
 
 :root {
   color-scheme: dark;
@@ -29,7 +29,7 @@ body {
   background-image:
     radial-gradient(ellipse 80% 60% at 50% -20%, rgba(180, 80, 180, 0.25) 0%, transparent 70%),
     radial-gradient(ellipse 50% 40% at 90% 90%,  rgba(120, 40, 140, 0.18) 0%, transparent 60%);
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Gothic A1', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--ink);
 }
 
@@ -95,7 +95,7 @@ body::after {
 
 /* ── Name / headline ────────────────────────────────────── */
 h1 {
-  font-family: 'Playfair Display', 'Georgia', serif;
+  font-family: 'Gothic A1', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 900;
   font-size: 2.6rem;
   margin: 0 0 12px;
@@ -124,7 +124,7 @@ h1 {
 
 /* ── Section headers ────────────────────────────────────── */
 h2 {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Gothic A1', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 600;
   font-size: 0.75rem;
   text-transform: uppercase;

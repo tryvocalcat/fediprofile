@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS Users (
     DisplayName TEXT,
     MastodonUser TEXT NOT NULL,
     MastodonServer TEXT NOT NULL,
+    IsAdmin INTEGER NOT NULL DEFAULT 0,
     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     DeletedUtc TEXT
@@ -40,16 +41,18 @@ CREATE TABLE IF NOT EXISTS Settings (
     ActorUsername TEXT NOT NULL DEFAULT 'profile',
     ActorBio TEXT,
     ActorAvatarUrl TEXT,
+    InstanceName TEXT,
+    LandingMarkdown TEXT,
     UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
     AdminMastodonUser TEXT,
     AdminMastodonDomain TEXT,
-    RootUserId INTEGER,
+    JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org',
     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme)
-VALUES (1, 'profile', 'theme-classic.css');
+INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme, JoinMastodonUrl)
+VALUES (1, 'profile', 'theme-classic.css', 'https://joinmastodon.org');
 
 -- ==============================================================================
 -- Jobs table: Simple generic job queue for background processing

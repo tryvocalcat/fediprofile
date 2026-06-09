@@ -26,7 +26,7 @@ public class ProfileHtmlService
     /// (Re)generates the static profile HTML for the given user.
     /// Reads data from the user's database and injects it into profile.html.
     /// </summary>
-    public async Task GenerateAsync(UserScopedDb userDb, string userSlug, string baseDomain)
+    public async Task GenerateAsync(UserScopedDb userDb, string userSlug, string baseDomain, string domain, string? joinMastodonUrl = null)
     {
         try
         {
@@ -81,11 +81,15 @@ public class ProfileHtmlService
             // Inject everything before </head>
             html = html.Replace("</head>", head.ToString() + "  </head>");
 
+            // Replace Join Mastodon URL placeholder
+            var resolvedJoinUrl = string.IsNullOrWhiteSpace(joinMastodonUrl) ? "https://joinmastodon.org" : joinMastodonUrl;
+            html = html.Replace("{{JOIN_MASTODON_URL}}", WebUtility.HtmlEncode(resolvedJoinUrl));
+
             // Write the generated file
             var profilesDir = Path.Combine(_env.WebRootPath, "profiles");
             Directory.CreateDirectory(profilesDir);
 
-            var outputPath = Path.Combine(profilesDir, $"{userSlug}.html");
+            var outputPath = Path.Combine(profilesDir, $"{domain}_{userSlug}.html");
             await File.WriteAllTextAsync(outputPath, html, new UTF8Encoding(false));
 
             _logger.LogInformation("Generated static profile for {UserSlug} at {Path}", userSlug, outputPath);
@@ -99,9 +103,9 @@ public class ProfileHtmlService
     /// <summary>
     /// Deletes the static profile HTML for the given user (e.g. on account deletion).
     /// </summary>
-    public void Delete(string userSlug)
+    public void Delete(string userSlug, string domain)
     {
-        var path = Path.Combine(_env.WebRootPath, "profiles", $"{userSlug}.html");
+        var path = Path.Combine(_env.WebRootPath, "profiles", $"{domain}_{userSlug}.html");
         if (File.Exists(path))
         {
             File.Delete(path);
