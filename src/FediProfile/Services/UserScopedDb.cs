@@ -26,6 +26,139 @@ public class UserScopedDb : LocalDbService
     private readonly string? _userSlug;
     private readonly string _domain;
 
+    // ===== MISSION CATALOG =====
+    // This catalog defines all available missions.
+    // The database only stores completed mission codes.
+    private static readonly List<UserMission> MissionCatalog = new()
+    {
+        new UserMission
+        {
+            Code = "first_link",
+            Title = "First link",
+            Description = "Add your first link to your profile.",
+            Icon = "🔗",
+            Category = "Starter",
+            XpReward = 50
+        },
+        new UserMission
+        {
+            Code = "first_badge",
+            Title = "First badge",
+            Description = "Import your first badge.",
+            Icon = "🏅",
+            Category = "Starter",
+            XpReward = 75
+        },
+        new UserMission
+        {
+            Code = "first_featured_badge",
+            Title = "Featured badge",
+            Description = "Feature your first badge on your profile.",
+            Icon = "⭐",
+            Category = "Starter",
+            XpReward = 40
+        },
+        new UserMission
+        {
+            Code = "reach_level_3",
+            Title = "Level 3",
+            Description = "Reach level 3.",
+            Icon = "⚡",
+            Category = "Progress",
+            XpReward = 50
+        },
+        new UserMission
+        {
+            Code = "reach_level_5",
+            Title = "Level 5",
+            Description = "Reach level 5.",
+            Icon = "🚀",
+            Category = "Progress",
+            XpReward = 100
+        },
+        new UserMission
+        {
+            Code = "reach_level_10",
+            Title = "Level 10",
+            Description = "Reach level 10.",
+            Icon = "👑",
+            Category = "Progress",
+            XpReward = 200
+        },
+        new UserMission
+        {
+            Code = "reach_level_15",
+            Title = "Level 15",
+            Description = "Reach level 15.",
+            Icon = "💎",
+            Category = "Progress",
+            XpReward = 300
+        },
+        new UserMission
+        {
+            Code = "streak_1",
+            Title = "Streak started",
+            Description = "Start an activity streak.",
+            Icon = "🔥",
+            Category = "Streak",
+            XpReward = 10
+        },
+        new UserMission
+        {
+            Code = "streak_3",
+            Title = "3-day streak",
+            Description = "Keep a 3-day streak.",
+            Icon = "🔥",
+            Category = "Streak",
+            XpReward = 30
+        },
+        new UserMission
+        {
+            Code = "streak_5",
+            Title = "5-day streak",
+            Description = "Keep a 5-day streak.",
+            Icon = "🔥",
+            Category = "Streak",
+            XpReward = 50
+        },
+        new UserMission
+        {
+            Code = "streak_10",
+            Title = "10-day streak",
+            Description = "Keep a 10-day streak.",
+            Icon = "🔥",
+            Category = "Streak",
+            XpReward = 100
+        },
+        new UserMission
+        {
+            Code = "streak_25",
+            Title = "25-day streak",
+            Description = "Keep a 25-day streak.",
+            Icon = "🔥",
+            Category = "Streak",
+            XpReward = 250
+        },
+        new UserMission
+        {
+            Code = "streak_50",
+            Title = "50-day streak",
+            Description = "Keep a 50-day streak.",
+            Icon = "🔥",
+            Category = "Streak",
+            XpReward = 500
+        },
+        new UserMission
+        {
+            Code = "streak_100",
+            Title = "100-day streak",
+            Description = "Keep a 100-day streak.",
+            Icon = "🏆",
+            Category = "Streak",
+            XpReward = 1000
+        }
+    };
+
     /// <summary>
     /// Constructor that accepts a domain and user slug.
     /// Used for manual instantiation with specific domain and user.
@@ -249,8 +382,14 @@ public class UserScopedDb : LocalDbService
                     IssuedOn TEXT,
                     AcceptedOn TEXT,
                     Hidden INTEGER NOT NULL DEFAULT 0,
+                    IsFeatured INTEGER NOT NULL DEFAULT 0,
                     ReceivedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (IssuerId) REFERENCES BadgeIssuers(Id)
+                );
+
+                CREATE TABLE IF NOT EXISTS UserMissions (
+                Code TEXT PRIMARY KEY,
+                CompletedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             ";
             command.ExecuteNonQuery();
@@ -313,6 +452,19 @@ public class UserScopedDb : LocalDbService
                     Url TEXT,
                     PublishedUtc TEXT,
                     BoostedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+            ";
+            command.ExecuteNonQuery();
+
+            // Create UserProgress table: Gamification progress for this profile
+            command.CommandText = @"
+                CREATE TABLE IF NOT EXISTS UserProgress (
+                    Id INTEGER PRIMARY KEY CHECK (Id = 1),
+                    TotalXp INTEGER NOT NULL DEFAULT 0,
+                    Level INTEGER NOT NULL DEFAULT 1,
+                    CurrentStreakDays INTEGER NOT NULL DEFAULT 0,
+                    LastActivityDate TEXT,
+                    UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             ";
             command.ExecuteNonQuery();
@@ -408,6 +560,13 @@ public class UserScopedDb : LocalDbService
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
+            if (!badgeColumns.Contains("IsFeatured"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE ReceivedBadges ADD COLUMN IsFeatured INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
             // Settings migrations
             var settingsColumns = GetTableColumns(connection, "Settings");
 
@@ -423,6 +582,19 @@ public class UserScopedDb : LocalDbService
                 using var alterCommand = connection.CreateCommand();
                 alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN ShowRecentPosts INTEGER NOT NULL DEFAULT 1;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            // UserMissions table migration
+            {
+                using var createCmd = connection.CreateCommand();
+                createCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS UserMissions (
+                        Code TEXT PRIMARY KEY,
+                        CompletedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                ";
+
+                try { createCmd.ExecuteNonQuery(); } catch { }
             }
 
             // RecentPosts table migration (create if missing)
@@ -445,12 +617,219 @@ public class UserScopedDb : LocalDbService
                 try { createCmd.ExecuteNonQuery(); } catch { }
             }
 
+            // UserProgress table migration
+            {
+                using var createCmd = connection.CreateCommand();
+                createCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS UserProgress (
+                        Id INTEGER PRIMARY KEY CHECK (Id = 1),
+                        TotalXp INTEGER NOT NULL DEFAULT 0,
+                        Level INTEGER NOT NULL DEFAULT 1,
+                        CurrentStreakDays INTEGER NOT NULL DEFAULT 0,
+                        LastActivityDate TEXT,
+                        UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                ";
+
+                try { createCmd.ExecuteNonQuery(); } catch { }
+            }
+
             connection.Close();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[Warning] Error applying user migrations: {ex.Message}");
         }
+    }
+
+    // ===== USER MISSIONS MANAGEMENT =====
+    public async Task<List<UserMission>> GetUserMissionsAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Code, CompletedUtc FROM UserMissions";
+
+        var completedMissions = new Dictionary<string, string?>();
+
+        using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            var code = reader.GetString(0);
+            var completedUtc = reader.IsDBNull(1) ? null : reader.GetString(1);
+
+            completedMissions[code] = completedUtc;
+        }
+
+        return MissionCatalog
+            .Select(mission => new UserMission
+            {
+                Code = mission.Code,
+                Title = mission.Title,
+                Description = mission.Description,
+                Icon = mission.Icon,
+                Category = mission.Category,
+                XpReward = mission.XpReward,
+                IsCompleted = completedMissions.ContainsKey(mission.Code),
+                CompletedUtc = completedMissions.TryGetValue(mission.Code, out var completedUtc)
+                    ? completedUtc
+                    : null
+            })
+            .ToList();
+    }
+
+    public async Task<bool> CompleteMissionAsync(string code)
+    {
+        var mission = MissionCatalog.FirstOrDefault(m => m.Code == code);
+
+        if (mission == null)
+        {
+            return false;
+        }
+
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            INSERT OR IGNORE INTO UserMissions (Code, CompletedUtc)
+            VALUES (@Code, @CompletedUtc);
+        ";
+
+        command.Parameters.AddWithValue("@Code", code);
+        command.Parameters.AddWithValue("@CompletedUtc", DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
+
+        var rowsAffected = await command.ExecuteNonQueryAsync();
+
+        if (rowsAffected <= 0)
+        {
+            return false;
+        }
+
+        connection.Close();
+
+        await AddXpAsync(mission.XpReward);
+
+        return true;
+    }
+
+    public async Task<List<UserMission>> CompleteAutomaticMissionsAsync()
+    {
+        var completedNow = new List<UserMission>();
+
+        var links = await GetLinksAsync();
+        var badges = await GetReceivedBadgesAsync();
+        var progress = await GetUserProgressAsync();
+
+        var missionCodes = new List<string>();
+
+        if (links.Any())
+        {
+            missionCodes.Add("first_link");
+        }
+
+        if (badges.Any())
+        {
+            missionCodes.Add("first_badge");
+        }
+
+        if (badges.Any(b => b.IsFeatured))
+        {
+            missionCodes.Add("first_featured_badge");
+        }
+
+        if (progress.CurrentStreakDays >= 1)
+        {
+            missionCodes.Add("streak_1");
+        }
+
+        if (progress.CurrentStreakDays >= 3)
+        {
+            missionCodes.Add("streak_3");
+        }
+
+        if (progress.CurrentStreakDays >= 5)
+        {
+            missionCodes.Add("streak_5");
+        }
+
+        if (progress.CurrentStreakDays >= 10)
+        {
+            missionCodes.Add("streak_10");
+        }
+
+        if (progress.CurrentStreakDays >= 25)
+        {
+            missionCodes.Add("streak_25");
+        }
+
+        if (progress.CurrentStreakDays >= 50)
+        {
+            missionCodes.Add("streak_50");
+        }
+
+        if (progress.CurrentStreakDays >= 100)
+        {
+            missionCodes.Add("streak_100");
+        }
+
+        foreach (var code in missionCodes.Distinct())
+        {
+            var completed = await CompleteMissionAsync(code);
+
+            if (completed)
+            {
+                var mission = MissionCatalog.FirstOrDefault(m => m.Code == code);
+
+                if (mission != null)
+                {
+                    completedNow.Add(mission);
+                }
+            }
+        }
+
+        progress = await GetUserProgressAsync();
+
+        var levelMissionCodes = new List<string>();
+
+        if (progress.Level >= 3)
+        {
+            levelMissionCodes.Add("reach_level_3");
+        }
+
+        if (progress.Level >= 5)
+        {
+            levelMissionCodes.Add("reach_level_5");
+        }
+
+        if (progress.Level >= 10)
+        {
+            levelMissionCodes.Add("reach_level_10");
+        }
+
+        if (progress.Level >= 15)
+        {
+            levelMissionCodes.Add("reach_level_15");
+        }
+
+        foreach (var code in levelMissionCodes.Distinct())
+        {
+            var completed = await CompleteMissionAsync(code);
+
+            if (completed)
+            {
+                var mission = MissionCatalog.FirstOrDefault(m => m.Code == code);
+
+                if (mission != null)
+                {
+                    completedNow.Add(mission);
+                }
+            }
+        }
+
+        return completedNow;
     }
 
     // ===== LINKS MANAGEMENT =====
@@ -505,7 +884,12 @@ public class UserScopedDb : LocalDbService
         Console.WriteLine($"Executing SQL:\n{command.CommandText}\nWith parameters: Name={name}, Url={url}, Icon={icon}, Description={description}, AutoBoost={autoBoost}, IsActivityPub={isActivityPub}, Category={category}, Type={type}, Hidden={hidden}");
 
         var result = await command.ExecuteScalarAsync();
-        return result != null ? Convert.ToInt32(result) : 0;
+        var linkId = result != null ? Convert.ToInt32(result) : 0;
+
+        await RecordActivityAsync(10);
+        await CompleteAutomaticMissionsAsync();
+
+        return linkId;
     }
 
     public async Task<List<Link>> GetLinksAsync(bool? hidden = null)
@@ -818,7 +1202,12 @@ public class UserScopedDb : LocalDbService
         command.Parameters.AddWithValue("@AcceptedOn", acceptedOn ?? (object)DBNull.Value);
 
         var result = await command.ExecuteScalarAsync();
-        return result != null ? Convert.ToInt32(result) : 0;
+        var badgeId = result != null ? Convert.ToInt32(result) : 0;
+
+        await RecordActivityAsync(25);
+        await CompleteAutomaticMissionsAsync();
+
+        return badgeId;
     }
 
     public async Task<List<ReceivedBadge>> GetReceivedBadgesAsync()
@@ -829,7 +1218,7 @@ public class UserScopedDb : LocalDbService
         await connection.OpenAsync();
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id, NoteId, IssuerId, Title, Image, Description, IssuedOn, AcceptedOn, Hidden, ReceivedUtc FROM ReceivedBadges ORDER BY ReceivedUtc DESC";
+        command.CommandText = "SELECT Id, NoteId, IssuerId, Title, Image, Description, IssuedOn, AcceptedOn, Hidden, ReceivedUtc, IsFeatured FROM ReceivedBadges ORDER BY ReceivedUtc DESC";
 
         using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -845,7 +1234,8 @@ public class UserScopedDb : LocalDbService
                 IssuedOn = reader.IsDBNull(6) ? null : reader.GetString(6),
                 AcceptedOn = reader.IsDBNull(7) ? null : reader.GetString(7),
                 Hidden = reader.GetInt64(8) != 0,
-                ReceivedUtc = reader.GetString(9)
+                ReceivedUtc = reader.GetString(9),
+                IsFeatured = reader.GetInt64(10) != 0
             });
         }
 
@@ -861,6 +1251,19 @@ public class UserScopedDb : LocalDbService
         command.CommandText = "UPDATE ReceivedBadges SET Hidden = @Hidden WHERE Id = @Id";
         command.Parameters.AddWithValue("@Hidden", hidden ? 1 : 0);
         command.Parameters.AddWithValue("@Id", badgeId);
+        await command.ExecuteNonQueryAsync(); 
+    }
+
+    public async Task SetBadgeFeaturedAsync(int badgeId, bool isFeatured)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE ReceivedBadges SET IsFeatured = @IsFeatured WHERE Id = @Id";
+        command.Parameters.AddWithValue("@IsFeatured", isFeatured ? 1 : 0);
+        command.Parameters.AddWithValue("@Id", badgeId);
+
         await command.ExecuteNonQueryAsync();
     }
 
@@ -1049,6 +1452,247 @@ public class UserScopedDb : LocalDbService
         }
 
         return posts;
+    }
+
+    // ===== USER PROGRESS / GAMIFICATION MANAGEMENT =====
+
+    private const int BaseXpForNextLevel = 100;
+    private const int XpIncreasePerLevel = 50;
+
+    public static int GetXpNeededForNextLevel(int level)
+    {
+        level = Math.Max(1, level);
+        return BaseXpForNextLevel + ((level - 1) * XpIncreasePerLevel);
+    }
+
+    public static int GetTotalXpRequiredForLevel(int level)
+    {
+        level = Math.Max(1, level);
+
+        var total = 0;
+
+        for (var currentLevel = 1; currentLevel < level; currentLevel++)
+        {
+            total += GetXpNeededForNextLevel(currentLevel);
+        }
+
+        return total;
+    }
+
+    public static int CalculateLevelFromXp(int totalXp)
+    {
+        totalXp = Math.Max(0, totalXp);
+
+        var level = 1;
+
+        while (totalXp >= GetTotalXpRequiredForLevel(level + 1))
+        {
+            level++;
+        }
+
+        return level;
+    }
+
+    public static int GetCurrentLevelXp(int totalXp, int level)
+    {
+        var levelStartXp = GetTotalXpRequiredForLevel(level);
+        return Math.Max(0, totalXp - levelStartXp);
+    }
+
+    private static UserProgress ReadUserProgress(System.Data.Common.DbDataReader reader)
+    {
+        return new UserProgress
+        {
+            Id = reader.GetInt32(0),
+            TotalXp = reader.GetInt32(1),
+            Level = reader.GetInt32(2),
+            CurrentStreakDays = reader.GetInt32(3),
+            LastActivityDate = reader.IsDBNull(4) ? null : reader.GetString(4),
+            UpdatedUtc = reader.GetString(5)
+        };
+    }
+
+    private async Task EnsureUserProgressRowAsync(SQLiteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            INSERT OR IGNORE INTO UserProgress
+                (Id, TotalXp, Level, CurrentStreakDays, LastActivityDate, UpdatedUtc)
+            VALUES
+                (1, 0, 1, 0, NULL, CURRENT_TIMESTAMP);
+        ";
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<UserProgress> GetUserProgressAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+
+        await EnsureUserProgressRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT Id, TotalXp, Level, CurrentStreakDays, LastActivityDate, UpdatedUtc
+            FROM UserProgress
+            WHERE Id = 1;
+        ";
+
+        using var reader = await command.ExecuteReaderAsync();
+
+        if (await reader.ReadAsync())
+        {
+            var progress = ReadUserProgress(reader);
+            var calculatedLevel = CalculateLevelFromXp(progress.TotalXp);
+
+            if (progress.Level != calculatedLevel)
+            {
+                progress.Level = calculatedLevel;
+
+                await reader.CloseAsync();
+
+                using var updateCommand = connection.CreateCommand();
+                updateCommand.CommandText = @"
+                    UPDATE UserProgress
+                    SET Level = @Level,
+                        UpdatedUtc = CURRENT_TIMESTAMP
+                    WHERE Id = 1;
+                ";
+                updateCommand.Parameters.AddWithValue("@Level", progress.Level);
+                await updateCommand.ExecuteNonQueryAsync();
+            }
+
+            return progress;
+        }
+
+        return new UserProgress();
+    }
+
+    public async Task<UserProgress> AddXpAsync(int amount)
+    {
+        if (amount <= 0)
+        {
+            return await GetUserProgressAsync();
+        }
+
+        using (var connection = GetConnection())
+        {
+            await connection.OpenAsync();
+
+            await EnsureUserProgressRowAsync(connection);
+
+            using var readCommand = connection.CreateCommand();
+            readCommand.CommandText = @"
+                SELECT TotalXp
+                FROM UserProgress
+                WHERE Id = 1;
+            ";
+
+            var currentTotalXp = Convert.ToInt32(await readCommand.ExecuteScalarAsync() ?? 0);
+            var newTotalXp = currentTotalXp + amount;
+            var newLevel = CalculateLevelFromXp(newTotalXp);
+
+            using var updateCommand = connection.CreateCommand();
+            updateCommand.CommandText = @"
+                UPDATE UserProgress
+                SET TotalXp = @TotalXp,
+                    Level = @Level,
+                    UpdatedUtc = CURRENT_TIMESTAMP
+                WHERE Id = 1;
+            ";
+            updateCommand.Parameters.AddWithValue("@TotalXp", newTotalXp);
+            updateCommand.Parameters.AddWithValue("@Level", newLevel);
+
+            await updateCommand.ExecuteNonQueryAsync();
+        }
+
+        return await GetUserProgressAsync();
+    }
+
+    public async Task<UserProgress> RecordActivityAsync(int xpAmount = 0)
+    {
+        using (var connection = GetConnection())
+        {
+            await connection.OpenAsync();
+
+            await EnsureUserProgressRowAsync(connection);
+
+            using var readCommand = connection.CreateCommand();
+            readCommand.CommandText = @"
+                SELECT TotalXp, CurrentStreakDays, LastActivityDate
+                FROM UserProgress
+                WHERE Id = 1;
+            ";
+
+            var totalXp = 0;
+            var currentStreakDays = 0;
+            string? lastActivityDate = null;
+
+            using (var reader = await readCommand.ExecuteReaderAsync())
+            {
+                if (await reader.ReadAsync())
+                {
+                    totalXp = reader.GetInt32(0);
+                    currentStreakDays = reader.GetInt32(1);
+                    lastActivityDate = reader.IsDBNull(2) ? null : reader.GetString(2);
+                }
+            }
+
+            var today = DateTime.UtcNow.Date;
+            var todayText = today.ToString("yyyy-MM-dd");
+
+            var newStreakDays = currentStreakDays;
+
+            if (string.IsNullOrWhiteSpace(lastActivityDate))
+            {
+                newStreakDays = 1;
+            }
+            else if (DateTime.TryParse(lastActivityDate, out var lastDate))
+            {
+                lastDate = lastDate.Date;
+
+                if (lastDate == today)
+                {
+                    newStreakDays = currentStreakDays;
+                }
+                else if (lastDate == today.AddDays(-1))
+                {
+                    newStreakDays = currentStreakDays + 1;
+                }
+                else
+                {
+                    newStreakDays = 1;
+                }
+            }
+            else
+            {
+                newStreakDays = 1;
+            }
+
+            var newTotalXp = totalXp + Math.Max(0, xpAmount);
+            var newLevel = CalculateLevelFromXp(newTotalXp);
+
+            using var updateCommand = connection.CreateCommand();
+            updateCommand.CommandText = @"
+                UPDATE UserProgress
+                SET TotalXp = @TotalXp,
+                    Level = @Level,
+                    CurrentStreakDays = @CurrentStreakDays,
+                    LastActivityDate = @LastActivityDate,
+                    UpdatedUtc = CURRENT_TIMESTAMP
+                WHERE Id = 1;
+            ";
+
+            updateCommand.Parameters.AddWithValue("@TotalXp", newTotalXp);
+            updateCommand.Parameters.AddWithValue("@Level", newLevel);
+            updateCommand.Parameters.AddWithValue("@CurrentStreakDays", newStreakDays);
+            updateCommand.Parameters.AddWithValue("@LastActivityDate", todayText);
+
+            await updateCommand.ExecuteNonQueryAsync();
+        }
+
+        return await GetUserProgressAsync();
     }
 
     // ===== USER SETTINGS MANAGEMENT =====

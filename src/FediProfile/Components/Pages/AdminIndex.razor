@@ -5,6 +5,7 @@
 @using System.Text.Json
 @using System.Net.Http.Headers
 @using FediProfile.Core
+@using FediProfile.Models
 @attribute [Authorize]
 @layout FediProfile.Components.Layouts.MainLayout
 @rendermode InteractiveServer
@@ -134,7 +135,55 @@
                 <!-- Bio -->
                 <textarea @bind="_profileBio" class="pe-bio-input" rows="2" placeholder="A short bio description ..."></textarea>
 
-                
+                @if (_userProgress != null)
+                {
+                    <!-- Progress -->
+                    <section class="admin-card" style="margin-bottom:1rem;padding:1rem;border-radius:16px;border:1px solid var(--border-color, rgba(255,255,255,0.12));background:rgba(255,255,255,0.04)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:0.9rem">
+                            <div>
+                                <h2 style="margin:0;font-size:1.1rem">My Progress</h2>
+                                <p class="muted" style="margin:0.25rem 0 0">Track your level, XP and daily streak.</p>
+                            </div>
+                        </div>
+
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem">
+                            <div style="padding:0.85rem;border-radius:14px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);text-align:center">
+                                <div style="font-size:1.4rem">🔥</div>
+                                <strong style="display:block;font-size:1.25rem">@_userProgress.CurrentStreakDays</strong>
+                                <span class="muted">Streak</span>
+                            </div>
+
+                            <div style="padding:0.85rem;border-radius:14px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);text-align:center">
+                                <div style="font-size:1.4rem">⭐</div>
+                                <strong style="display:block;font-size:1.25rem">@_userProgress.Level</strong>
+                                <span class="muted">Level</span>
+                            </div>
+
+                            <div style="padding:0.85rem;border-radius:14px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);text-align:center">
+                                <div style="font-size:1.4rem">⚡</div>
+                                <strong style="display:block;font-size:1.25rem">@_userProgress.TotalXp</strong>
+                                <span class="muted">XP</span>
+                            </div>
+
+                            <div style="padding:0.85rem;border-radius:14px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);text-align:center">
+                                <div style="font-size:1.4rem">📅</div>
+                                <strong style="display:block;font-size:1.25rem">@FormatShortDate(_userProgress.LastActivityDate)</strong>
+                                <span class="muted">Last Activity</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:1rem;padding:0.85rem;border-radius:14px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04)">
+                            <div style="display:flex;justify-content:space-between;gap:1rem;font-size:0.85rem;margin-bottom:0.45rem">
+                                <span>Level @_userProgress.Level → @(_userProgress.Level + 1)</span>
+                                <span>@_adminCurrentLevelXp / @_adminNextLevelXp XP</span>
+                            </div>
+
+                            <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.12);overflow:hidden">
+                                <div style="height:100%;width:@_adminProgressWidth;border-radius:999px;background:var(--primary, #8b5cf6)"></div>
+                            </div>
+                        </div>
+                    </section>
+                }
 
                 <!-- Links -->
                 <div class="pe-links">
@@ -453,6 +502,151 @@
                 }
             </article>
 
+            <!-- Missions -->
+            @if (_userMissions.Count > 0)
+            {
+                <article class="card admin-card-spaced admin-missions-card">
+                    <div class="admin-missions-header">
+                        <div>
+                            <h2 class="admin-missions-title">🎯 Missions</h2>
+                            <p class="admin-missions-subtitle">
+                                Complete profile challenges, earn XP, and unlock progress.
+                            </p>
+                        </div>
+
+                        <div class="admin-missions-summary">
+                            <strong>@_completedMissionsCount / @_totalMissionsCount</strong>
+                            <span>completed</span>
+                        </div>
+                    </div>
+
+                    <div class="admin-missions-progress">
+                        <div class="admin-missions-progress-fill" style="width:@_missionsProgressWidth"></div>
+                    </div>
+
+                    @foreach (var category in MissionCategoryOrder)
+                    {
+                        var categoryMissions = _userMissions
+                            .Where(m => m.Category == category)
+                            .ToList();
+
+                        if (categoryMissions.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        <div class="admin-mission-category">
+                            <div class="admin-mission-category-heading">
+                                <span>@GetMissionCategoryIcon(category)</span>
+                                <h3>@category</h3>
+                            </div>
+
+                            <div class="admin-mission-grid">
+                                @foreach (var mission in categoryMissions)
+                                {
+                                    <article class="admin-mission-card @(mission.IsCompleted ? "admin-mission-completed" : "admin-mission-pending")" @key="mission.Code">
+                                        <div class="admin-mission-icon">
+                                            @mission.Icon
+                                        </div>
+
+                                        <div class="admin-mission-content">
+                                            <h4>@mission.Title</h4>
+
+                                            <p>@mission.Description</p>
+
+                                            <div class="admin-mission-footer">
+                                                <span class="admin-mission-xp">
+                                                    +@mission.XpReward XP
+                                                </span>
+
+                                                @if (mission.IsCompleted)
+                                                {
+                                                    <span class="admin-mission-status admin-mission-status-completed">
+                                                        ✅ Completed
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="admin-mission-status admin-mission-status-pending">
+                                                        ⏳ Pending
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+                                    </article>
+                                }
+                            </div>
+                        </div>
+                    }
+                </article>
+            }
+
+            <!-- Community Overview -->
+            <article class="card admin-card-spaced admin-community-card">
+                <div class="admin-community-header">
+                    <div>
+                        <h2 class="admin-community-title">🌐 Community</h2>
+                        <p class="admin-community-subtitle">
+                            Overview of your profile's social presence across the Fediverse.
+                        </p>
+                    </div>
+
+                    <div class="admin-community-status">
+                        <strong>@CommunityStatusLabel</strong>
+                        <span>@CommunityTotalSignals signals</span>
+                    </div>
+                </div>
+
+                <div class="admin-community-handle">
+                    <div>
+                        <span class="admin-community-handle-label">Fediverse handle</span>
+                        <code>@FediverseHandle</code>
+                    </div>
+
+                    <button class="button button-ghost button-small" @onclick="CopyFediverseHandle">
+                        @(_fediverseHandleCopied ? "Copied!" : "Copy handle")
+                    </button>
+                </div>
+
+                <div class="admin-community-grid">
+                    <div class="admin-community-stat">
+                        <div class="admin-community-stat-icon">👥</div>
+                        <div>
+                            <strong>@CommunityFollowersCount</strong>
+                            <span>Followers</span>
+                            <p>People following your federated profile.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-community-stat">
+                        <div class="admin-community-stat-icon">🏅</div>
+                        <div>
+                            <strong>@CommunityBadgeSourcesCount</strong>
+                            <span>Badge sources</span>
+                            <p>Issuers connected through received badges.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-community-stat">
+                        <div class="admin-community-stat-icon">🛰️</div>
+                        <div>
+                            <strong>@CommunityFediverseLinksCount</strong>
+                            <span>Fediverse links</span>
+                            <p>ActivityPub links detected in your profile.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-community-stat">
+                        <div class="admin-community-stat-icon">📢</div>
+                        <div>
+                            <strong>@CommunityRecentActivityCount</strong>
+                            <span>Recent activity</span>
+                            <p>Recent posts available for your profile.</p>
+                        </div>
+                    </div>
+                </div>
+            </article>
+
             <!-- Followers -->
             @if (_followers != null)
             {
@@ -665,40 +859,59 @@
                                         {
                                             <div style="font-size:0.75rem;color:var(--muted)">Issued: @badge.IssuedOn</div>
                                         }
-                                        <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap">
+                                        <div style="display:flex;gap:0.45rem;flex-wrap:wrap;margin-top:0.75rem">
+                                            <button class="button button-ghost button-small"
+                                                    style="font-size:0.75rem;padding:2px 8px"
+                                                    @onclick="() => ToggleFeaturedBadge(badge)"
+                                                    title="@(badge.IsFeatured ? "Remove from featured badges" : "Show as featured badge")">
+                                                @(badge.IsFeatured ? "⭐ Featured" : "☆ Feature")
+                                            </button>
+
                                             <button class="button button-ghost button-small"
                                                     style="font-size:0.75rem;padding:2px 8px"
                                                     @onclick="() => ToggleBadgeVisibility(badge)"
                                                     title="@(badge.Hidden ? "Show on profile" : "Hide from profile")">
                                                 @(badge.Hidden ? "👁️ Show" : "🙈 Hide")
                                             </button>
-                                            @if (!string.IsNullOrEmpty(badge.NoteId))
+
+                                            @if (!string.IsNullOrWhiteSpace(badge.NoteId))
                                             {
-                                                <a href="@badge.NoteId" target="_blank" rel="noopener" class="button button-ghost button-small" style="font-size:0.75rem;padding:2px 8px;text-decoration:none">
+                                                <a class="button button-ghost button-small"
+                                                style="font-size:0.75rem;padding:2px 8px"
+                                                href="@badge.NoteId"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                title="View badge">
                                                     🔗 View
                                                 </a>
                                             }
+
                                             @if (_badgeDeleteConfirmId == badge.Id)
                                             {
-                                                <span style="font-size:0.75rem;color:#dc3545;font-weight:600">Delete?</span>
-                                                <button class="button button-ghost button-small"
-                                                        style="font-size:0.75rem;padding:2px 8px;color:#dc3545;border-color:#dc3545"
-                                                        @onclick="() => DeleteBadge(badge.Id)">
-                                                    Yes
-                                                </button>
-                                                <button class="button button-ghost button-small"
+                                                <button type="button"
+                                                        class="button button-danger button-small"
                                                         style="font-size:0.75rem;padding:2px 8px"
-                                                        @onclick="() => _badgeDeleteConfirmId = null">
-                                                    No
+                                                        @onclick="() => DeleteBadge(badge.Id)"
+                                                        title="Confirm delete badge">
+                                                    Delete
+                                                </button>
+
+                                                <button type="button"
+                                                        class="button button-ghost button-small"
+                                                        style="font-size:0.75rem;padding:2px 8px"
+                                                        @onclick="() => _badgeDeleteConfirmId = null"
+                                                        title="Cancel delete">
+                                                    Cancel
                                                 </button>
                                             }
                                             else
                                             {
-                                                <button class="button button-ghost button-small"
-                                                        style="font-size:0.75rem;padding:2px 8px;color:#dc3545"
+                                                <button type="button"
+                                                        class="button button-ghost button-small"
+                                                        style="font-size:0.75rem;padding:2px 8px"
                                                         @onclick="() => _badgeDeleteConfirmId = badge.Id"
-                                                        title="Delete this badge permanently">
-                                                    🗑️
+                                                        title="Delete badge">
+                                                    🗑
                                                 </button>
                                             }
                                         </div>
@@ -842,7 +1055,403 @@
     }
 </section>
 
+<style>
+    .admin-missions-card {
+        overflow: hidden;
+        --mission-accent: var(--primary, var(--accent, #8b5cf6));
+        --mission-surface: color-mix(in srgb, currentColor 6%, transparent);
+        --mission-surface-strong: color-mix(in srgb, currentColor 10%, transparent);
+        --mission-border: color-mix(in srgb, currentColor 16%, transparent);
+        --mission-muted: color-mix(in srgb, currentColor 62%, transparent);
+    }
 
+    .admin-missions-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 0.85rem;
+    }
+
+    .admin-missions-title {
+        margin: 0;
+        font-size: 1.25rem;
+        line-height: 1.2;
+        color: inherit;
+    }
+
+    .admin-missions-subtitle {
+        margin: 0.25rem 0 0;
+        color: var(--mission-muted);
+        font-size: 0.9rem;
+    }
+
+    .admin-missions-summary {
+        min-width: 96px;
+        padding: 0.65rem 0.8rem;
+        border: 1px solid var(--mission-border);
+        border-radius: 14px;
+        text-align: center;
+        background: var(--mission-surface);
+        color: inherit;
+    }
+
+    .admin-missions-summary strong {
+        display: block;
+        font-size: 1rem;
+        line-height: 1.1;
+        color: inherit;
+    }
+
+    .admin-missions-summary span {
+        display: block;
+        margin-top: 0.15rem;
+        font-size: 0.72rem;
+        color: var(--mission-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .admin-missions-progress {
+        width: 100%;
+        height: 9px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--mission-surface-strong);
+        margin-bottom: 1.1rem;
+    }
+
+    .admin-missions-progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--mission-accent);
+        transition: width 300ms ease;
+    }
+
+    .admin-mission-category {
+        margin-top: 1rem;
+    }
+
+    .admin-mission-category-heading {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-bottom: 0.65rem;
+    }
+
+    .admin-mission-category-heading h3 {
+        margin: 0;
+        font-size: 0.95rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--mission-muted);
+    }
+
+    .admin-mission-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .admin-mission-card {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.85rem;
+        border: 1px solid var(--mission-border);
+        border-radius: 16px;
+        background: var(--mission-surface);
+        color: inherit;
+        transition:
+            transform 220ms ease,
+            border-color 220ms ease,
+            box-shadow 220ms ease,
+            background 220ms ease,
+            opacity 220ms ease;
+    }
+
+    .admin-mission-icon {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        font-size: 1.35rem;
+        background: var(--mission-surface-strong);
+        border: 1px solid var(--mission-border);
+    }
+
+    .admin-mission-content {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .admin-mission-content h4 {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.2;
+        color: inherit;
+    }
+
+    .admin-mission-content p {
+        margin: 0.35rem 0 0.65rem;
+        font-size: 0.8rem;
+        color: var(--mission-muted);
+        line-height: 1.35;
+    }
+
+    .admin-mission-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .admin-mission-xp {
+        font-size: 0.75rem;
+        font-weight: 800;
+        color: var(--mission-accent);
+    }
+
+    .admin-mission-status {
+        flex-shrink: 0;
+        padding: 0.22rem 0.48rem;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 800;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+
+    .admin-mission-status-completed {
+        background: color-mix(in srgb, #22c55e 16%, transparent);
+        color: #4ade80;
+        border-color: color-mix(in srgb, #22c55e 34%, transparent);
+    }
+
+    .admin-mission-status-pending {
+        background: color-mix(in srgb, #f59e0b 16%, transparent);
+        color: #fbbf24;
+        border-color: color-mix(in srgb, #f59e0b 34%, transparent);
+    }
+
+    .admin-mission-completed {
+        background: color-mix(in srgb, #22c55e 8%, transparent);
+        border-color: color-mix(in srgb, #22c55e 40%, transparent);
+    }
+
+    .admin-mission-completed .admin-mission-icon {
+        background: color-mix(in srgb, #22c55e 14%, transparent);
+        border-color: color-mix(in srgb, #22c55e 38%, transparent);
+    }
+
+    .admin-mission-pending {
+        opacity: 0.76;
+    }
+
+    .admin-mission-pending:hover {
+        opacity: 1;
+    }
+
+    @@media (hover: hover) {
+        .admin-mission-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--mission-accent);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.20);
+            background: var(--mission-surface-strong);
+        }
+    }
+
+    @@media (max-width: 900px) {
+        .admin-mission-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 640px) {
+        .admin-missions-header {
+            flex-direction: column;
+        }
+
+        .admin-missions-summary {
+            width: 100%;
+        }
+
+        .admin-mission-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* ===== COMMUNITY OVERVIEW ===== */
+
+    .admin-community-card {
+        overflow: hidden;
+        --community-accent: var(--primary, var(--accent, #8b5cf6));
+        --community-surface: color-mix(in srgb, currentColor 6%, transparent);
+        --community-surface-strong: color-mix(in srgb, currentColor 10%, transparent);
+        --community-border: color-mix(in srgb, currentColor 16%, transparent);
+        --community-muted: color-mix(in srgb, currentColor 62%, transparent);
+    }
+
+    .admin-community-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .admin-community-title {
+        margin: 0;
+        font-size: 1.25rem;
+        line-height: 1.2;
+        color: inherit;
+    }
+
+    .admin-community-subtitle {
+        margin: 0.25rem 0 0;
+        color: var(--community-muted);
+        font-size: 0.9rem;
+    }
+
+    .admin-community-status {
+        min-width: 120px;
+        padding: 0.65rem 0.8rem;
+        border: 1px solid var(--community-border);
+        border-radius: 14px;
+        text-align: center;
+        background: var(--community-surface);
+        color: inherit;
+    }
+
+    .admin-community-status strong {
+        display: block;
+        font-size: 0.82rem;
+        line-height: 1.1;
+    }
+
+    .admin-community-status span {
+        display: block;
+        margin-top: 0.2rem;
+        font-size: 0.72rem;
+        color: var(--community-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .admin-community-handle {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.85rem;
+        margin-bottom: 1rem;
+        border: 1px solid var(--community-border);
+        border-radius: 16px;
+        background: var(--community-surface);
+    }
+
+    .admin-community-handle-label {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-size: 0.72rem;
+        color: var(--community-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .admin-community-handle code {
+        font-size: 0.9rem;
+        color: var(--community-accent);
+        word-break: break-all;
+    }
+
+    .admin-community-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .admin-community-stat {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.85rem;
+        border: 1px solid var(--community-border);
+        border-radius: 16px;
+        background: var(--community-surface);
+        color: inherit;
+        transition:
+            transform 220ms ease,
+            border-color 220ms ease,
+            box-shadow 220ms ease,
+            background 220ms ease;
+    }
+
+    .admin-community-stat-icon {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        font-size: 1.35rem;
+        background: var(--community-surface-strong);
+        border: 1px solid var(--community-border);
+    }
+
+    .admin-community-stat strong {
+        display: block;
+        font-size: 1rem;
+        line-height: 1.1;
+        color: inherit;
+    }
+
+    .admin-community-stat span {
+        display: block;
+        margin-top: 0.2rem;
+        font-size: 0.78rem;
+        font-weight: 800;
+        color: var(--community-accent);
+    }
+
+    .admin-community-stat p {
+        margin: 0.35rem 0 0;
+        font-size: 0.76rem;
+        color: var(--community-muted);
+        line-height: 1.3;
+    }
+
+    @@media (hover: hover) {
+        .admin-community-stat:hover {
+            transform: translateY(-3px);
+            border-color: var(--community-accent);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.20);
+            background: var(--community-surface-strong);
+        }
+    }
+
+    @@media (max-width: 1000px) {
+        .admin-community-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 640px) {
+        .admin-community-header,
+        .admin-community-handle {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .admin-community-status {
+            width: 100%;
+        }
+
+        .admin-community-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 
 @code {
     [SupplyParameterFromQuery(Name = "impersonate")]
@@ -879,6 +1488,90 @@
     private bool _newLinkHidden;
     private bool _newLinkIconGridOpen;
     private bool _addingNewLink;
+
+    // Gamification
+    private UserProgress? _userProgress;
+    private List<UserMission> _userMissions = new();
+
+    private static readonly string[] MissionCategoryOrder =
+    [
+        "Starter",
+        "Progress",
+        "Streak"
+    ];
+
+    private static readonly (int Level, string Code)[] LevelMissionThresholds =
+    [
+        (3, "reach_level_3"),
+        (5, "reach_level_5"),
+        (10, "reach_level_10"),
+        (15, "reach_level_15")
+    ];
+
+    private static readonly (int Days, string Code)[] StreakMissionThresholds =
+    [
+        (1, "streak_1"),
+        (3, "streak_3"),
+        (5, "streak_5"),
+        (10, "streak_10"),
+        (25, "streak_25"),
+        (50, "streak_50"),
+        (100, "streak_100")
+    ];
+
+    private int _completedMissionsCount =>
+        _userMissions.Count(m => m.IsCompleted);
+
+    private int _totalMissionsCount =>
+        _userMissions.Count;
+
+    private double _missionsProgressPercent =>
+        _totalMissionsCount <= 0
+            ? 0
+            : Math.Clamp((_completedMissionsCount / (double)_totalMissionsCount) * 100, 0, 100);
+
+    private string _missionsProgressWidth =>
+        $"{_missionsProgressPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+
+    private int _adminCurrentLevelXp =>
+        _userProgress == null ? 0 : UserScopedDb.GetCurrentLevelXp(_userProgress.TotalXp, _userProgress.Level);
+
+    private int _adminNextLevelXp =>
+        _userProgress == null ? 100 : UserScopedDb.GetXpNeededForNextLevel(_userProgress.Level);
+
+    private double _adminProgressPercent =>
+        _adminNextLevelXp <= 0
+            ? 0
+            : Math.Clamp((_adminCurrentLevelXp / (double)_adminNextLevelXp) * 100, 0, 100);
+
+    private string _adminProgressWidth =>
+        $"{_adminProgressPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+
+    private string FormatShortDate(string? dateText)
+    {
+        if (string.IsNullOrWhiteSpace(dateText))
+        {
+            return "—";
+        }
+
+        if (DateTime.TryParse(dateText, out var date))
+        {
+            return date.ToString("dd/MM/yy");
+        }
+
+        return dateText;
+    }
+
+    private static string GetMissionCategoryIcon(string category)
+    {
+        return category switch
+        {
+            "Starter" => "✨",
+            "Progress" => "⚡",
+            "Streak" => "🔥",
+            _ => "🎯"
+        };
+    }
 
     // URL format hints per platform icon
     private static readonly Dictionary<string, (string HandlePrefix, string UrlTemplate, string PlatformName, string Example)> _urlHints = new()
@@ -1068,6 +1761,44 @@
     // Recent posts (boosted content)
     private List<RecentPost>? _recentPosts;
 
+    // ===== Community Overview =====
+    private bool _fediverseHandleCopied;
+
+    private string FediverseHandle =>
+        string.IsNullOrWhiteSpace(_currentUserSlug)
+            ? string.Empty
+            : $"@{_currentUserSlug}@{_currentDomain}";
+
+    private int CommunityFollowersCount =>
+        _followerCount;
+
+    private int CommunityBadgeSourcesCount =>
+        _receivedBadges?
+            .Select(badge => badge.IssuerId)
+            .Distinct()
+            .Count() ?? 0;
+
+    private int CommunityFediverseLinksCount =>
+        _editableLinks?.Count(link => link.IsActivityPub && !link.Hidden) ?? 0;
+
+    private int CommunityRecentActivityCount =>
+        _recentPosts?.Count ?? 0;
+
+    private int CommunityTotalSignals =>
+        CommunityFollowersCount
+        + CommunityBadgeSourcesCount
+        + CommunityFediverseLinksCount
+        + CommunityRecentActivityCount;
+
+    private string CommunityStatusLabel =>
+        CommunityTotalSignals switch
+        {
+            0 => "Getting started",
+            < 3 => "Building presence",
+            < 8 => "Connected profile",
+            _ => "Active community"
+        };
+
     // Danger Zone - Delete Account
     private bool _deleteAccountConfirming;
     private string? _deleteAccountConfirmText;
@@ -1180,6 +1911,9 @@
             await LoadVerifiedUris();
             await LoadFollowers();
             await LoadRecentPosts();
+            await LoadUserProgress();
+            await LoadUserMissions();
+            await CheckAutomaticMissionsAsync();
         }
     }
 
@@ -1209,6 +1943,60 @@
         {
             _profileTheme = Themes.DefaultFile;
         }
+    }
+
+    private async Task LoadUserProgress()
+    {
+        if (_currentUserDb == null) return;
+
+        _userProgress = await _currentUserDb.GetUserProgressAsync();
+    }
+
+    private async Task LoadUserMissions()
+    {
+        if (_currentUserDb == null) return;
+
+        _userMissions = await _currentUserDb.GetUserMissionsAsync();
+    }
+
+    private async Task TryCompleteMissionAsync(string missionCode)
+    {
+        if (_currentUserDb == null) return;
+
+        var completed = await _currentUserDb.CompleteMissionAsync(missionCode);
+
+        if (completed)
+        {
+            _userProgress = await _currentUserDb.GetUserProgressAsync();
+            await LoadUserMissions();
+            await CheckAutomaticMissionsAsync();
+        }
+    }
+
+    private async Task CheckAutomaticMissionsAsync()
+    {
+        if (_currentUserDb == null) return;
+
+        var progress = await _currentUserDb.GetUserProgressAsync();
+
+        foreach (var milestone in LevelMissionThresholds)
+        {
+            if (progress.Level >= milestone.Level)
+            {
+                await _currentUserDb.CompleteMissionAsync(milestone.Code);
+            }
+        }
+
+        foreach (var milestone in StreakMissionThresholds)
+        {
+            if (progress.CurrentStreakDays >= milestone.Days)
+            {
+                await _currentUserDb.CompleteMissionAsync(milestone.Code);
+            }
+        }
+
+        _userProgress = await _currentUserDb.GetUserProgressAsync();
+        await LoadUserMissions();
     }
 
     private bool _themeSaved;
@@ -1286,6 +2074,11 @@
                 actorAvatarUrl: _profileAvatarUrl,
                 uiTheme: _profileTheme
             );
+
+            // Updates streak without giving XP for repeated saves.
+            _userProgress = await _currentUserDb.RecordActivityAsync(0);
+            await CheckAutomaticMissionsAsync();
+
             await RegenerateStaticProfileAsync();
             _profileMessage = "Profile saved successfully!";
         }
@@ -2025,12 +2818,21 @@ I don't know if this is the best UX
                 actorAPUri: actorAPUri
             );
 
+            // Reward XP only when a new link is added.
+            _userProgress = await _currentUserDb.RecordActivityAsync(25);
+            await TryCompleteMissionAsync("first_link");
+            await CheckAutomaticMissionsAsync();
+
             _linkMessage = isActivityPub 
-                ? "Link added! ActivityPub actor detected — you can enable AutoBoost."
-                : "Link added!";
+                ? "Link added! ActivityPub actor detected — you can enable AutoBoost. +25 XP"
+                : "Link added! +25 XP";
+
             _addingNewLink = false;
             await LoadLinks();
             await RegenerateStaticProfileAsync();
+            await LoadUserProgress();
+            await LoadUserMissions();
+            await CheckAutomaticMissionsAsync();
         }
         catch (Exception ex)
         {
@@ -2065,6 +2867,9 @@ I don't know if this is the best UX
             _linkMessage = "Link deleted.";
             await LoadLinks();
             await RegenerateStaticProfileAsync();
+            await LoadUserProgress();
+            await LoadUserMissions();
+            await CheckAutomaticMissionsAsync();
         }
         catch (Exception ex)
         {
@@ -2166,13 +2971,27 @@ I don't know if this is the best UX
             if (importedCount > 0)
             {
                 var titles = string.Join(", ", importedTitles.Select(t => $"'{t}'"));
+
+                _userProgress = await _currentUserDb.RecordActivityAsync(importedCount * 50);
+                await TryCompleteMissionAsync("first_badge");
+                await CheckAutomaticMissionsAsync();
+
+                var earnedXp = importedCount * 50;
+
                 _importBadgeMessage = importedCount == 1
-                    ? $"Badge {titles} imported successfully!"
-                    : $"{importedCount} badges imported: {titles}";
+                    ? $"Badge {titles} imported successfully! +{earnedXp} XP"
+                    : $"{importedCount} badges imported: {titles} +{earnedXp} XP";
+
                 _importBadgeUrl = null;
+
                 await LoadBadgeIssuers();
                 await LoadReceivedBadges();
                 await RegenerateStaticProfileAsync();
+                await LoadUserProgress();
+                await LoadUserMissions();
+                await CheckAutomaticMissionsAsync();
+                await LoadLinks();
+
                 _badgeTab = "badges";
             }
             else if (skippedRecipients.Count > 0)
@@ -2229,20 +3048,67 @@ I don't know if this is the best UX
         }
     }
 
-    private async Task ToggleBadgeVisibility(ReceivedBadge badge)
+    private async Task ToggleFeaturedBadge(ReceivedBadge badge)
     {
         if (_currentUserDb == null) return;
+
         try
         {
-            var newHidden = !badge.Hidden;
-            await _currentUserDb.SetBadgeHiddenAsync(badge.Id, newHidden);
-            badge.Hidden = newHidden;
+            var shouldFeature = !badge.IsFeatured;
+
+            var featuredCount = _receivedBadges?
+                .Count(b => b.IsFeatured && b.Id != badge.Id) ?? 0;
+
+            if (shouldFeature && featuredCount >= 3)
+            {
+                _profileMessage = "You can only feature up to 3 badges.";
+                _profileIsError = true;
+                return;
+            }
+
+            await _currentUserDb.SetBadgeFeaturedAsync(badge.Id, shouldFeature);
+
+            badge.IsFeatured = shouldFeature;
+
+            _userProgress = await _currentUserDb.RecordActivityAsync(5);
+
+            if (shouldFeature)
+            {
+                await TryCompleteMissionAsync("first_featured_badge");
+            }
+
+            await LoadReceivedBadges();
             await RegenerateStaticProfileAsync();
+            await LoadUserProgress();
+            await LoadUserMissions();
+            await CheckAutomaticMissionsAsync();
+
+            _profileMessage = shouldFeature
+                ? "Badge added to featured badges."
+                : "Badge removed from featured badges.";
+
+            _profileIsError = false;
+
+            StateHasChanged();
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to toggle badge visibility for badge {BadgeId}", badge.Id);
+            Logger.LogWarning(ex, "Failed to toggle featured badge {BadgeId}", badge.Id);
+            _profileMessage = $"Could not update featured badge: {ex.Message}";
+            _profileIsError = true;
         }
+    }
+    
+    private async Task ToggleBadgeVisibility(ReceivedBadge badge)
+    {
+        if (_currentUserDb == null) return;
+
+        await _currentUserDb.SetBadgeHiddenAsync(badge.Id, !badge.Hidden);
+
+        badge.Hidden = !badge.Hidden;
+
+        await LoadReceivedBadges();
+        await RegenerateStaticProfileAsync();
     }
 
     private async Task DeleteBadge(int badgeId)
@@ -2254,6 +3120,9 @@ I don't know if this is the best UX
             _badgeDeleteConfirmId = null;
             await LoadReceivedBadges();
             await RegenerateStaticProfileAsync();
+            await LoadUserProgress();
+            await LoadUserMissions();
+            await CheckAutomaticMissionsAsync();
         }
         catch (Exception ex)
         {
@@ -2391,6 +3260,24 @@ I don't know if this is the best UX
         var profileUrl = $"{(_currentDomain?.Contains("localhost") == true ? "http" : "https")}://{_currentDomain}/{_currentUserSlug}";
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", profileUrl);
         _copied = true;
+        StateHasChanged();
+    }
+
+    private async Task CopyFediverseHandle()
+    {
+        if (string.IsNullOrWhiteSpace(FediverseHandle))
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", FediverseHandle);
+
+        _fediverseHandleCopied = true;
+        StateHasChanged();
+
+        await Task.Delay(1600);
+
+        _fediverseHandleCopied = false;
         StateHasChanged();
     }
 

@@ -536,18 +536,49 @@ app.MapGet("/{userSlug}/links", async (UserScopedDb db) =>
     return Results.Json(links);
 });
 
-// User-scoped badges endpoint: /{user}/badges (public - hidden badges excluded)
+// User-scoped badges endpoint: /{user}/badges
 app.MapGet("/{userSlug}/badges", async (UserScopedDb db) =>
 {
     var badges = await db.GetReceivedBadgesAsync();
-    var visible = badges.Where(b => !b.Hidden).Select(b => new {
-        b.Title,
-        b.Image,
-        b.Description,
-        b.IssuedOn,
-        b.NoteId
-    });
+
+    var visible = badges
+        .Where(b => !b.Hidden || b.IsFeatured)
+        .Select(b => new
+        {
+            b.Title,
+            b.Image,
+            b.Description,
+            b.IssuedOn,
+            b.NoteId,
+            hidden = b.Hidden,
+            featured = b.IsFeatured
+        });
+
     return Results.Json(visible);
+});
+
+// User-scoped gamification endpoint: /{user}/gamification
+app.MapGet("/{userSlug}/gamification", async (UserScopedDb db) =>
+{
+    var progress = await db.GetUserProgressAsync();
+    var badges = await db.GetReceivedBadgesAsync();
+
+    var publicBadgesCount = badges.Count(b => !b.Hidden || b.IsFeatured);
+
+    var currentLevelXp = UserScopedDb.GetCurrentLevelXp(progress.TotalXp, progress.Level);
+    var nextLevelXp = UserScopedDb.GetXpNeededForNextLevel(progress.Level);
+
+    return Results.Json(new
+    {
+        streakDays = progress.CurrentStreakDays,
+        level = progress.Level,
+        xp = progress.TotalXp,
+        currentLevelXp,
+        nextLevelXp,
+        badgesCount = publicBadgesCount,
+        lastActivityDate = progress.LastActivityDate,
+        updatedUtc = progress.UpdatedUtc
+    });
 });
 
 // User-scoped recent posts endpoint: /{user}/recent-posts (public, respects ShowRecentPosts setting)

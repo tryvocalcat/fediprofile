@@ -2,6 +2,7 @@
 
 // Derive the user base path from the current URL (e.g. "/john" -> "/john")
 const basePath = window.location.pathname.replace(/\/$/, '');
+const USE_DEMO_GAMIFICATION = false;
 
 async function loadProfile() {
   try {
@@ -36,11 +37,15 @@ async function loadProfile() {
     // Update page title
     if (actor.name) document.title = actor.name + ' - FediProfile';
 
+    // Fetch and render badges
+    const badges = await loadBadges();
+
+    // Fetch and render gamification
+    const gamification = await loadGamification(actor._fediprofile?.gamification);
+    renderGamification(gamification, badges);
+
     // Render links from attachments
     renderLinks(actor.attachment || []);
-
-    // Fetch and render badges
-    await loadBadges();
 
     // Fetch and render recent posts
     await loadRecentPosts();
@@ -50,6 +55,140 @@ async function loadProfile() {
   }
 }
 
+async function loadGamification(fallbackData = null) {
+  try {
+    const url = basePath + '/gamification?t=' + Date.now();
+
+    const response = await fetch(url, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      return fallbackData;
+    }
+
+    return await response.json();
+  } catch (err) {
+    return fallbackData;
+  }
+}
+
+function renderGamification(gamification, badges = []) {
+  const section = document.getElementById('gamification-section');
+  const featuredSection = document.getElementById('featured-achievements-section');
+  const featuredContainer = document.getElementById('featured-achievements-container');
+
+  if (!section) return;
+
+  const hasRealGamification = gamification && typeof gamification === 'object';
+
+  if (!hasRealGamification && !USE_DEMO_GAMIFICATION) {
+    section.style.display = 'none';
+
+    renderFeaturedAchievements(
+      gamification?.featuredAchievements,
+      badges,
+      featuredSection,
+      featuredContainer
+    );
+
+    return;
+  }
+
+  const demoData = {
+    streakDays: 15,
+    level: 7,
+    xp: 2300,
+    currentLevelXp: 2300,
+    nextLevelXp: 3000,
+    badgesCount: badges.length || 8
+  };
+
+  const data = {
+    ...demoData,
+    ...(hasRealGamification ? gamification : {})
+  };
+
+  const streakEl = document.getElementById('streak-days');
+  const levelEl = document.getElementById('profile-level');
+  const xpEl = document.getElementById('profile-xp');
+  const achievementsEl = document.getElementById('profile-achievements-count');
+  const progressNumbersEl = document.getElementById('xp-progress-numbers');
+  const progressFillEl = document.getElementById('xp-progress-fill');
+
+  if (streakEl) streakEl.textContent = data.streakDays ?? 0;
+  if (levelEl) levelEl.textContent = data.level ?? 1;
+  if (xpEl) xpEl.textContent = formatNumber(data.xp ?? 0);
+  if (achievementsEl) achievementsEl.textContent = data.badgesCount ?? data.achievementsCount ?? badges.length ?? 0;
+
+  const currentXp = Number(data.currentLevelXp ?? data.xp ?? 0);
+  const nextLevelXp = Number(data.nextLevelXp ?? 100);
+  const progress = nextLevelXp > 0
+    ? Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100))
+    : 0;
+
+  if (progressNumbersEl) {
+    const nextLevel = Number(data.level ?? 1) + 1;
+    progressNumbersEl.textContent = `Level ${data.level ?? 1} → ${nextLevel}`;
+  }
+
+  if (progressFillEl) {
+    progressFillEl.style.width = `${progress}%`;
+  }
+
+  section.style.display = '';
+
+  renderFeaturedAchievements(data.featuredAchievements, badges, featuredSection, featuredContainer);
+}
+
+function renderFeaturedAchievements(featuredAchievements, badges = [], section, container) {
+  if (!section || !container) return;
+
+  let achievements = [];
+
+  if (Array.isArray(featuredAchievements) && featuredAchievements.length > 0) {
+    achievements = featuredAchievements;
+  } else if (Array.isArray(badges) && badges.length > 0) {
+    achievements = badges.filter(b => b.featured === true || b.isFeatured === true || b.IsFeatured === true);
+  }
+
+  if (!achievements || achievements.length === 0) {
+    section.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  const html = achievements.slice(0, 3).map(achievement => {
+    const title = escapeHtml(achievement.title || achievement.name || 'Achievement');
+    const image = achievement.image || achievement.iconUrl || '';
+    const icon = achievement.icon || '🏆';
+
+    const visual = image
+      ? `<img src="${escapeHtml(image)}" alt="${title}" class="featured-achievement-image" />`
+      : `<div class="featured-achievement-icon">${escapeHtml(icon)}</div>`;
+
+    return `
+      <div class="featured-achievement-card">
+        ${visual}
+        <div class="featured-achievement-name">${title}</div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+  section.style.display = '';
+}
+
+function formatNumber(value) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return '0';
+
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 0
+  }).format(number);
+}
 
 function renderLinks(attachments) {
   const container = document.getElementById('profile-container');
@@ -148,17 +287,26 @@ async function loadBadges() {
   try {
     const url = basePath + '/badges?t=' + Date.now();
     const response = await fetch(url);
-    if (!response.ok) return;
+    if (!response.ok) return [];
 
     const badges = await response.json();
-    if (!badges || badges.length === 0) return;
+    if (!badges || badges.length === 0) return [];
 
     const section = document.getElementById('badges-section');
     const container = document.getElementById('badges-container');
-    if (!section || !container) return;
+    if (!section || !container) return badges;
+
+    const visibleBadges = badges.filter(badge => badge.hidden !== true);
+
+    if (visibleBadges.length === 0) {
+      container.innerHTML = '';
+      section.style.display = 'none';
+      return badges;
+    }
 
     let html = '';
-    badges.forEach(badge => {
+
+    visibleBadges.forEach(badge => {
       const title = escapeHtml(badge.title || 'Badge');
       const image = badge.image;
       const description = badge.description ? escapeHtml(badge.description) : '';
@@ -185,8 +333,11 @@ async function loadBadges() {
 
     container.innerHTML = html;
     section.style.display = '';
+
+    return badges;
   } catch (err) {
     // Badges are optional — silently ignore errors
+    return [];
   }
 }
 

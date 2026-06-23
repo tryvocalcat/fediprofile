@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS ReceivedBadges (
     IssuedOn TEXT,
     AcceptedOn TEXT,
     Hidden INTEGER NOT NULL DEFAULT 0,
+    IsFeatured INTEGER NOT NULL DEFAULT 0,
     ReceivedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (IssuerId) REFERENCES BadgeIssuers(Id)
 );
@@ -103,6 +104,26 @@ CREATE TABLE IF NOT EXISTS Settings (
     ShowRecentPosts INTEGER NOT NULL DEFAULT 1,
     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==============================================================================
+-- UserProgress table: Gamification progress for this profile
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS UserProgress (
+    Id INTEGER PRIMARY KEY CHECK (Id = 1),
+    TotalXp INTEGER NOT NULL DEFAULT 0,
+    Level INTEGER NOT NULL DEFAULT 1,
+    CurrentStreakDays INTEGER NOT NULL DEFAULT 0,
+    LastActivityDate TEXT,
+    UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==============================================================================
+-- UserMissions table: Completed gamification missions for this profile
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS UserMissions (
+    Code TEXT PRIMARY KEY,
+    CompletedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ==============================================================================

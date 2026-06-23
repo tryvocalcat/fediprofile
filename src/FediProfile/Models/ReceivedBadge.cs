@@ -12,4 +12,5 @@ public class ReceivedBadge
     public string? AcceptedOn { get; set; }
     public bool Hidden { get; set; }
     public string ReceivedUtc { get; set; } = string.Empty;
+    public bool IsFeatured { get; set; }
 }

@@ -14,6 +14,176 @@
         margin: 0 auto 1rem;
         display: block;
       }
+      .gamification-section {
+        margin: 1.5rem 0;
+      }
+
+      .gamification-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+      }
+
+      .gamification-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 0.9rem 0.5rem;
+        text-align: center;
+        color: var(--ink);
+        box-shadow: 0 4px 12px var(--shadow);
+        transition:
+          transform 250ms cubic-bezier(0.16, 1, 0.3, 1),
+          background 250ms ease,
+          border-color 250ms ease,
+          box-shadow 250ms ease;
+      }
+
+      .gamification-icon {
+        font-size: 1.3rem;
+        margin-bottom: 0.35rem;
+      }
+
+      .gamification-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1.2;
+        color: inherit;
+        transition: color 250ms ease;
+      }
+
+      .gamification-label {
+        font-size: 0.75rem;
+        opacity: 0.75;
+        margin-top: 0.2rem;
+        color: inherit;
+      }
+
+      .xp-progress {
+        margin-top: 1rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 0.8rem;
+        color: var(--ink);
+        box-shadow: 0 4px 12px var(--shadow);
+        transition:
+          transform 250ms cubic-bezier(0.16, 1, 0.3, 1),
+          background 250ms ease,
+          border-color 250ms ease,
+          box-shadow 250ms ease;
+      }
+
+      .xp-progress-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        font-size: 0.78rem;
+        opacity: 0.9;
+        margin-bottom: 0.5rem;
+      }
+
+      .xp-progress-track {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--border);
+      }
+
+      .xp-progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+
+      .featured-achievements-section {
+        margin: 1.5rem 0;
+      }
+
+      .featured-achievements-heading {
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+        text-align: center;
+        color: var(--accent);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .featured-achievements-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+      }
+
+      .featured-achievement-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 0.9rem 0.7rem;
+        text-align: center;
+        color: var(--ink);
+        box-shadow: 0 4px 12px var(--shadow);
+        transition:
+          transform 250ms cubic-bezier(0.16, 1, 0.3, 1),
+          background 250ms ease,
+          border-color 250ms ease,
+          box-shadow 250ms ease;
+      }
+
+      .featured-achievement-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.35rem;
+      }
+
+      .featured-achievement-name {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: inherit;
+        transition: color 250ms ease;
+      }
+
+      .featured-achievement-description {
+        display: none;
+      }
+
+      .featured-achievement-image {
+        width: 48px;
+        height: 48px;
+        object-fit: contain;
+        margin-bottom: 0.45rem;
+      }
+
+      @media (hover: hover) {
+        .gamification-card:hover,
+        .xp-progress:hover,
+        .featured-achievement-card:hover {
+          background: var(--card-hover);
+          border-color: var(--accent);
+          transform: translate(-2px, -2px);
+          box-shadow: 5px 5px 0 var(--accent);
+        }
+
+        .gamification-card:hover .gamification-value,
+        .featured-achievement-card:hover .featured-achievement-name {
+          color: var(--accent);
+        }
+      }
+
+      @media (max-width: 640px) {
+        .gamification-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .featured-achievements-container {
+          grid-template-columns: 1fr;
+        }
+
+        .xp-progress-header {
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+      }
     </style>
   </head>
   <body>
@@ -32,7 +202,52 @@
         </button>
       </div>
       <p class="subtitle" id="profile-bio"></p>
-      
+
+      <!-- Gamification Stats -->
+      <section id="gamification-section" class="gamification-section" style="display:none">
+        <div class="gamification-grid">
+          <div class="gamification-card">
+            <div class="gamification-icon">🔥</div>
+            <div class="gamification-value" id="streak-days">0</div>
+            <div class="gamification-label">Streak</div>
+          </div>
+
+          <div class="gamification-card">
+            <div class="gamification-icon">⭐</div>
+            <div class="gamification-value" id="profile-level">1</div>
+            <div class="gamification-label">Level</div>
+          </div>
+
+          <div class="gamification-card">
+            <div class="gamification-icon">⚡</div>
+            <div class="gamification-value" id="profile-xp">0</div>
+            <div class="gamification-label">XP</div>
+          </div>
+
+          <div class="gamification-card">
+            <div class="gamification-icon">🏆</div>
+            <div class="gamification-value" id="profile-achievements-count">0</div>
+            <div class="gamification-label">Badges</div>
+          </div>
+        </div>
+
+        <div class="xp-progress">
+          <div class="xp-progress-header">
+            <span id="xp-progress-label">XP Progress</span>
+            <span id="xp-progress-numbers">0 / 100 XP</span>
+          </div>
+          <div class="xp-progress-track">
+            <div id="xp-progress-fill" class="xp-progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Featured Badges -->
+      <section id="featured-achievements-section" class="featured-achievements-section" style="display:none">
+        <h2 class="featured-achievements-heading">Featured Badges</h2>
+        <div id="featured-achievements-container" class="featured-achievements-container"></div>
+      </section>
+
       <div id="profile-container" class="profile-container">
         <p>Loading your profile...</p>
       </div>
@@ -75,6 +290,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
-    <script src="/assets/profile.js"></script>
+    <script src="/assets/profile.js?v=gamification-1"></script>
   </body>
 </html>
