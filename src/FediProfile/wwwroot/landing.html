@@ -90,6 +90,32 @@
         }
         .nav-links a:hover { color: var(--ink); }
 
+        .nav-links a {
+            position: relative;
+            padding: 6px 10px;
+            border-radius: 8px;
+            transition: all 0.25s ease;
+        }
+
+        .nav-links a:hover {
+            color: #fff;
+            background: rgba(139, 92, 246, 0.15);
+            box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+        }
+
+        .nav-links a {
+            position: relative;
+            padding: 6px 10px;
+            border-radius: 8px;
+            transition: all 0.25s ease;
+        }
+
+        .nav-links a:hover {
+            color: #fff;
+            background: rgba(139, 92, 246, 0.15);
+            box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+        }
+
         /* ── Buttons ── */
         .btn {
             display: inline-flex;
@@ -162,11 +188,10 @@
         }
 
         .hero-logo {
-            width: 80px;
-            height: 80px;
-            margin-bottom: 24px;
-            animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-            filter: drop-shadow(0 0 30px rgba(139, 92, 246, 0.3));
+            width: 1em;
+            height: 1em;
+            min-width: 40px;
+            transform: translateY(2px);
         }
 
         .hero-badge {
@@ -221,6 +246,95 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* ── Hero Extras ── */
+        .hero-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .social-container {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            margin: 28px 0 36px;
+            flex-wrap: wrap;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeUp 0.8s 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .social-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+            transition: all 0.25s ease;
+        }
+
+        .social-link img {
+            width: 22px;
+            height: 22px;
+            filter: grayscale(100%) brightness(1.3);
+            opacity: 0.85;
+            transition: all 0.25s ease;
+        }
+
+        .social-link:hover {
+            background: rgba(168, 85, 247, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 0 14px rgba(168, 85, 247, 0.6);
+        }
+
+        .social-link:hover img {
+            mix-blend-mode: screen;
+            filter: brightness(0) invert(1)
+                    drop-shadow(0 0 6px #a855f7)
+                    drop-shadow(0 0 10px rgba(168, 85, 247, 0.8));
+        }
+
+        /* ── Flip Text ── */
+        .flip {
+            display: inline-block;
+            height: 1.15em;
+            overflow: hidden;
+            vertical-align: baseline;
+            position: relative;
+            top: 0.16em;
+        }
+
+        .flip-inner {
+            display: inline-block;
+            animation: flipLoop 8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+        }
+
+        .flip-inner span {
+            display: block;
+            height: 1.15em;
+            line-height: 1.15em;
+            background: linear-gradient(135deg, var(--accent), #c084fc, #f0abfc);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+       @keyframes flipLoop {
+            0%   { transform: translateY(0); }
+            20%  { transform: translateY(0); }
+
+            30%  { transform: translateY(-1.15em); }
+            50%  { transform: translateY(-1.15em); }
+
+            60%  { transform: translateY(-2.3em); }
+            80%  { transform: translateY(-2.3em); }
+
+            100% { transform: translateY(-3.45em); }
+        }
+
         /* ── Mockup Preview ── */
         .hero-preview {
             margin-top: 64px;
@@ -229,20 +343,44 @@
             animation: fadeUp 1s 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
 
-        .preview-card {
-            background: var(--card);
-            border: 1px solid var(--border);
+        /* ── Preview Card Glow ── */
+        .card {
+            width: 100%;
             border-radius: 20px;
+            background: transparent;
+            padding: 2px;
+            transition: all 0.3s;
+            display: block;
+        }
+
+        .card2 {
+            width: 100%;
+            border-radius: 18px;
+            background-color: #1a1a1a;
+            transition: transform 0.2s ease;
+        }
+
+        .card:hover {
+            background-image: linear-gradient(163deg, #f0abfc 0%, #a855f7 50%, #7c3aed 100%);
+            box-shadow: 0 0 40px rgba(168, 85, 247, 0.5);
+            transform: translateY(-4px);
+        }
+
+        .card2:hover {
+            transform: scale(0.98);
+        }
+
+        .preview-card {
             padding: 32px 24px;
-            box-shadow: 0 25px 50px -12px var(--shadow);
             text-align: center;
+            border-radius: 18px;
         }
 
         .preview-avatar {
             width: 64px;
             height: 64px;
             border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent), #c084fc);
+            background: linear-gradient(135deg, #c084fc, #7c3aed);
             margin: 0 auto 12px;
             display: grid;
             place-items: center;
@@ -255,11 +393,12 @@
             font-weight: 700;
             font-size: 1.1rem;
             margin-bottom: 4px;
+            color: #f5f3ff;
         }
 
         .preview-handle {
             font-size: 0.85rem;
-            color: var(--muted);
+            color: #c4b5fd;
             margin-bottom: 20px;
         }
 
@@ -312,7 +451,7 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            color: var(--accent);
+            color: var(--muted);
             font-size: 0.8rem;
             font-weight: 700;
             text-transform: uppercase;
@@ -345,41 +484,82 @@
             gap: 24px;
         }
 
-        .feature-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 32px 28px;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .feature-card:hover {
-            border-color: var(--accent);
-            transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(139, 92, 246, 0.12);
-        }
-
         .feature-icon {
             width: 48px;
             height: 48px;
             border-radius: 12px;
-            background: var(--accent-soft);
+            background: rgba(168, 85, 247, 0.15);
             display: grid;
             place-items: center;
             font-size: 1.5rem;
-            margin-bottom: 20px;
+            margin: 0 auto 12px;
         }
 
-        .feature-card h3 {
-            font-size: 1.15rem;
-            font-weight: 700;
-            margin-bottom: 8px;
+        .feature-card .card {
+            width: 100%;
+            height: 220px;
+            background: #1a1a1a;
+            transition: all 0.4s;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
         }
 
-        .feature-card p {
-            color: var(--muted);
+        .feature-card .card:hover {
+            transform: translateY(-6px) scale(1.03);
+            box-shadow: 0 20px 50px rgba(168, 85, 247, 0.25);
+            background: #2a1f3d;
+        }
+
+        .first-content {
+            height: 100%;
+            width: 100%;
+            transition: all 0.4s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 1;
+        }
+
+        .feature-front {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .card:hover .first-content {
+            height: 0;
+            opacity: 0;
+        }
+
+        .second-content {
+            height: 0%;
+            width: 100%;
+            opacity: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.4s;
+            transform: rotate(90deg) scale(-1);
+        }
+
+        .card:hover .second-content {
+            opacity: 1;
+            height: 100%;
+            transform: rotate(0deg);
+        }
+
+        .second-content p {
+            color: #e9d5ff;
             font-size: 0.95rem;
-            line-height: 1.6;
+            line-height: 1.5;
+        }
+
+        .feature-front h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #f5f3ff;
         }
 
         /* ── Comparison ── */
@@ -389,36 +569,84 @@
             border-bottom: 1px solid var(--border);
         }
 
+        .table-container {
+            background: transparent;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+
         .comparison-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 8px;
-        }
-
-        .comparison-table th,
-        .comparison-table td {
-            padding: 16px 20px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.95rem;
         }
 
         .comparison-table th {
-            font-weight: 700;
-            font-size: 0.85rem;
+            text-align: center;
+            padding: 14px 16px;
+            font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.08em;
             color: var(--muted);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .comparison-table td {
+            padding: 16px;
+            border-top: 1px solid var(--border);
+            font-size: 0.95rem;
+        }
+
+        .comparison-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
         }
 
         .comparison-table td:first-child {
             font-weight: 600;
         }
 
-        .comparison-table td:nth-child(2) { color: var(--accent); font-weight: 700; }
+        .comparison-table td:nth-child(2),
+        .comparison-table th:nth-child(2) {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--accent);
+            position: relative;
+        }
 
-        .check { color: var(--success); font-weight: 700; }
-        .cross { color: var(--muted); opacity: 0.5; }
+        .comparison-table td:nth-child(2) {
+            color: var(--accent);
+        }
+
+        .comparison-table th:nth-child(2) {
+            color: white;
+        }
+
+        .check {
+            color: var(--success);
+            font-weight: 700;
+        }
+
+        .cross {
+            color: #ef4444;
+            font-weight: 700;
+            opacity: 1;
+        }
+
+        .badge {
+            background: rgba(0, 255, 150, 0.15);
+            color: var(--success);
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .comparison-table th,
+            .comparison-table td {
+                font-size: 0.8rem;
+                padding: 10px;
+            }
+        }
 
         /* ── How it works ── */
         .steps {
@@ -621,33 +849,47 @@
 
     <!-- Hero -->
     <section class="hero">
-        <svg class="hero-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M50 8 L88 28 L88 72 L50 92 L12 72 L12 28 Z" stroke="url(#grad1)" stroke-width="4" fill="none"/>
-            <circle cx="50" cy="8" r="6" fill="url(#grad1)"/>
-            <circle cx="88" cy="28" r="6" fill="url(#grad1)"/>
-            <circle cx="88" cy="72" r="6" fill="url(#grad1)"/>
-            <circle cx="50" cy="92" r="6" fill="url(#grad1)"/>
-            <circle cx="12" cy="72" r="6" fill="url(#grad1)"/>
-            <circle cx="12" cy="28" r="6" fill="url(#grad1)"/>
-            <line x1="50" y1="8" x2="88" y2="72" stroke="url(#grad1)" stroke-width="2" opacity="0.35"/>
-            <line x1="88" y1="28" x2="12" y2="72" stroke="url(#grad1)" stroke-width="2" opacity="0.35"/>
-            <line x1="50" y1="92" x2="12" y2="28" stroke="url(#grad1)" stroke-width="2" opacity="0.35"/>
-            <circle cx="50" cy="50" r="9" fill="url(#grad1)" opacity="0.8"/>
-            <defs>
-                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#8b5cf6"/>
-                    <stop offset="50%" stop-color="#c084fc"/>
-                    <stop offset="100%" stop-color="#f0abfc"/>
-                </linearGradient>
-            </defs>
-        </svg>
+        <br>
+
+        <h1 class="hero-title">
+            <svg class="hero-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 8 L88 28 L88 72 L50 92 L12 72 L12 28 Z" stroke="url(#grad1)" stroke-width="4" fill="none"/>
+                <circle cx="50" cy="8" r="6" fill="url(#grad1)"/>
+                <circle cx="88" cy="28" r="6" fill="url(#grad1)"/>
+                <circle cx="88" cy="72" r="6" fill="url(#grad1)"/>
+                <circle cx="50" cy="92" r="6" fill="url(#grad1)"/>
+                <circle cx="12" cy="72" r="6" fill="url(#grad1)"/>
+                <circle cx="12" cy="28" r="6" fill="url(#grad1)"/>
+                <line x1="50" y1="8" x2="88" y2="72" stroke="url(#grad1)" stroke-width="2" opacity="0.35"/>
+                <line x1="88" y1="28" x2="12" y2="72" stroke="url(#grad1)" stroke-width="2" opacity="0.35"/>
+                <line x1="50" y1="92" x2="12" y2="28" stroke="url(#grad1)" stroke-width="2" opacity="0.35"/>
+                <circle cx="50" cy="50" r="9" fill="url(#grad1)" opacity="0.8"/>
+                <defs>
+                    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#8b5cf6"/>
+                        <stop offset="50%" stop-color="#c084fc"/>
+                        <stop offset="100%" stop-color="#f0abfc"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+        </h1>
 
         <div class="hero-badge">&#10024; Open Source &amp; Federated</div>
 
-        <h1>Your links.<br><span class="gradient">Your identity.</span><br>Your network.</h1>
+        <h1>
+            Your 
+            <span class="flip">
+                <span class="flip-inner">
+                    <span>links</span>
+                    <span>identity</span>
+                    <span>network</span>
+                    <span>links</span>
+                </span>
+            </span>
+        </h1>
 
         <p class="hero-sub">
-            The decentralized link-in-bio that connects to the Fediverse. 
+            The decentralized link-in-bio that connects to the Fediverse.
             Share links, collect badges, and own your online presence &mdash; no corporation in the middle.
         </p>
 
@@ -656,19 +898,49 @@
             <a href="#features" class="btn btn-ghost">See Features</a>
         </div>
 
+        <div class="social-container">
+            <a href="https://mastodon.social" target="_blank" class="social-link" title="Mastodon">
+                <img src="assets/icons/mastodon.svg" alt="Mastodon">
+            </a>
+
+            <a href="https://joinpeertube.org" target="_blank" class="social-link" title="PeerTube">
+                <img src="assets/icons/peertube.svg" alt="PeerTube">
+            </a>
+
+            <a href="https://pixelfed.org" target="_blank" class="social-link" title="Pixelfed">
+                <img src="assets/icons/pixelfed.svg" alt="Pixelfed">
+            </a>
+
+            <a href="https://github.com" target="_blank" class="social-link" title="GitHub">
+                <img src="assets/icons/github.svg" alt="GitHub">
+            </a>
+
+            <a href="https://linkedin.com" target="_blank" class="social-link" title="LinkedIn">
+                <img src="assets/icons/linkedin.svg" alt="LinkedIn">
+            </a>
+        </div>
+
+        <br>
+
         <!-- Mockup -->
         <div class="hero-preview">
-            <div class="preview-card">
-                <div class="preview-avatar">A</div>
-                <div class="preview-name">Alex Rivera</div>
-                <div class="preview-handle">@alex@mastodon.social</div>
-                <a href="#" class="preview-link" onclick="return false">&#127912; My Portfolio</a>
-                <a href="#" class="preview-link" onclick="return false">&#128240; Latest Blog Post</a>
-                <a href="#" class="preview-link" onclick="return false">&#128187; Open Source Projects</a>
-                <div class="preview-badges">
-                    <div class="preview-badge-dot" style="background: rgba(139,92,246,0.15)">&#127942;</div>
-                    <div class="preview-badge-dot" style="background: rgba(52,211,153,0.15)">&#9989;</div>
-                    <div class="preview-badge-dot" style="background: rgba(251,191,36,0.15)">&#11088;</div>
+            <div class="card">
+                <div class="card2">
+                    <div class="preview-card">
+                        <div class="preview-avatar">A</div>
+                        <div class="preview-name">Alex Rivera</div>
+                        <div class="preview-handle">@alex@mastodon.social</div>
+
+                        <a href="#" class="preview-link" onclick="return false">&#127912; My Portfolio</a>
+                        <a href="#" class="preview-link" onclick="return false">&#128240; Latest Blog Post</a>
+                        <a href="#" class="preview-link" onclick="return false">&#128187; Open Source Projects</a>
+
+                        <div class="preview-badges">
+                            <div class="preview-badge-dot" style="background: rgba(139,92,246,0.15)">&#127942;</div>
+                            <div class="preview-badge-dot" style="background: rgba(52,211,153,0.15)">&#9989;</div>
+                            <div class="preview-badge-dot" style="background: rgba(251,191,36,0.15)">&#11088;</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -676,44 +948,101 @@
 
     <!-- Features -->
     <section id="features">
+        <br>
+
         <div class="section-inner section-center">
             <span class="section-label">&#9889; Features</span>
             <h2 class="section-title">Everything you need.<br>Nothing you don't.</h2>
+            <br>
             <p class="section-desc">
                 A powerful, privacy-respecting profile hub that puts you in control of your online identity.
             </p>
         </div>
+
         <div class="section-inner">
             <div class="features-grid">
                 <div class="feature-card reveal">
-                    <div class="feature-icon">&#128279;</div>
-                    <h3>Link-in-Bio</h3>
-                    <p>Add unlimited links, organize them your way. A clean, fast profile page that works everywhere.</p>
+                    <div class="card">
+                        <div class="first-content">
+                            <div class="feature-front">
+                                <div class="feature-icon">&#128279;</div>
+                                <h3>Link-in-Bio</h3>
+                            </div>
+                        </div>
+                        <div class="second-content">
+                            <p>Add unlimited links, organize them your way. A clean, fast profile page that works everywhere.</p>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="feature-card reveal">
-                    <div class="feature-icon">&#127760;</div>
-                    <h3>ActivityPub Native</h3>
-                    <p>Your profile is a first-class citizen on Mastodon, Pleroma, Misskey and every ActivityPub platform.</p>
+                    <div class="card">
+                        <div class="first-content">
+                            <div class="feature-front">
+                                <div class="feature-icon">&#127760;</div>
+                                <h3>ActivityPub Native</h3>
+                            </div>
+                        </div>
+                        <div class="second-content">
+                            <p>Your profile is a first-class citizen on Mastodon, Pleroma, Misskey and every ActivityPub platform.</p>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="feature-card reveal">
-                    <div class="feature-icon">&#127942;</div>
-                    <h3>Badge Collection</h3>
-                    <p>Receive and showcase verifiable badges from issuers across the Fediverse. Proof of achievement, decentralized.</p>
+                    <div class="card">
+                        <div class="first-content">
+                            <div class="feature-front">
+                                <div class="feature-icon">&#127942;</div>
+                                <h3>Badge Collection</h3>
+                            </div>
+                        </div>
+                        <div class="second-content">
+                            <p>Receive and showcase verifiable badges from issuers across the Fediverse. Proof of achievement, decentralized.</p>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="feature-card reveal">
-                    <div class="feature-icon">&#128275;</div>
-                    <h3>Login with Mastodon</h3>
-                    <p>No new password needed. Sign in with your existing Mastodon account from any instance.</p>
+                    <div class="card">
+                        <div class="first-content">
+                            <div class="feature-front">
+                                <div class="feature-icon">&#128275;</div>
+                                <h3>Login with Mastodon</h3>
+                            </div>
+                        </div>
+                        <div class="second-content">
+                            <p>No new password needed. Sign in with your existing Mastodon account from any instance.</p>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="feature-card reveal">
-                    <div class="feature-icon">&#128640;</div>
-                    <h3>Auto-Boost &amp; Relay</h3>
-                    <p>Consolidate your Fediverse presence. Automatically boost posts from your other accounts into one unified profile.</p>
+                    <div class="card">
+                        <div class="first-content">
+                            <div class="feature-front">
+                                <div class="feature-icon">&#128640;</div>
+                                <h3>Auto-Boost &amp; Relay</h3>
+                            </div>
+                        </div>
+                        <div class="second-content">
+                            <p>Consolidate your Fediverse presence. Automatically boost posts from your other accounts into one unified profile.</p>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="feature-card reveal">
-                    <div class="feature-icon">&#129505;</div>
-                    <h3>Open Source</h3>
-                    <p>Fully transparent. Self-host it, audit it, or contribute on GitHub. Your data stays yours, always.</p>
+                    <div class="card">
+                        <div class="first-content">
+                            <div class="feature-front">
+                                <div class="feature-icon">&#129505;</div>
+                                <h3>Open Source</h3>
+                            </div>
+                        </div>
+                        <div class="second-content">
+                            <p>Fully transparent. Self-host it, audit it, or contribute on GitHub. Your data stays yours, always.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -726,7 +1055,7 @@
             <h2 class="section-title">Why FediProfile?</h2>
             <p class="section-desc">See how we stack up against the walled-garden alternatives.</p>
 
-            <div style="overflow-x:auto;">
+            <div class="table-container">
                 <table class="comparison-table reveal">
                     <thead>
                         <tr>
