@@ -1,0 +1,684 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  color-scheme: light;
+  --bg: #f0f2f7;
+  --ink: #1a1a2e;
+  --accent: #6c5ce7;
+  --accent-hover: #5a4bd1;
+  --accent-dim: rgba(108, 92, 231, 0.10);
+  --card: #ffffff;
+  --card-hover: #f7f5ff;
+  --border: #e2e0ef;
+  --shadow: rgba(108, 92, 231, 0.08);
+  --link-hover: rgba(108, 92, 231, 0.06);
+  --surface: #f8f7fc;
+  --surface-raised: #ffffff;
+  --muted: #7c7a92;
+  --tile-1: #6c5ce7;
+  --tile-2: #1a73e8;
+  --tile-3: #0d9488;
+  --tile-4: #e8590c;
+  --tile-5: #d63384;
+  --tile-6: #3d5afe;
+  --tile-7: #0891b2;
+  --tile-8: #7c3aed;
+  --tile-9: #16a34a;
+  --tile-10: #ca8a04;
+}
+
+/* === Full-screen layout === */
+
+body {
+  font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+.card {
+  max-width: 100%;
+  width: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  animation: none;
+}
+
+/* === Profile hero — integrated banner === */
+
+/* Use CSS grid on card to create a hero layout:
+   avatar sits left, name/handle/bio flow to the right */
+.card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto auto auto 1fr;
+  gap: 0;
+}
+
+/* Avatar tile — large, prominent, left column spanning rows */
+.avatar-wrapper {
+  grid-column: 1;
+  grid-row: 1 / 5;
+  width: auto;
+  margin: 40px 0 0 48px;
+  align-self: start;
+}
+
+.profile-avatar {
+  width: 130px;
+  height: 130px;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+#profile-avatar {
+  border-radius: 0 !important;
+  border: none;
+  box-shadow: 0 4px 20px rgba(108, 92, 231, 0.18);
+  width: 130px;
+  height: 130px;
+  background: var(--surface);
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.qr-avatar-btn {
+  border-radius: 0;
+  border-color: #fff;
+  background: var(--accent);
+  bottom: -4px;
+  right: -4px;
+  width: 30px;
+  height: 30px;
+}
+
+/* Name — flows to the right of avatar */
+h1 {
+  grid-column: 2;
+  grid-row: 1;
+  font-family: 'Inter', sans-serif;
+  font-size: 2.8rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-align: left;
+  color: var(--ink);
+  margin: 0;
+  padding: 42px 48px 0 24px;
+  position: relative;
+}
+
+h1::before {
+  display: none;
+}
+
+/* Handle — right of avatar */
+.fedi-handle-hero {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 6px 0 0 0;
+  padding: 6px 14px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--accent);
+  font-family: 'Inter', monospace;
+  font-size: 0.84rem;
+  letter-spacing: 0.01em;
+  width: fit-content;
+  margin-left: 24px;
+  justify-content: flex-start;
+}
+
+/* Bio — right of avatar */
+.subtitle {
+  grid-column: 2;
+  grid-row: 3;
+  font-size: 0.95rem;
+  color: var(--muted);
+  text-align: left;
+  margin: 0;
+  font-weight: 400;
+  padding: 8px 48px 0 24px;
+  line-height: 1.5;
+  max-width: 620px;
+}
+
+/* Everything below the hero — full-width */
+.profile-container,
+.links-container,
+.badges-section,
+.recent-posts-section,
+.info-section {
+  grid-column: 1 / -1;
+}
+
+/* Spacer below hero before tiles */
+.profile-container {
+  margin-top: 28px;
+}
+
+/* === Section headings === */
+
+h2 {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 0 0;
+  padding: 16px 0 12px;
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+h2::before,
+h2::after {
+  display: none;
+}
+
+/* === Link tiles — the Metro heart === */
+
+.profile-container {
+  padding: 0;
+}
+
+.links-container {
+  gap: 0;
+  padding: 0 48px;
+}
+
+.category {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 3px;
+}
+
+.category h2 {
+  grid-column: 1 / -1;
+  padding-left: 0;
+}
+
+.link-card {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  min-height: 140px;
+  gap: 0;
+  padding: 0;
+  background: var(--tile-2);
+  border: none;
+  border-radius: 0;
+  text-decoration: none;
+  color: #fff;
+  transition: all 160ms ease;
+  box-shadow: none;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Stagger tile colors — vibrant mix */
+.link-card:nth-child(10n+1)  { background: var(--tile-1); }
+.link-card:nth-child(10n+2)  { background: var(--tile-2); }
+.link-card:nth-child(10n+3)  { background: var(--tile-3); }
+.link-card:nth-child(10n+4)  { background: var(--tile-4); }
+.link-card:nth-child(10n+5)  { background: var(--tile-5); }
+.link-card:nth-child(10n+6)  { background: var(--tile-6); }
+.link-card:nth-child(10n+7)  { background: var(--tile-7); }
+.link-card:nth-child(10n+8)  { background: var(--tile-8); }
+.link-card:nth-child(10n+9)  { background: var(--tile-9); }
+.link-card:nth-child(10n+10) { background: var(--tile-10); }
+
+.link-card::after {
+  display: none;
+}
+
+.link-card:hover {
+  filter: brightness(0.85);
+  border-color: transparent;
+  transform: scale(0.97);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+.link-icon {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 0;
+  object-fit: cover;
+  filter: brightness(0) invert(1);
+  opacity: 0.85;
+  transition: all 200ms ease;
+}
+
+.link-card:hover .link-icon {
+  opacity: 1;
+  filter: brightness(0) invert(1);
+  transform: scale(1.08);
+}
+
+.link-content {
+  flex: none;
+  min-width: 0;
+  width: 100%;
+  padding: 0 14px 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.link-content strong {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  display: block;
+  line-height: 1.25;
+}
+
+.link-content p {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 3px 0 0;
+  line-height: 1.35;
+}
+
+/* === Verified & Boost === */
+
+.verified-badge {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.boost-badge {
+  background: none;
+  color: rgba(255, 255, 255, 0.5);
+  opacity: 1;
+  padding: 0;
+  box-shadow: none;
+}
+
+.boost-badge:hover {
+  color: #fff;
+}
+
+/* === Badges section === */
+
+.badges-section {
+  border-top: 1px solid var(--border);
+  margin-top: 0;
+  padding: 32px 48px;
+  background: var(--surface);
+}
+
+.badges-heading {
+  text-align: left;
+  padding-left: 18px;
+  position: relative;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.badges-heading::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 4px;
+  background: var(--accent);
+}
+
+.badges-container {
+  justify-content: flex-start;
+}
+
+.badge-media {
+  border-radius: 0;
+  border-color: var(--border);
+  background: var(--card);
+  box-shadow: 0 4px 16px rgba(108, 92, 231, 0.1);
+}
+
+.badge-card:hover .badge-media,
+.badge-card:focus-visible .badge-media {
+  transform: scale(0.96);
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(108, 92, 231, 0.18);
+}
+
+.badge-image {
+  border-radius: 0;
+}
+
+.badge-info {
+  border-radius: 0;
+  border-color: var(--border);
+  background: var(--card);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+}
+
+.badge-info::after {
+  border-right-color: var(--border);
+  border-bottom-color: var(--border);
+}
+
+/* === Recent Posts === */
+
+.recent-posts-section {
+  border-top: 1px solid var(--border);
+  margin-top: 0;
+  padding: 32px 48px;
+  background: #fff;
+}
+
+.recent-posts-heading {
+  text-align: left;
+  padding-left: 18px;
+  position: relative;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.recent-posts-heading::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 4px;
+  background: var(--accent);
+}
+
+.rp-card {
+  border-radius: 0;
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.rp-card:hover {
+  transform: none;
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent), 0 4px 12px rgba(108, 92, 231, 0.1);
+}
+
+.rp-avatar {
+  border-radius: 0;
+}
+
+.rp-content a {
+  color: var(--accent-hover);
+}
+
+.rp-media {
+  border-radius: 0;
+}
+
+/* === Info / Footer section === */
+
+.info-section {
+  border-top: 1px solid var(--border);
+  margin-top: 0;
+  padding: 24px 48px;
+  background: var(--surface);
+}
+
+.info-section summary {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: color 150ms;
+}
+
+.info-section summary:hover {
+  color: var(--accent);
+}
+
+.info-section ul {
+  color: var(--muted);
+}
+
+.info-section code {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 0;
+  font-size: 0.82rem;
+  padding: 2px 6px;
+}
+
+.fedi-handle {
+  color: var(--muted);
+}
+
+.fedi-handle strong {
+  color: var(--ink);
+}
+
+.fedi-note {
+  color: var(--muted);
+}
+
+.fedi-note a {
+  color: var(--accent);
+}
+
+.copy-fedi-btn {
+  color: var(--accent);
+}
+
+/* === Share button === */
+
+.share-btn {
+  border-radius: 0;
+  border: 2px solid var(--accent);
+  background: #fff;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.share-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(108, 92, 231, 0.3);
+}
+
+/* === QR Modal === */
+
+.qr-modal {
+  border-radius: 0;
+  background: var(--card);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.qr-title {
+  color: var(--ink);
+}
+
+.qr-close {
+  color: var(--muted);
+}
+
+.qr-url {
+  color: var(--muted);
+}
+
+.qr-download-btn {
+  border-radius: 0;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.qr-download-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* === "Want your own profile?" link below card === */
+
+body > div:last-of-type {
+  background: #fff;
+  padding: 20px 48px;
+  opacity: 1;
+}
+
+body > div:last-of-type .muted {
+  color: var(--muted);
+}
+
+body > div:last-of-type a {
+  color: var(--accent);
+}
+
+/* === Responsive === */
+
+@media (min-width: 900px) {
+  .category {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+
+  .link-card {
+    min-height: 160px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .category {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  .link-card {
+    min-height: 170px;
+  }
+
+  .link-icon {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+@media (max-width: 768px) {
+  .card {
+    grid-template-columns: auto 1fr;
+  }
+  .avatar-wrapper {
+    margin: 24px 0 0 24px;
+  }
+  .profile-avatar,
+  #profile-avatar {
+    width: 100px;
+    height: 100px;
+  }
+  h1 {
+    font-size: 2.2rem;
+    padding: 28px 24px 0 20px;
+  }
+  .fedi-handle-hero {
+    margin-left: 20px;
+  }
+  .subtitle {
+    padding: 6px 24px 0 20px;
+  }
+  .links-container {
+    padding: 0 24px;
+  }
+  .category {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .link-card {
+    min-height: 120px;
+  }
+  .badges-section,
+  .recent-posts-section,
+  .info-section {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Stack avatar above name on small screens */
+  .card {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .avatar-wrapper {
+    grid-column: 1;
+    grid-row: auto;
+    margin: 20px 0 0 16px;
+  }
+  .profile-avatar,
+  #profile-avatar {
+    width: 80px;
+    height: 80px;
+  }
+  #profile-avatar {
+    outline-width: 2px;
+    outline-offset: 2px;
+    box-shadow: 0 2px 12px rgba(108, 92, 231, 0.15);
+  }
+  h1 {
+    grid-column: 1;
+    grid-row: auto;
+    font-size: 1.8rem;
+    padding: 12px 16px 0;
+  }
+  .fedi-handle-hero {
+    grid-column: 1;
+    grid-row: auto;
+    margin-left: 16px;
+    font-size: 0.78rem;
+  }
+  .subtitle {
+    grid-column: 1;
+    grid-row: auto;
+    padding: 4px 16px 0;
+  }
+  .profile-container {
+    margin-top: 20px;
+  }
+  .links-container {
+    padding: 0 16px;
+  }
+  .category {
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
+  .link-card {
+    min-height: 110px;
+  }
+  .link-icon {
+    width: 34px;
+    height: 34px;
+    top: 10px;
+    left: 10px;
+  }
+  .link-content {
+    padding: 0 10px 10px;
+  }
+  .link-content strong {
+    font-size: 0.82rem;
+  }
+  .badges-section,
+  .recent-posts-section,
+  .info-section {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  body > div:last-of-type {
+    padding: 16px;
+  }
+}
