@@ -145,6 +145,20 @@
                             <small>The link shown to users who aren't on the Fediverse yet. Default: https://joinmastodon.org</small>
                         </div>
 
+                        <div class="form-group">
+                            <label for="defaultMastodonServer">Featured login server</label>
+                            <input type="text" id="defaultMastodonServer" @bind="_defaultMastodonServer"
+                                   placeholder="vocalcat.com" class="form-control" />
+                            <small>Optional. A Mastodon (or compatible) server shown as a prominent one-click sign-in button on the login page. Leave empty to hide it.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="defaultMastodonLabel">Featured login button label</label>
+                            <input type="text" id="defaultMastodonLabel" @bind="_defaultMastodonLabel"
+                                   placeholder="Social Vocal Cat" class="form-control" />
+                            <small>The text shown on the featured button, e.g. "Social Vocal Cat". Falls back to the server domain when empty.</small>
+                        </div>
+
                         <button type="submit" class="button button-primary" disabled="@_isProcessing">
                             @(_isProcessing ? "Saving..." : "Save Instance Settings")
                         </button>
@@ -1013,6 +1027,8 @@
     private bool _hideRecentPostsTab;
     private bool _hideSettingsTab;
     private string? _joinMastodonUrl;
+    private string? _defaultMastodonServer;
+    private string? _defaultMastodonLabel;
     private Dictionary<string, bool> _allowedThemeSelection = new(StringComparer.OrdinalIgnoreCase);
     private IBrowserFile? _pendingLogoFile;
     private bool _removeLogo;
@@ -1098,6 +1114,8 @@
         _hideRecentPostsTab = await DomainDb.GetHideRecentPostsTabAsync();
         _hideSettingsTab = await DomainDb.GetHideSettingsTabAsync();
         _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
+        _defaultMastodonServer = await DomainDb.GetDefaultMastodonServerAsync();
+        _defaultMastodonLabel = await DomainDb.GetDefaultMastodonLabelAsync();
         var allowedThemeFiles = await DomainDb.GetAllowedUiThemesAsync();
         _allowedThemeSelection = Themes.All.ToDictionary(
             theme => theme.FileName,
@@ -1183,6 +1201,7 @@
                 .ToList();
             await DomainDb.SetAllowedUiThemesAsync(selectedThemeFiles);
             await DomainDb.SetJoinMastodonUrlAsync(_joinMastodonUrl);
+            await DomainDb.SetDefaultMastodonServerAsync(_defaultMastodonServer, _defaultMastodonLabel);
             await DomainDb.SetInstanceLogoUrlAsync(resolvedLogoUrl);
             await LoadInstanceSettings();
             _message = requestedName == null

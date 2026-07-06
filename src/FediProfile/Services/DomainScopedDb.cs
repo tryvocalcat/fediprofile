@@ -144,6 +144,8 @@ public class DomainScopedDb : LocalDbService
                 AdminMastodonUser TEXT,
                 AdminMastodonDomain TEXT,
                 JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org',
+                DefaultMastodonServer TEXT,
+                DefaultMastodonLabel TEXT,
                 NavbarLinks TEXT,
                 InstanceLogoUrl TEXT,
                 HideFollowersTab INTEGER NOT NULL DEFAULT 0,
@@ -233,6 +235,20 @@ public class DomainScopedDb : LocalDbService
             {
                 using var alterCommand = connection.CreateCommand();
                 alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org';";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("DefaultMastodonServer"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN DefaultMastodonServer TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("DefaultMastodonLabel"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN DefaultMastodonLabel TEXT;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
@@ -845,6 +861,86 @@ public class DomainScopedDb : LocalDbService
         command.Parameters.AddWithValue(
             "@JoinMastodonUrl",
             string.IsNullOrWhiteSpace(url) ? "https://joinmastodon.org" : url.Trim());
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Gets the featured/default Mastodon (or compatible) server for this instance's login page,
+    /// shown as a prominent "sign in" button. Returns null when not configured.
+    /// </summary>
+    public async Task<string?> GetDefaultMastodonServerAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT DefaultMastodonServer FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        var server = Convert.ToString(result)?.Trim();
+        return string.IsNullOrWhiteSpace(server) ? null : server;
+    }
+
+    /// <summary>
+    /// Gets the display label for the featured/default Mastodon server button. Falls back to
+    /// the server domain when no explicit label was configured.
+    /// </summary>
+    public async Task<string?> GetDefaultMastodonLabelAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT DefaultMastodonLabel FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        var label = Convert.ToString(result)?.Trim();
+        return string.IsNullOrWhiteSpace(label) ? null : label;
+    }
+
+    /// <summary>
+    /// Configures the featured/default Mastodon server shown on the login page.
+    /// Pass null/empty values to remove the featured button.
+    /// </summary>
+    public async Task SetDefaultMastodonServerAsync(string? server, string? label)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        var sanitizedServer = string.IsNullOrWhiteSpace(server) ? null : server.Trim();
+        if (sanitizedServer != null)
+        {
+            if (sanitizedServer.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                sanitizedServer = sanitizedServer.Substring("https://".Length);
+            else if (sanitizedServer.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                sanitizedServer = sanitizedServer.Substring("http://".Length);
+            sanitizedServer = sanitizedServer.TrimEnd('/');
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET DefaultMastodonServer = @DefaultMastodonServer,
+                DefaultMastodonLabel = @DefaultMastodonLabel,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue(
+            "@DefaultMastodonServer",
+            sanitizedServer == null ? DBNull.Value : sanitizedServer);
+        command.Parameters.AddWithValue(
+            "@DefaultMastodonLabel",
+            string.IsNullOrWhiteSpace(label) ? DBNull.Value : label.Trim());
 
         await command.ExecuteNonQueryAsync();
     }

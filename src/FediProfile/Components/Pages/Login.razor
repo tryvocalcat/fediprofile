@@ -22,41 +22,68 @@
 <section class="login-shell">
     <div class="login-card">
         <h1 class="admin-title">Login or Sign Up</h1>
-        <p class="admin-subtitle">Sign in with your Fediverse account. If you don't have a profile yet, we'll help you create one.</p>
+        <p class="admin-subtitle">Sign in with an account you already have. We never see or store your username or password.</p>
 
-        <label class="field-label" for="fediverseServer">Server</label>
-        <input id="fediverseServer" class="input" placeholder="mastodon.social" @bind="server" />
-        <p class="muted small">Mastodon, GoToSocial, and compatible servers.</p>
+        <div class="login-providers">
+            @if (!string.IsNullOrWhiteSpace(_defaultMastodonServer))
+            {
+                <button class="login-provider login-provider-mastodon" @onclick="LoginWithDefaultServer">
+                    <span class="login-provider-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.268 5.313c-.35-2.578-2.617-4.61-5.304-5.004C17.51.242 15.792 0 11.813 0h-.03c-3.98 0-4.835.242-5.288.309C3.882.692 1.496 2.518.917 5.127.64 6.412.61 7.837.661 9.143c.074 1.874.088 3.745.26 5.611.118 1.24.325 2.47.62 3.68.55 2.237 2.777 4.098 4.96 4.857 2.336.792 4.849.923 7.256.38.265-.061.527-.132.786-.213.585-.184 1.27-.39 1.774-.753a.057.057 0 0 0 .023-.043v-1.809a.052.052 0 0 0-.02-.041.053.053 0 0 0-.046-.01 20.282 20.282 0 0 1-4.709.545c-2.73 0-3.463-1.284-3.674-1.818a5.593 5.593 0 0 1-.319-1.433.053.053 0 0 1 .066-.054c1.517.363 3.072.546 4.632.546.376 0 .75 0 1.125-.01 1.57-.044 3.224-.124 4.768-.422.038-.008.077-.015.11-.024 2.435-.464 4.753-1.92 4.989-5.604.008-.145.03-1.52.03-1.67.002-.512.167-3.63-.024-5.545zm-3.748 9.195h-2.561V8.29c0-1.309-.55-1.976-1.67-1.976-1.23 0-1.846.79-1.846 2.35v3.403h-2.546V8.663c0-1.56-.617-2.35-1.848-2.35-1.112 0-1.668.668-1.67 1.977v6.218H4.822V8.102c0-1.31.337-2.35 1.011-3.12.696-.77 1.608-1.164 2.74-1.164 1.311 0 2.302.5 2.962 1.498l.638 1.06.638-1.06c.66-.999 1.65-1.498 2.96-1.498 1.13 0 2.043.395 2.74 1.164.675.77 1.012 1.81 1.012 3.12z"/></svg>
+                    </span>
+                    <span class="login-provider-label">Continue with @(string.IsNullOrWhiteSpace(_defaultMastodonLabel) ? _defaultMastodonServer : _defaultMastodonLabel)</span>
+                </button>
+            }
 
-        <button class="button button-primary" @onclick="StartLogin" disabled="@string.IsNullOrWhiteSpace(server)">
-            Continue
-        </button>
+            @if (_githubEnabled)
+            {
+                <button class="login-provider login-provider-github" @onclick="LoginWithGitHub">
+                    <span class="login-provider-icon">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    </span>
+                    <span class="login-provider-label">Continue with GitHub</span>
+                </button>
+            }
 
-        <p class="muted small">You'll be redirected to your server to authorize.</p>
+            @if (_linkedInEnabled)
+            {
+                <button class="login-provider login-provider-linkedin" @onclick="LoginWithLinkedIn">
+                    <span class="login-provider-icon">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016l.016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z"/></svg>
+                    </span>
+                    <span class="login-provider-label">Continue with LinkedIn</span>
+                </button>
+            }
 
-        <p class="muted small">Not on the Fediverse? <a href="@_joinMastodonUrl" target="_blank" rel="noopener noreferrer">Join here</a></p>
+            @if (!_showServerInput)
+            {
+                <button class="login-provider login-provider-mastodon-outline" @onclick="ShowServerInput">
+                    <span class="login-provider-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.268 5.313c-.35-2.578-2.617-4.61-5.304-5.004C17.51.242 15.792 0 11.813 0h-.03c-3.98 0-4.835.242-5.288.309C3.882.692 1.496 2.518.917 5.127.64 6.412.61 7.837.661 9.143c.074 1.874.088 3.745.26 5.611.118 1.24.325 2.47.62 3.68.55 2.237 2.777 4.098 4.96 4.857 2.336.792 4.849.923 7.256.38.265-.061.527-.132.786-.213.585-.184 1.27-.39 1.774-.753a.057.057 0 0 0 .023-.043v-1.809a.052.052 0 0 0-.02-.041.053.053 0 0 0-.046-.01 20.282 20.282 0 0 1-4.709.545c-2.73 0-3.463-1.284-3.674-1.818a5.593 5.593 0 0 1-.319-1.433.053.053 0 0 1 .066-.054c1.517.363 3.072.546 4.632.546.376 0 .75 0 1.125-.01 1.57-.044 3.224-.124 4.768-.422.038-.008.077-.015.11-.024 2.435-.464 4.753-1.92 4.989-5.604.008-.145.03-1.52.03-1.67.002-.512.167-3.63-.024-5.545zm-3.748 9.195h-2.561V8.29c0-1.309-.55-1.976-1.67-1.976-1.23 0-1.846.79-1.846 2.35v3.403h-2.546V8.663c0-1.56-.617-2.35-1.848-2.35-1.112 0-1.668.668-1.67 1.977v6.218H4.822V8.102c0-1.31.337-2.35 1.011-3.12.696-.77 1.608-1.164 2.74-1.164 1.311 0 2.302.5 2.962 1.498l.638 1.06.638-1.06c.66-.999 1.65-1.498 2.96-1.498 1.13 0 2.043.395 2.74 1.164.675.77 1.012 1.81 1.012 3.12z"/></svg>
+                    </span>
+                    <span class="login-provider-label">Continue with Mastodon</span>
+                </button>
+            }
+            else
+            {
+                <div class="login-server-picker">
+                    <label class="field-label" for="mastodonServer">Your Mastodon server</label>
+                    <input id="mastodonServer" class="input" placeholder="mastodon.social" @bind="server" @bind:event="oninput" @ref="_serverInput" @onkeydown="OnServerKeyDown" />
+                    <p class="muted small">Enter your server domain, then continue to authorize.</p>
+                    <div class="login-server-actions">
+                        <button class="button button-primary" @onclick="StartLogin" disabled="@string.IsNullOrWhiteSpace(server)">Continue</button>
+                        <button class="button button-ghost" @onclick="HideServerInput">Cancel</button>
+                    </div>
+                </div>
+            }
+        </div>
 
-        @if (_githubEnabled || _linkedInEnabled)
-        {
-            <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border, #e0e0e0);" />
-            <p class="muted small">Or sign in with:</p>
-            <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-                @if (_githubEnabled)
-                {
-                    <button class="button" style="background-color:#24292f;color:#fff;border-color:#24292f;" @onclick="LoginWithGitHub">
-                        <svg style="width:1em;height:1em;vertical-align:middle;margin-right:0.4em" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-                        GitHub
-                    </button>
-                }
-                @if (_linkedInEnabled)
-                {
-                    <button class="button" style="background-color:#0a66c2;color:#fff;border-color:#0a66c2;" @onclick="LoginWithLinkedIn">
-                        <svg style="width:1em;height:1em;vertical-align:middle;margin-right:0.4em" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016l.016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z"/></svg>
-                        LinkedIn
-                    </button>
-                }
-            </div>
-        }
+        <hr class="login-divider" />
+
+        <a class="login-create-account" href="@_joinMastodonUrl" target="_blank" rel="noopener noreferrer">
+            <span class="login-create-account-title">Create New Account</span>
+            <span class="login-create-account-sub">New here? We'll help you set one up in minutes.</span>
+        </a>
     </div>
 </section>
 
@@ -67,10 +94,17 @@
     private bool _githubEnabled;
     private bool _linkedInEnabled;
     private string? _joinMastodonUrl;
+    private string? _defaultMastodonServer;
+    private string? _defaultMastodonLabel;
+    private bool _showServerInput;
+    private bool _focusServerInput;
+    private ElementReference _serverInput;
 
     protected override async Task OnInitializedAsync()
     {
         _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
+        _defaultMastodonServer = await DomainDb.GetDefaultMastodonServerAsync();
+        _defaultMastodonLabel = await DomainDb.GetDefaultMastodonLabelAsync();
         // Check which OAuth providers are configured
         _githubEnabled = !string.IsNullOrEmpty(Configuration["Authentication:GitHub:ClientId"])
                       && !string.IsNullOrEmpty(Configuration["Authentication:GitHub:ClientSecret"]);
@@ -93,6 +127,43 @@
         _checking = false;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusServerInput)
+        {
+            _focusServerInput = false;
+            try { await _serverInput.FocusAsync(); } catch { }
+        }
+    }
+
+    private void ShowServerInput()
+    {
+        _showServerInput = true;
+        _focusServerInput = true;
+    }
+
+    private void HideServerInput()
+    {
+        _showServerInput = false;
+        server = null;
+    }
+
+    private void OnServerKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            StartLogin();
+        }
+    }
+
+    private void NavigateToProvider(string providerPath)
+    {
+        var url = $"{providerPath}?returnUrl={Uri.EscapeDataString("/login/check")}";
+        if (!string.IsNullOrEmpty(_refParam))
+            url += $"&ref={Uri.EscapeDataString(_refParam)}";
+        NavigationManager.NavigateTo(url, true);
+    }
+
     private void StartLogin()
     {
         if (string.IsNullOrWhiteSpace(server))
@@ -101,25 +172,23 @@
         }
 
         var sanitized = server.Trim();
-        var url = $"/login/oauth/{sanitized}?returnUrl={Uri.EscapeDataString("/login/check")}";
-        if (!string.IsNullOrEmpty(_refParam))
-            url += $"&ref={Uri.EscapeDataString(_refParam)}";
-        NavigationManager.NavigateTo(url, true);
+        if (sanitized.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            sanitized = sanitized.Substring("https://".Length);
+        else if (sanitized.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            sanitized = sanitized.Substring("http://".Length);
+        sanitized = sanitized.TrimEnd('/');
+
+        NavigateToProvider($"/login/oauth/{sanitized}");
     }
 
-    private void LoginWithGitHub()
+    private void LoginWithDefaultServer()
     {
-        var url = $"/login/github?returnUrl={Uri.EscapeDataString("/login/check")}";
-        if (!string.IsNullOrEmpty(_refParam))
-            url += $"&ref={Uri.EscapeDataString(_refParam)}";
-        NavigationManager.NavigateTo(url, true);
+        if (string.IsNullOrWhiteSpace(_defaultMastodonServer))
+            return;
+        NavigateToProvider($"/login/oauth/{_defaultMastodonServer.Trim()}");
     }
 
-    private void LoginWithLinkedIn()
-    {
-        var url = $"/login/linkedin?returnUrl={Uri.EscapeDataString("/login/check")}";
-        if (!string.IsNullOrEmpty(_refParam))
-            url += $"&ref={Uri.EscapeDataString(_refParam)}";
-        NavigationManager.NavigateTo(url, true);
-    }
+    private void LoginWithGitHub() => NavigateToProvider("/login/github");
+
+    private void LoginWithLinkedIn() => NavigateToProvider("/login/linkedin");
 }
