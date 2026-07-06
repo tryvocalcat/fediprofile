@@ -8,18 +8,50 @@
 
 <div class="app-shell">
     <header class="topbar">
-        <a class="brand" href="/">@_instanceName</a>
-        <nav class="topbar-nav">
-            @if (_integrationRef != null)
-            {
-                <a href="@_backToUrl" class="button button-primary" style="font-size:0.85rem;color:white;text-decoration:none;">&larr; @_integrationRef.Name</a>
-            }
-
-            <a class="button button-ghost" href="/logout">
-                <svg style="width:16px;height:16px;vertical-align:-2px;margin-right:0.25rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                Logout
+        <div class="topbar-inner">
+            <a class="brand" href="/admin/">
+                @if (!string.IsNullOrWhiteSpace(_instanceLogoUrl))
+                {
+                    <img class="brand-logo" src="@_instanceLogoUrl" alt="@_instanceName logo" />
+                }
+                else
+                {
+                    <span class="brand-name">@_instanceName</span>
+                }
             </a>
-        </nav>
+            <nav class="topbar-nav" aria-label="Admin navigation">
+                @foreach (var item in _navbarItems)
+                {
+                    <a class="topbar-nav-link" href="@item.Url">
+                        <span class="topbar-nav-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>
+                            </svg>
+                        </span>
+                        <span>@item.Label</span>
+                    </a>
+                }
+
+                @if (_integrationRef != null)
+                {
+                    <a href="@_backToUrl" class="button button-primary button-small topbar-action">
+                        <span class="topbar-nav-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="m11 17-5-5 5-5"/><path d="M6 12h11"/>
+                            </svg>
+                        </span>
+                        <span>@_integrationRef.Name</span>
+                    </a>
+                }
+
+                <a class="button button-ghost button-small topbar-action" href="/logout">
+                    <span class="topbar-nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    </span>
+                    <span>Logout</span>
+                </a>
+            </nav>
+        </div>
     </header>
 
     <main class="page">
@@ -28,16 +60,26 @@
 </div>
 
 @code{
+    private sealed class NavLinkItem
+    {
+        public string Label { get; init; } = string.Empty;
+        public string Url { get; init; } = string.Empty;
+    }
+
     private string? _currentUserSlug;
     private bool _isAuthorized;
     private string? _signedInAs;
     private FediProfile.Core.IntegrationRef? _integrationRef;
     private string? _backToUrl;
     private string _instanceName = "FediProfile";
+    private string? _instanceLogoUrl;
+    private List<NavLinkItem> _navbarItems = new();
 
     protected override async Task OnInitializedAsync()
     {
         _instanceName = await DomainDb.GetInstanceNameAsync();
+        _instanceLogoUrl = await DomainDb.GetStoredInstanceLogoUrlAsync();
+        _navbarItems = await LoadNavbarItemsAsync();
 
         // Parse integration ref from query string
         var uri = new Uri(NavigationManager.Uri);
@@ -49,7 +91,7 @@
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
         var mastodonUser = state.User.FindFirst(ClaimTypes.Name)?.Value;
         var mastodonHost = state.User.FindFirst("urn:mastodon:hostname")?.Value;
-        
+
         if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonHost))
         {
             _signedInAs = $"{mastodonUser}@{mastodonHost}";
@@ -62,7 +104,7 @@
         // Look up the user in the domain DB by Mastodon credentials to find their slug
         _currentUserSlug = null;
         _isAuthorized = false;
-        
+
         if (!string.IsNullOrWhiteSpace(mastodonUser) && !string.IsNullOrWhiteSpace(mastodonHost))
         {
             var dbUser = await DomainDb.GetUserByMastodonAsync(mastodonUser, mastodonHost);
@@ -92,5 +134,34 @@
             }
             _backToUrl = backUrl;
         }
+    }
+
+    private async Task<List<NavLinkItem>> LoadNavbarItemsAsync()
+    {
+        var rawConfig = await DomainDb.GetNavbarLinksAsync();
+        if (string.IsNullOrWhiteSpace(rawConfig))
+        {
+            return new List<NavLinkItem>
+            {
+                new() { Label = "Dashboard", Url = "/admin/" }
+            };
+        }
+
+        return rawConfig
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line =>
+            {
+                var parts = line.Split('|', 2);
+                if (parts.Length != 2) return null;
+
+                var label = parts[0].Trim();
+                var url = parts[1].Trim();
+                return string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(url)
+                    ? null
+                    : new NavLinkItem { Label = label, Url = url };
+            })
+            .Where(item => item != null)
+            .Select(item => item!)
+            .ToList();
     }
 }

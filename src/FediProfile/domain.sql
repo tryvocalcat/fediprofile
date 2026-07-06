@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS Settings (
     AdminMastodonUser TEXT,
     AdminMastodonDomain TEXT,
     JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org',
+    NavbarLinks TEXT,
+    InstanceLogoUrl TEXT,
+    HideFollowersTab INTEGER NOT NULL DEFAULT 0,
+    HideRecentPostsTab INTEGER NOT NULL DEFAULT 0,
+    HideSettingsTab INTEGER NOT NULL DEFAULT 0,
+    AllowedUiThemes TEXT,
     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

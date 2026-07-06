@@ -1,7 +1,9 @@
 @page "/admin/root"
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
 @using System.Security.Claims
 @using System.Text.Json
+@using FediProfile.Models
 @attribute [Authorize]
 @layout FediProfile.Components.Layouts.MainLayout
 @rendermode InteractiveServer
@@ -13,6 +15,7 @@
 @inject NavigationManager Navigation
 @inject LandingPageService LandingPageService
 @inject IHttpContextAccessor HttpContextAccessor
+@inject IWebHostEnvironment WebHostEnvironment
 @inject Microsoft.Extensions.Caching.Memory.IMemoryCache MemoryCache
 @inject ProfileHtmlService ProfileHtml
 @inject ActorService ActorService
@@ -20,8 +23,8 @@
 <section class="admin-shell">
     <header class="admin-header">
         <div>
-            <h1 class="admin-title">Root Administration</h1>
-            <p class="admin-subtitle">Domain-level management for the instance owner.</p>
+            <h1 class="admin-title">Instance Administration</h1>
+            <p class="admin-subtitle">Manage branding, navigation, and domain settings for this instance.</p>
         </div>
         <div style="display:flex;gap:0.5rem;align-items:center">
             <a class="button button-ghost" href="/admin/">Back to Admin</a>
@@ -67,7 +70,7 @@
 
                 <article class="card">
                     <h2>Instance Settings</h2>
-                    <p class="muted">Customize the name shown in the app header for this domain.</p>
+                    <p class="muted">Customize the name, logo, and header links shown for this domain.</p>
 
                     <form @onsubmit="SaveInstanceSettings" class="admin-form">
                         <div class="form-group">
@@ -75,6 +78,64 @@
                             <input type="text" id="instanceName" @bind="_instanceName"
                                    placeholder="FediProfile" class="form-control" />
                             <small>Leave blank to fall back to the configured default name.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="instanceLogo">Instance Logo</label>
+                            <InputFile id="instanceLogo" OnChange="HandleLogoSelection" accept="image/*" />
+                            <small>Upload a logo for the instance header. PNG, JPG, or WebP up to 2MB.</small>
+                            @if (!string.IsNullOrWhiteSpace(_instanceLogoUrl))
+                            {
+                                <div class="logo-preview">
+                                    <img src="@_instanceLogoUrl" alt="Current instance logo" />
+                                    <span class="muted">This logo will appear in the top header for this domain.</span>
+                                </div>
+                            }
+                            @if (_removeLogo)
+                            {
+                                <small class="muted">A current logo will be removed when you save.</small>
+                            }
+                        </div>
+
+                        <div class="form-group">
+                            <label for="navbarLinks">Header Navigation Links</label>
+                            <textarea id="navbarLinks" class="form-control sql-textarea" rows="6" @bind="_navbarLinks"></textarea>
+                            <small>One link per line in the format Label|Url. Example: Dashboard|/admin/</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Wallet Tabs to Hide</label>
+                            <div style="display:grid;gap:0.5rem;max-width:24rem">
+                                <label style="display:flex;align-items:center;gap:0.5rem;font-weight:600">
+                                    <input type="checkbox" @bind="_hideFollowersTab" />
+                                    <span>Followers</span>
+                                </label>
+                                <label style="display:flex;align-items:center;gap:0.5rem;font-weight:600">
+                                    <input type="checkbox" @bind="_hideRecentPostsTab" />
+                                    <span>Recent Posts</span>
+                                </label>
+                                <label style="display:flex;align-items:center;gap:0.5rem;font-weight:600">
+                                    <input type="checkbox" @bind="_hideSettingsTab" />
+                                    <span>Settings</span>
+                                </label>
+                            </div>
+                            <small>These tabs will be hidden from the wallet dashboard for users on this domain.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Theme options for profile owners</label>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.55rem">
+                                @foreach (var theme in Themes.All)
+                                {
+                                    <label style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.65rem;border:1px solid var(--border, #e0e0e0);border-radius:8px;background:var(--bg, #fff);cursor:pointer">
+                                        <input type="checkbox"
+                                               checked="@(_allowedThemeSelection.GetValueOrDefault(theme.FileName))"
+                                               @onchange="args => ToggleAllowedTheme(theme.FileName, args.Value is bool flag && flag)" />
+                                        <span style="font-size:0.9rem">@theme.DisplayName</span>
+                                    </label>
+                                }
+                            </div>
+                            <small>Choose which themes appear in the theme picker for users on this domain. Leave all unchecked to use the default theme list.</small>
                         </div>
 
                         <div class="form-group">
@@ -946,7 +1007,15 @@
     private string _activeTab = "settings";
     private bool _isProcessing;
     private string? _instanceName;
+    private string? _instanceLogoUrl;
+    private string? _navbarLinks;
+    private bool _hideFollowersTab;
+    private bool _hideRecentPostsTab;
+    private bool _hideSettingsTab;
     private string? _joinMastodonUrl;
+    private Dictionary<string, bool> _allowedThemeSelection = new(StringComparer.OrdinalIgnoreCase);
+    private IBrowserFile? _pendingLogoFile;
+    private bool _removeLogo;
     private string? _landingMarkdown;
     private string? _landingMessage;
     private bool _landingIsError;
@@ -1023,7 +1092,46 @@
     private async Task LoadInstanceSettings()
     {
         _instanceName = await DomainDb.GetStoredInstanceNameAsync();
+        _instanceLogoUrl = await DomainDb.GetStoredInstanceLogoUrlAsync();
+        _navbarLinks = await DomainDb.GetStoredNavbarLinksAsync();
+        _hideFollowersTab = await DomainDb.GetHideFollowersTabAsync();
+        _hideRecentPostsTab = await DomainDb.GetHideRecentPostsTabAsync();
+        _hideSettingsTab = await DomainDb.GetHideSettingsTabAsync();
         _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
+        var allowedThemeFiles = await DomainDb.GetAllowedUiThemesAsync();
+        _allowedThemeSelection = Themes.All.ToDictionary(
+            theme => theme.FileName,
+            theme => allowedThemeFiles.Any(file => file.Equals(theme.FileName, StringComparison.OrdinalIgnoreCase)),
+            StringComparer.OrdinalIgnoreCase);
+        _pendingLogoFile = null;
+        _removeLogo = false;
+    }
+
+    private void ToggleAllowedTheme(string themeFileName, bool isEnabled)
+    {
+        if (_allowedThemeSelection.ContainsKey(themeFileName))
+            _allowedThemeSelection[themeFileName] = isEnabled;
+    }
+
+    private async Task HandleLogoSelection(InputFileChangeEventArgs e)
+    {
+        _removeLogo = false;
+        _pendingLogoFile = null;
+        _message = null;
+        _isError = false;
+
+        if (e.File is null)
+            return;
+
+        if (e.File.Size > 2 * 1024 * 1024)
+        {
+            _message = "The logo must be 2MB or smaller.";
+            _isError = true;
+            return;
+        }
+
+        _pendingLogoFile = e.File;
+        _message = $"Logo selected: {e.File.Name}";
     }
 
     private async Task SaveInstanceSettings()
@@ -1035,8 +1143,47 @@
         try
         {
             var requestedName = string.IsNullOrWhiteSpace(_instanceName) ? null : _instanceName.Trim();
+            var requestedNavbarLinks = string.IsNullOrWhiteSpace(_navbarLinks) ? null : _navbarLinks.Trim();
+            string? resolvedLogoUrl = null;
+
+            if (_pendingLogoFile != null)
+            {
+                var safeDomain = System.Text.RegularExpressions.Regex.Replace(DomainDb.GetDomain(), "[^a-zA-Z0-9._-]", "_");
+                var uploadsFolder = Path.Combine(WebHostEnvironment.WebRootPath, "uploads", safeDomain);
+                Directory.CreateDirectory(uploadsFolder);
+
+                var extension = Path.GetExtension(_pendingLogoFile.Name);
+                var fileName = string.IsNullOrWhiteSpace(extension) ? "logo.png" : $"logo{extension.ToLowerInvariant()}";
+                var destinationPath = Path.Combine(uploadsFolder, fileName);
+
+                await using (var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write))
+                {
+                    await _pendingLogoFile.OpenReadStream(2 * 1024 * 1024).CopyToAsync(fileStream);
+                }
+
+                resolvedLogoUrl = $"/uploads/{safeDomain}/{fileName}";
+            }
+            else if (_removeLogo)
+            {
+                resolvedLogoUrl = null;
+            }
+            else
+            {
+                resolvedLogoUrl = _instanceLogoUrl;
+            }
+
             await DomainDb.SetInstanceNameAsync(requestedName);
+            await DomainDb.SetNavbarLinksAsync(requestedNavbarLinks);
+            await DomainDb.SetHideFollowersTabAsync(_hideFollowersTab);
+            await DomainDb.SetHideRecentPostsTabAsync(_hideRecentPostsTab);
+            await DomainDb.SetHideSettingsTabAsync(_hideSettingsTab);
+            var selectedThemeFiles = Themes.All
+                .Where(theme => _allowedThemeSelection.GetValueOrDefault(theme.FileName))
+                .Select(theme => theme.FileName)
+                .ToList();
+            await DomainDb.SetAllowedUiThemesAsync(selectedThemeFiles);
             await DomainDb.SetJoinMastodonUrlAsync(_joinMastodonUrl);
+            await DomainDb.SetInstanceLogoUrlAsync(resolvedLogoUrl);
             await LoadInstanceSettings();
             _message = requestedName == null
                 ? "Instance name cleared. The UI will use the configured default name."

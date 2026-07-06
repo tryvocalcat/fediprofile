@@ -144,6 +144,12 @@ public class DomainScopedDb : LocalDbService
                 AdminMastodonUser TEXT,
                 AdminMastodonDomain TEXT,
                 JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org',
+                NavbarLinks TEXT,
+                InstanceLogoUrl TEXT,
+                HideFollowersTab INTEGER NOT NULL DEFAULT 0,
+                HideRecentPostsTab INTEGER NOT NULL DEFAULT 0,
+                HideSettingsTab INTEGER NOT NULL DEFAULT 0,
+                AllowedUiThemes TEXT,
                 CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -209,6 +215,8 @@ public class DomainScopedDb : LocalDbService
                         UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
                         AdminMastodonUser TEXT,
                         AdminMastodonDomain TEXT,
+                        NavbarLinks TEXT,
+                        InstanceLogoUrl TEXT,
                         CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
@@ -228,6 +236,13 @@ public class DomainScopedDb : LocalDbService
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
+            if (!settingsColumns.Contains("NavbarLinks"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN NavbarLinks TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
             if (!settingsColumns.Contains("AdminMastodonUser"))
             {
                 using var alterCommand = connection.CreateCommand();
@@ -242,10 +257,45 @@ public class DomainScopedDb : LocalDbService
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
+            if (!settingsColumns.Contains("InstanceLogoUrl"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN InstanceLogoUrl TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("HideFollowersTab"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN HideFollowersTab INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("HideRecentPostsTab"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN HideRecentPostsTab INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("HideSettingsTab"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN HideSettingsTab INTEGER NOT NULL DEFAULT 0;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
             if (!settingsColumns.Contains("LandingMarkdown"))
             {
                 using var alterCommand = connection.CreateCommand();
                 alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN LandingMarkdown TEXT;";
+                try { alterCommand.ExecuteNonQuery(); } catch { }
+            }
+
+            if (!settingsColumns.Contains("AllowedUiThemes"))
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = "ALTER TABLE Settings ADD COLUMN AllowedUiThemes TEXT;";
                 try { alterCommand.ExecuteNonQuery(); } catch { }
             }
 
@@ -530,6 +580,172 @@ public class DomainScopedDb : LocalDbService
         await command.ExecuteNonQueryAsync();
     }
 
+    public async Task<string?> GetStoredInstanceLogoUrlAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT InstanceLogoUrl FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        var logoUrl = Convert.ToString(result)?.Trim();
+        return string.IsNullOrWhiteSpace(logoUrl) ? null : logoUrl;
+    }
+
+    public async Task SetInstanceLogoUrlAsync(string? logoUrl)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET InstanceLogoUrl = @InstanceLogoUrl,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue(
+            "@InstanceLogoUrl",
+            string.IsNullOrWhiteSpace(logoUrl) ? DBNull.Value : logoUrl.Trim());
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<IReadOnlyList<string>> GetAllowedUiThemesAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT AllowedUiThemes FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return Array.Empty<string>();
+
+        var configuredValue = Convert.ToString(result)?.Trim();
+        return string.IsNullOrWhiteSpace(configuredValue)
+            ? Array.Empty<string>()
+            : configuredValue
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .ToList();
+    }
+
+    public async Task SetAllowedUiThemesAsync(IEnumerable<string>? allowedThemes)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        var normalizedThemes = Themes.GetAllowedThemeFiles(allowedThemes);
+        var serializedThemes = string.Join(",", normalizedThemes);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET AllowedUiThemes = @AllowedUiThemes,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue("@AllowedUiThemes", string.IsNullOrWhiteSpace(serializedThemes) ? DBNull.Value : serializedThemes);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<bool> GetHideFollowersTabAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT HideFollowersTab FROM Settings WHERE Id = 1";
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result ?? 0) == 1;
+    }
+
+    public async Task<bool> GetHideRecentPostsTabAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT HideRecentPostsTab FROM Settings WHERE Id = 1";
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result ?? 0) == 1;
+    }
+
+    public async Task<bool> GetHideSettingsTabAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT HideSettingsTab FROM Settings WHERE Id = 1";
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result ?? 0) == 1;
+    }
+
+    public async Task SetHideFollowersTabAsync(bool hide)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET HideFollowersTab = @HideFollowersTab,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue("@HideFollowersTab", hide ? 1 : 0);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task SetHideRecentPostsTabAsync(bool hide)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET HideRecentPostsTab = @HideRecentPostsTab,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue("@HideRecentPostsTab", hide ? 1 : 0);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task SetHideSettingsTabAsync(bool hide)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET HideSettingsTab = @HideSettingsTab,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue("@HideSettingsTab", hide ? 1 : 0);
+        await command.ExecuteNonQueryAsync();
+    }
+
     public async Task<string?> GetLandingMarkdownAsync()
     {
         using var connection = GetConnection();
@@ -545,6 +761,49 @@ public class DomainScopedDb : LocalDbService
 
         var markdown = Convert.ToString(result);
         return string.IsNullOrWhiteSpace(markdown) ? null : markdown;
+    }
+
+    public async Task<string?> GetStoredNavbarLinksAsync()
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT NavbarLinks FROM Settings WHERE Id = 1";
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        var navbarLinks = Convert.ToString(result)?.Trim();
+        return string.IsNullOrWhiteSpace(navbarLinks) ? null : navbarLinks;
+    }
+
+    public async Task<string> GetNavbarLinksAsync()
+    {
+        var navbarLinks = await GetStoredNavbarLinksAsync();
+        return string.IsNullOrWhiteSpace(navbarLinks) ? string.Empty : navbarLinks;
+    }
+
+    public async Task SetNavbarLinksAsync(string? navbarLinks)
+    {
+        using var connection = GetConnection();
+        await connection.OpenAsync();
+        await EnsureSettingsRowAsync(connection);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Settings
+            SET NavbarLinks = @NavbarLinks,
+                UpdatedUtc = CURRENT_TIMESTAMP
+            WHERE Id = 1
+        ";
+        command.Parameters.AddWithValue(
+            "@NavbarLinks",
+            string.IsNullOrWhiteSpace(navbarLinks) ? DBNull.Value : navbarLinks.Trim());
+
+        await command.ExecuteNonQueryAsync();
     }
 
     public async Task<string?> GetStoredJoinMastodonUrlAsync()

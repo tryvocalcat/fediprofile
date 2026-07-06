@@ -48,6 +48,53 @@ public static class Themes
         => !string.IsNullOrEmpty(fileName) && All.Any(t => t.FileName == fileName);
 
     /// <summary>
+    /// Returns the subset of known themes that are allowed by the configured list.
+    /// An empty or missing configuration falls back to all available themes.
+    /// </summary>
+    public static IReadOnlyList<string> GetAllowedThemeFiles(IEnumerable<string>? configuredThemeFiles)
+    {
+        if (configuredThemeFiles == null)
+            return All.Select(t => t.FileName).ToList();
+
+        var requestedThemes = configuredThemeFiles
+            .Select(t => t?.Trim())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (requestedThemes.Count == 0)
+            return All.Select(t => t.FileName).ToList();
+
+        var validThemes = requestedThemes
+            .Where(IsValid)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return validThemes.Count > 0 ? validThemes : All.Select(t => t.FileName).ToList();
+    }
+
+    /// <summary>
+    /// Returns the theme options that should be shown to profile owners.
+    /// </summary>
+    public static IReadOnlyList<ThemeOption> GetAvailableOptions(IEnumerable<string>? configuredThemeFiles)
+    {
+        var allowedThemeFiles = GetAllowedThemeFiles(configuredThemeFiles);
+        return All.Where(t => allowedThemeFiles.Contains(t.FileName, StringComparer.OrdinalIgnoreCase)).ToList();
+    }
+
+    /// <summary>
+    /// Returns <paramref name="fileName"/> if it's a known theme and allowed, otherwise the first allowed theme.
+    /// </summary>
+    public static string ResolveForSelection(string? fileName, IEnumerable<string>? configuredThemeFiles)
+    {
+        var resolvedTheme = Resolve(fileName);
+        var allowedThemeFiles = GetAllowedThemeFiles(configuredThemeFiles);
+        return allowedThemeFiles.Contains(resolvedTheme, StringComparer.OrdinalIgnoreCase)
+            ? resolvedTheme
+            : allowedThemeFiles.FirstOrDefault() ?? DefaultFile;
+    }
+
+    /// <summary>
     /// Returns <paramref name="fileName"/> if it's a known theme, otherwise <see cref="DefaultFile"/>.
     /// </summary>
     public static string Resolve(string? fileName)

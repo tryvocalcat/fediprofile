@@ -5,6 +5,7 @@
 @using System.Text.Json
 @using System.Net.Http.Headers
 @using FediProfile.Core
+@using FediProfile.Models
 @attribute [Authorize]
 @layout FediProfile.Components.Layouts.MainLayout
 @rendermode InteractiveServer
@@ -26,14 +27,14 @@
 <section class="admin-shell">
     <header class="admin-header">
         <div>
-            <h1 class="admin-title">My Profile</h1>
+            <h1 class="admin-title">Profile Dashboard</h1>
             @if (_impersonating)
             {
                 <p class="admin-subtitle" style="color:#e67e22;font-weight:600;">Impersonating: @_currentUserSlug</p>
             }
             else
             {
-                <p class="admin-subtitle">Edit your links, bio, and badges.</p>
+                <p class="admin-subtitle">Manage your public profile, links, bio, and badges.</p>
             }
         </div>
         <div style="display:flex;gap:0.5rem;align-items:center">
@@ -60,8 +61,29 @@
     @if (_isAuthorized && !string.IsNullOrEmpty(_currentUserSlug))
     {
         <div class="admin-section">
-            <!-- Profile Editor (WYSIWYG) -->
-            <article class="pe-card">
+            <div class="admin-section-nav">
+                <button class="admin-section-tab @(_activeAdminTab == "profile" ? "is-active" : "")" @onclick='() => SetAdminTab("profile")'>Profile</button>
+                @if (!_hideFollowersTab)
+                {
+                    <button class="admin-section-tab @(_activeAdminTab == "followers" ? "is-active" : "")" @onclick='() => SetAdminTab("followers")'>Followers</button>
+                }
+                <button class="admin-section-tab @(_activeAdminTab == "badges" ? "is-active" : "")" @onclick='() => SetAdminTab("badges")'>Badges</button>
+                @if (!_hideRecentPostsTab)
+                {
+                    <button class="admin-section-tab @(_activeAdminTab == "activity" ? "is-active" : "")" @onclick='() => SetAdminTab("activity")'>Recent Posts</button>
+                }
+                @if (!_hideSettingsTab)
+                {
+                    <button class="admin-section-tab @(_activeAdminTab == "settings" ? "is-active" : "")" @onclick='() => SetAdminTab("settings")'>Settings</button>
+                }
+                <button class="admin-section-tab @(_activeAdminTab == "danger" ? "is-active" : "")" @onclick='() => SetAdminTab("danger")'>Danger Zone</button>
+            </div>
+
+            @if (_activeAdminTab == "profile")
+            {
+                <div class="dashboard-panel">
+                    <!-- Profile Editor (WYSIWYG) -->
+                    <article class="pe-card">
                 @if (!string.IsNullOrEmpty(_profileMessage))
                 {
                     <div class="alert @(_profileIsError ? "alert-error" : "alert-success")">
@@ -73,7 +95,7 @@
                     <div class="pe-save-bar-left">
                         <label class="muted" style="white-space:nowrap;margin:0">Theme</label>
                         <select value="@_profileTheme" @onchange="OnThemeChanged" class="form-control">
-                            @foreach (var t in Themes.All)
+                            @foreach (var t in _availableThemes)
                             {
                                 <option value="@t.FileName">@t.DisplayName</option>
                             }
@@ -429,12 +451,6 @@
                     </div>
                 }
 
-                <!-- Fedi handle info -->
-                <div class="pe-info-section">
-                    <p class="muted">Follow me in the fediverse: @@<strong>@_currentUserSlug@@@(_currentDomain)</strong></p>
-                    <p class="muted" style="font-size:0.82rem">Not in the fediverse? <a href="@_joinMastodonUrl" target="_blank" style="text-decoration:underline">Join now </a></p>
-                </div>
-
                 <!-- Footer: Save -->
                 <div class="pe-save-bar">
                     <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto">
@@ -451,12 +467,16 @@
                         @_profileMessage
                     </div>
                 }
-            </article>
+                    </article>
+                </div>
+            }
 
-            <!-- Followers -->
-            @if (_followers != null)
+            @if (_activeAdminTab == "followers")
             {
-                <article class="card admin-card-spaced">
+                <div class="dashboard-panel">
+                    @if (_followers != null)
+                    {
+                        <article class="card admin-card-spaced">
                     <h2>Followers (@_followerCount)</h2>
                     <p class="muted">People following your profile via ActivityPub</p>
 
@@ -496,11 +516,16 @@
                             <p class="text-muted" style="margin-top:0.5rem;">Showing newest 10 of @_followerCount followers.</p>
                         }
                     }
-                </article>
+                        </article>
+                    }
+                </div>
             }
 
-            <!-- Badges & Verifications -->
-            <article class="card admin-card-spaced">
+            @if (_activeAdminTab == "badges")
+            {
+                <div class="dashboard-panel">
+                    <!-- Badges & Verifications -->
+                    <article class="card admin-card-spaced">
                 <div style="margin-bottom:0.75rem">
                     <h2 style="margin:0">🏅 Badges</h2>
                     <p class="muted" style="margin:0.25rem 0 0">Badges you've earned and received</p>
@@ -737,10 +762,15 @@
                     }
                 </div>
                 }
-            </article>
+                    </article>
+                </div>
+            }
 
-            <!-- Recent Posts -->
-            <article class="card admin-card-spaced">
+            @if (_activeAdminTab == "activity")
+            {
+                <div class="dashboard-panel">
+                    <!-- Recent Posts -->
+                    <article class="card admin-card-spaced">
                 <h2>Recent Posts (@(_recentPosts?.Count ?? 0))</h2>
                 <p class="muted">The last boosted posts from your linked accounts. These are shown on your public profile.</p>
 
@@ -793,14 +823,41 @@
                         }
                     </div>
                 }
-            </article>
+                    </article>
+                </div>
+            }
 
-            <!-- Settings -->
-            <article class="card admin-card-spaced">
+            @if (_activeAdminTab == "settings")
+            {
+                <div class="dashboard-panel">
+                    <!-- Settings -->
+                    <article class="card admin-card-spaced">
                 <h2>Settings</h2>
                 <p class="muted">Configure how your profile behaves.</p>
 
                 <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:1rem">
+                    @if (_isRootUser)
+                    {
+                        <div style="padding:0.75rem;border:1px solid var(--border, #e0e0e0);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap; margin-bottom:0.6rem">
+                                <div>
+                                    <strong style="font-size:0.92rem">Theme options for profile owners</strong>
+                                    <p class="muted" style="font-size:0.82rem;margin:0.15rem 0 0">Choose which themes appear in the theme picker for users on this instance.</p>
+                                </div>
+                                <button class="button button-primary button-small" @onclick="SaveAllowedThemesAsync">Save theme options</button>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.55rem">
+                                @foreach (var theme in Themes.All)
+                                {
+                                    <label style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.65rem;border:1px solid var(--border, #e0e0e0);border-radius:8px;background:var(--bg, #fff);cursor:pointer">
+                                        <input type="checkbox" checked="@(_allowedThemeSelection.GetValueOrDefault(theme.FileName))" @onchange="args => ToggleAllowedTheme(theme.FileName, args.Value is bool flag && flag)" />
+                                        <span style="font-size:0.9rem">@theme.DisplayName</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                    }
+
                     <!-- Skip Replies -->
                     <div style="display:flex;align-items:flex-start;gap:0.75rem;padding:0.75rem;border:1px solid var(--border, #e0e0e0);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
                         <label class="pe-toggle" style="flex-shrink:0;margin-top:0.1rem;cursor:pointer" title="@(_profileSkipReplies ? "Only boosting main posts" : "Boosting all posts including replies")">
@@ -825,10 +882,15 @@
                         </div>
                     </div>
                 </div>
-            </article>
+                    </article>
+                </div>
+            }
 
-            <!-- Danger Zone -->
-            <article class="card admin-card-spaced" style="border:2px solid #dc3545;">
+            @if (_activeAdminTab == "danger")
+            {
+                <div class="dashboard-panel">
+                    <!-- Danger Zone -->
+                    <article class="card admin-card-spaced" style="border:2px solid #dc3545;">
                 <h2 style="color:#dc3545;">⚠️ Danger Zone</h2>
                 <p class="muted">Permanently delete your account and all associated data. This action cannot be undone.</p>
 
@@ -865,7 +927,9 @@
                         </button>
                     </div>
                 }
-            </article>
+                    </article>
+                </div>
+            }
         </div>
     }
 </section>
@@ -884,6 +948,11 @@
     private bool _isAuthorized;
     private string? _currentUserSlug;
     private string? _currentDomain;
+    private bool _hideFollowersTab;
+    private bool _hideRecentPostsTab;
+    private bool _hideSettingsTab;
+    private IReadOnlyList<ThemeOption> _availableThemes = Themes.All;
+    private Dictionary<string, bool> _allowedThemeSelection = new(StringComparer.OrdinalIgnoreCase);
 
     // Profile editing fields
     private string? _profileDisplayName;
@@ -894,6 +963,7 @@
     private bool _profileIsError;
     private bool _profileSkipReplies;
     private bool _profileShowRecentPosts = true;
+    private string _activeAdminTab = "profile";
 
     // Link fields (new link form)
     private string? _newLinkName;
@@ -1234,9 +1304,34 @@
 
     private string? _joinMastodonUrl;
 
+    private void SetAdminTab(string tab)
+    {
+        if (tab == "followers" && _hideFollowersTab) return;
+        if (tab == "activity" && _hideRecentPostsTab) return;
+        if (tab == "settings" && _hideSettingsTab) return;
+        _activeAdminTab = tab;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _joinMastodonUrl = await DomainDb.GetJoinMastodonUrlAsync();
+        _hideFollowersTab = await DomainDb.GetHideFollowersTabAsync();
+        _hideRecentPostsTab = await DomainDb.GetHideRecentPostsTabAsync();
+        _hideSettingsTab = await DomainDb.GetHideSettingsTabAsync();
+
+        var allowedThemeFiles = await DomainDb.GetAllowedUiThemesAsync();
+        _availableThemes = Themes.GetAvailableOptions(allowedThemeFiles);
+        _allowedThemeSelection = Themes.All.ToDictionary(
+            theme => theme.FileName,
+            theme => _availableThemes.Any(option => option.FileName == theme.FileName),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (_hideFollowersTab && _activeAdminTab == "followers")
+            _activeAdminTab = "profile";
+        if (_hideRecentPostsTab && _activeAdminTab == "activity")
+            _activeAdminTab = "profile";
+        if (_hideSettingsTab && _activeAdminTab == "settings")
+            _activeAdminTab = "profile";
         // Parse integration ref from query string
         var navUri = new Uri(Navigation.Uri);
         var qs = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(navUri.Query);
@@ -1316,18 +1411,25 @@
         try
         {
             var settings = await _currentUserDb.GetSettingsAsync();
+            var allowedThemeFiles = await DomainDb.GetAllowedUiThemesAsync();
+            _availableThemes = Themes.GetAvailableOptions(allowedThemeFiles);
+            _allowedThemeSelection = Themes.All.ToDictionary(
+                theme => theme.FileName,
+                theme => _availableThemes.Any(option => option.FileName == theme.FileName),
+                StringComparer.OrdinalIgnoreCase);
+
             if (settings != null)
             {
                 _profileDisplayName = settings.ActorUsername;
                 _profileBio = settings.ActorBio;
                 _profileAvatarUrl = settings.ActorAvatarUrl;
-                _profileTheme = Themes.Resolve(settings.UiTheme);
+                _profileTheme = Themes.ResolveForSelection(settings.UiTheme, allowedThemeFiles);
                 _profileSkipReplies = settings.SkipReplies;
                 _profileShowRecentPosts = settings.ShowRecentPosts;
             }
             else
             {
-                _profileTheme = Themes.DefaultFile;
+                _profileTheme = Themes.ResolveForSelection(Themes.DefaultFile, allowedThemeFiles);
             }
         }
         catch
@@ -1363,6 +1465,39 @@
         await Task.Delay(2000);
         _themeSaved = false;
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleAllowedTheme(string themeFileName, bool isEnabled)
+    {
+        if (_allowedThemeSelection.ContainsKey(themeFileName))
+            _allowedThemeSelection[themeFileName] = isEnabled;
+    }
+
+    private async Task SaveAllowedThemesAsync()
+    {
+        var selectedThemes = Themes.All
+            .Where(theme => _allowedThemeSelection.TryGetValue(theme.FileName, out var isEnabled) && isEnabled)
+            .Select(theme => theme.FileName)
+            .ToList();
+
+        if (selectedThemes.Count == 0)
+            selectedThemes = Themes.All.Select(theme => theme.FileName).ToList();
+
+        await DomainDb.SetAllowedUiThemesAsync(selectedThemes);
+
+        var allowedThemeFiles = await DomainDb.GetAllowedUiThemesAsync();
+        _availableThemes = Themes.GetAvailableOptions(allowedThemeFiles);
+        _allowedThemeSelection = Themes.All.ToDictionary(
+            theme => theme.FileName,
+            theme => _availableThemes.Any(option => option.FileName == theme.FileName),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (_currentUserDb != null && !string.IsNullOrWhiteSpace(_profileTheme) && !_availableThemes.Any(option => option.FileName == _profileTheme))
+        {
+            _profileTheme = _availableThemes.FirstOrDefault()?.FileName ?? Themes.DefaultFile;
+            await _currentUserDb.UpsertSettingsAsync(uiTheme: _profileTheme);
+            await RegenerateStaticProfileAsync();
+        }
     }
 
     private async Task OnSkipRepliesChanged(ChangeEventArgs e)
