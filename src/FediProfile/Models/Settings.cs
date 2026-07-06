@@ -17,7 +17,7 @@ public class Settings
     public bool HideRecentPostsTab { get; set; }
     public bool HideSettingsTab { get; set; }
     public string? LandingMarkdown { get; set; }
-    public string UiTheme { get; set; } = "theme-classic.css";
+    public string UiTheme { get; set; } = "theme-default.css";
     public string? NavbarLinks { get; set; }
     public string? AdminMastodonUser { get; set; }
     public string? AdminMastodonDomain { get; set; }

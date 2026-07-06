@@ -1,0 +1,636 @@
+/* ============================================================
+   FediProfile — "Badges" theme
+   BadgeFed-branded, credential-first profile layout.
+   Puts verified badges front and centre (LinkedIn "Licenses &
+   certifications" style) on a clean, professional surface.
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* BadgeFed brand palette */
+  --bf-bg: #f4f6fb;
+  --bf-surface: #ffffff;
+  --bf-surface-2: #f8fafc;
+  --bf-border: #e2e8f0;
+  --bf-border-hover: #c7d2fe;
+  --bf-text: #0f172a;
+  --bf-muted: #64748b;
+  --bf-faint: #94a3b8;
+  --bf-indigo: #6366f1;
+  --bf-indigo-strong: #4f46e5;
+  --bf-violet: #7c3aed;
+  --bf-cyan: #06b6d4;
+  --bf-indigo-soft: rgba(99, 102, 241, 0.1);
+  --bf-cyan-soft: rgba(6, 182, 212, 0.1);
+  --bf-grad: linear-gradient(120deg, #6366f1 0%, #7c3aed 52%, #06b6d4 100%);
+  --bf-grad-text: linear-gradient(95deg, #6366f1 0%, #06b6d4 100%);
+  --bf-shadow: rgba(15, 23, 42, 0.08);
+  --bf-shadow-lg: rgba(49, 46, 129, 0.16);
+
+  /* Map onto the tokens the base theme + shared components use */
+  --bg: var(--bf-bg);
+  --ink: var(--bf-text);
+  --accent: var(--bf-indigo);
+  --accent-hover: var(--bf-indigo-strong);
+  --card: var(--bf-surface);
+  --card-hover: var(--bf-surface-2);
+  --border: var(--bf-border);
+  --muted: var(--bf-muted);
+  --shadow: var(--bf-shadow);
+  --link-hover: var(--bf-indigo-soft);
+
+  --badge-tile-bg: var(--bf-surface);
+  --badge-tile-border: var(--bf-border);
+  --badge-tile-shadow: rgba(99, 102, 241, 0.12);
+  --badge-hover-shadow: rgba(99, 102, 241, 0.22);
+  --badge-tooltip-bg: var(--bf-surface);
+  --badge-tooltip-border: var(--bf-border);
+  --badge-tooltip-shadow: var(--bf-shadow-lg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bf-bg: #0b1020;
+    --bf-surface: #111827;
+    --bf-surface-2: #0f172a;
+    --bf-border: rgba(148, 163, 184, 0.16);
+    --bf-border-hover: rgba(129, 140, 248, 0.5);
+    --bf-text: #f1f5f9;
+    --bf-muted: #94a3b8;
+    --bf-faint: #64748b;
+    --bf-indigo-soft: rgba(99, 102, 241, 0.2);
+    --bf-cyan-soft: rgba(6, 182, 212, 0.18);
+    --bf-shadow: rgba(0, 0, 0, 0.45);
+    --bf-shadow-lg: rgba(0, 0, 0, 0.55);
+
+    --badge-tile-bg: #0f172a;
+    --badge-tile-shadow: rgba(0, 0, 0, 0.4);
+    --badge-hover-shadow: rgba(99, 102, 241, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--bf-text);
+  line-height: 1.6;
+  padding: clamp(16px, 3vw, 40px) clamp(14px, 3vw, 24px);
+  background:
+    radial-gradient(circle at 12% -8%, rgba(99, 102, 241, 0.14), transparent 42%),
+    radial-gradient(circle at 92% 4%, rgba(6, 182, 212, 0.12), transparent 40%),
+    var(--bf-bg);
+  overflow-x: hidden;
+}
+
+/* ── Card shell ─────────────────────────────────────────── */
+.card {
+  position: relative;
+  width: min(100%, 900px);
+  margin: 0 auto 18px;
+  display: flex;
+  flex-direction: column;
+  padding: 148px clamp(22px, 4vw, 46px) clamp(28px, 3.5vw, 44px);
+  border: 1px solid var(--bf-border);
+  border-radius: 28px;
+  background: var(--bf-surface);
+  box-shadow: 0 30px 80px var(--bf-shadow), 0 2px 8px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Brand banner behind the hero */
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 132px;
+  background: var(--bf-grad);
+  z-index: 0;
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 132px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.28), transparent 45%),
+    radial-gradient(circle at 85% 0%, rgba(255, 255, 255, 0.14), transparent 40%);
+  opacity: 0.9;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ── Hero: avatar + name + bio ──────────────────────────── */
+.avatar-wrapper {
+  position: relative;
+  z-index: 2;
+  order: 0;
+  width: 132px;
+  margin: -74px auto 18px;
+}
+
+.profile-avatar {
+  width: 128px !important;
+  height: 128px !important;
+  border-radius: 50% !important;
+  object-fit: cover;
+  display: block;
+  margin: 0 !important;
+  border: 5px solid var(--bf-surface);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.22);
+  background: var(--bf-surface);
+}
+
+.qr-avatar-btn {
+  bottom: 6px;
+  right: 0;
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--bf-surface);
+  background: linear-gradient(135deg, var(--bf-indigo) 0%, var(--bf-violet) 100%);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+}
+
+h1 {
+  order: 1;
+  z-index: 1;
+  text-align: center;
+  font-size: clamp(1.9rem, 3.6vw, 2.7rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  margin: 0 0 8px;
+  color: var(--bf-text);
+}
+
+.subtitle {
+  order: 3;
+  z-index: 1;
+  text-align: center;
+  max-width: 46ch;
+  margin: 0 auto 6px;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--bf-muted);
+}
+
+/* Fedi handle chip under the name */
+.fedi-handle-hero {
+  order: 2;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  margin: 0 auto 10px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--bf-indigo-soft);
+  border: 1px solid color-mix(in srgb, var(--bf-indigo) 24%, transparent);
+  color: var(--bf-indigo-strong);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.fedi-handle-hero .copy-fedi-btn {
+  color: var(--bf-indigo-strong);
+}
+
+/* ── Featured badges — the centrepiece ──────────────────── */
+.badges-section {
+  order: 4;
+  z-index: 1;
+  position: relative;
+  margin: 22px 0 4px;
+  padding: clamp(22px, 3vw, 32px) clamp(18px, 2.6vw, 30px) clamp(24px, 3vw, 32px);
+  border: 1px solid var(--bf-border);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bf-indigo) 5%, var(--bf-surface)) 0%, var(--bf-surface) 60%);
+  box-shadow: 0 18px 44px var(--bf-shadow);
+}
+
+/* Accent rail along the top of the featured section */
+.badges-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: 24px;
+  height: 4px;
+  border-radius: 0 0 6px 6px;
+  background: var(--bf-grad);
+}
+
+.badges-heading {
+  position: relative;
+  text-align: center;
+  margin: 0 0 20px;
+  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--bf-text);
+}
+
+/* Eyebrow label above the badges heading */
+.badges-heading::before {
+  content: "Verified credentials";
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--bf-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--bf-indigo);
+}
+
+.badges-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  justify-content: center;
+}
+
+/* Each badge becomes a professional credential card */
+.badge-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 14px 14px;
+  border: 1px solid var(--bf-border);
+  border-radius: 18px;
+  background: var(--bf-surface);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.badge-card:hover,
+.badge-card:focus-visible,
+.badge-card:focus-within {
+  transform: translateY(-4px);
+  border-color: var(--bf-border-hover);
+  box-shadow: 0 18px 38px rgba(99, 102, 241, 0.18);
+}
+
+.badge-media {
+  width: 96px;
+  height: 96px;
+  padding: 10px;
+  margin: 0 0 12px;
+  border-radius: 18px;
+  border: 1px solid var(--bf-border);
+  background:
+    linear-gradient(135deg, var(--bf-indigo-soft) 0%, var(--bf-cyan-soft) 100%);
+  box-shadow: none;
+}
+
+.badge-card:hover .badge-media,
+.badge-card:focus-visible .badge-media,
+.badge-card:focus-within .badge-media,
+.badge-card:active .badge-media {
+  transform: none;
+  border-color: var(--bf-border-hover);
+  box-shadow: none;
+}
+
+.badge-image {
+  border-radius: 12px;
+}
+
+.badge-placeholder {
+  background: transparent;
+  color: var(--bf-indigo);
+}
+
+/* Turn the hover tooltip into an always-visible credential caption */
+.badge-info {
+  position: static;
+  width: 100%;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  text-align: center;
+}
+
+.badge-info::after {
+  display: none;
+}
+
+/* Keep the caption static on hover/focus (base theme animates a tooltip) */
+.badge-card:hover .badge-info,
+.badge-card:focus-visible .badge-info,
+.badge-card:focus-within .badge-info,
+.badge-card:active .badge-info {
+  transform: none;
+  opacity: 1;
+}
+
+.badge-title {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--bf-text);
+}
+
+.badge-date {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--bf-faint);
+}
+
+.badge-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--bf-muted);
+}
+
+.badge-link-hint {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--bf-indigo-strong);
+}
+
+.badge-card:hover .badge-link-hint {
+  text-decoration: underline;
+}
+
+/* ── Links — secondary "connect" section ────────────────── */
+.profile-container,
+#profile-container {
+  order: 5;
+  z-index: 1;
+  margin-top: 26px;
+}
+
+.links-container {
+  display: grid;
+  gap: 20px;
+}
+
+.category-tabs {
+  display: none;
+}
+
+.category {
+  display: grid;
+  gap: 10px;
+}
+
+/* Section headers (e.g. "Links") rendered inside profile-container */
+.profile-container h2 {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--bf-muted);
+}
+
+.link-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--bf-border);
+  border-radius: 14px;
+  background: var(--bf-surface);
+  color: var(--bf-text);
+  text-decoration: none;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.link-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--bf-border-hover);
+  background: var(--bf-surface-2);
+  box-shadow: 0 12px 26px rgba(99, 102, 241, 0.12);
+}
+
+.link-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  object-fit: cover;
+  flex-shrink: 0;
+  filter: none;
+  background: linear-gradient(135deg, var(--bf-indigo-soft) 0%, var(--bf-cyan-soft) 100%);
+  color: var(--bf-indigo);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+
+.link-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-content strong {
+  display: block;
+  font-size: 0.98rem;
+  font-weight: 700;
+  margin-bottom: 3px;
+  color: var(--bf-text);
+  word-break: break-word;
+}
+
+.link-content p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--bf-muted);
+  word-break: break-word;
+}
+
+.boost-badge,
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bf-indigo-soft);
+  color: var(--bf-indigo);
+  opacity: 1;
+}
+
+/* ── Recent activity ────────────────────────────────────── */
+.recent-posts-section {
+  order: 6;
+  z-index: 1;
+  margin-top: 30px;
+  padding-top: 28px;
+  border-top: 1px solid var(--bf-border);
+}
+
+.recent-posts-heading {
+  text-align: center;
+  margin: 0 0 16px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--bf-text);
+}
+
+.rp-card {
+  border: 1px solid var(--bf-border);
+  border-radius: 14px;
+  background: var(--bf-surface);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+.rp-card:hover {
+  border-color: var(--bf-border-hover);
+  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.1);
+}
+
+.rp-name {
+  color: var(--bf-text);
+}
+
+.rp-date {
+  color: var(--bf-faint);
+}
+
+.rp-content {
+  color: var(--bf-text);
+}
+
+.rp-content a {
+  color: var(--bf-indigo-strong);
+}
+
+/* ── Info / footer sections ─────────────────────────────── */
+.info-section {
+  order: 7;
+  z-index: 1;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--bf-border);
+  color: var(--bf-muted);
+  font-size: 0.9rem;
+}
+
+.info-section .fedi-handle,
+.info-section .fedi-note {
+  display: none !important;
+}
+
+.info-section a {
+  color: var(--bf-indigo-strong);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.info-section a:hover {
+  text-decoration: underline;
+}
+
+/* ── Buttons / global links ─────────────────────────────── */
+a {
+  color: var(--bf-indigo-strong);
+  text-decoration: none;
+}
+
+.share-btn {
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, var(--bf-indigo) 0%, var(--bf-violet) 100%);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.3);
+}
+
+.share-btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  color: #fff;
+  box-shadow: 0 14px 30px rgba(79, 70, 229, 0.4);
+}
+
+/* ── QR modal accents ───────────────────────────────────── */
+.qr-title {
+  color: var(--bf-text);
+}
+
+.qr-download-btn {
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, var(--bf-indigo) 0%, var(--bf-violet) 100%);
+  color: #fff;
+}
+
+.qr-download-btn:hover {
+  filter: brightness(1.05);
+  color: #fff;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .card {
+    padding: 128px 18px 28px;
+    border-radius: 22px;
+  }
+
+  .card::before,
+  .card::after {
+    height: 112px;
+  }
+
+  .avatar-wrapper {
+    width: 112px;
+    margin-top: -62px;
+  }
+
+  .profile-avatar {
+    width: 108px !important;
+    height: 108px !important;
+  }
+
+  .badges-container {
+    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+    gap: 12px;
+  }
+
+  .badge-media {
+    width: 84px;
+    height: 84px;
+  }
+}

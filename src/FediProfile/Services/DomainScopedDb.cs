@@ -140,7 +140,7 @@ public class DomainScopedDb : LocalDbService
                 ActorAvatarUrl TEXT,
                 InstanceName TEXT,
                 LandingMarkdown TEXT,
-                UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
+                UiTheme TEXT NOT NULL DEFAULT 'theme-default.css',  -- see Themes.DefaultFile
                 AdminMastodonUser TEXT,
                 AdminMastodonDomain TEXT,
                 JoinMastodonUrl TEXT DEFAULT 'https://joinmastodon.org',
@@ -154,7 +154,7 @@ public class DomainScopedDb : LocalDbService
                 UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme, JoinMastodonUrl)
-            VALUES (1, 'profile', 'theme-classic.css', 'https://joinmastodon.org');
+            VALUES (1, 'profile', 'theme-default.css', 'https://joinmastodon.org');
         ";
         command.ExecuteNonQuery();
     }
@@ -212,7 +212,7 @@ public class DomainScopedDb : LocalDbService
                         ActorAvatarUrl TEXT,
                         InstanceName TEXT,
                         LandingMarkdown TEXT,
-                        UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
+                        UiTheme TEXT NOT NULL DEFAULT 'theme-default.css',
                         AdminMastodonUser TEXT,
                         AdminMastodonDomain TEXT,
                         NavbarLinks TEXT,
@@ -221,7 +221,7 @@ public class DomainScopedDb : LocalDbService
                         UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                     INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme)
-                    VALUES (1, 'profile', 'theme-classic.css');
+                    VALUES (1, 'profile', 'theme-default.css');
                 ";
                 ensureSettingsTable.ExecuteNonQuery();
             }
@@ -532,7 +532,7 @@ public class DomainScopedDb : LocalDbService
         using var command = connection.CreateCommand();
         command.CommandText = @"
             INSERT OR IGNORE INTO Settings (Id, ActorUsername, UiTheme, CreatedUtc, UpdatedUtc)
-            VALUES (1, 'profile', 'theme-classic.css', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (1, 'profile', 'theme-default.css', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ";
         await command.ExecuteNonQueryAsync();
     }

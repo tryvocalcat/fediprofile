@@ -291,7 +291,7 @@ public class UserScopedDb : LocalDbService
                     ActorUsername TEXT NOT NULL DEFAULT 'profile',
                     ActorBio TEXT,
                     ActorAvatarUrl TEXT,
-                    UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',  -- see Themes.DefaultFile
+                    UiTheme TEXT NOT NULL DEFAULT 'theme-default.css',  -- see Themes.DefaultFile
                     SkipReplies INTEGER NOT NULL DEFAULT 0,
                     ShowRecentPosts INTEGER NOT NULL DEFAULT 1,
                     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1097,7 +1097,7 @@ public class UserScopedDb : LocalDbService
         command.Parameters.AddWithValue("@InsertActorUsername", actorUsername ?? "username");
         command.Parameters.AddWithValue("@InsertActorBio", (object?)actorBio ?? DBNull.Value);
         command.Parameters.AddWithValue("@InsertActorAvatarUrl", (object?)actorAvatarUrl ?? DBNull.Value);
-        command.Parameters.AddWithValue("@InsertUiTheme", uiTheme ?? "theme-classic.css");
+        command.Parameters.AddWithValue("@InsertUiTheme", uiTheme ?? "theme-default.css");
         command.Parameters.AddWithValue("@InsertSkipReplies", skipReplies == true ? 1 : 0);
         command.Parameters.AddWithValue("@InsertShowRecentPosts", showRecentPosts != false ? 1 : 0);
 

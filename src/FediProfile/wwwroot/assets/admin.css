@@ -314,7 +314,7 @@ a:hover {
   background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.92) 100%);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
-  padding: 1rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
   box-shadow: var(--admin-shadow);
 }
 
@@ -886,13 +886,16 @@ input[type="checkbox"] {
    Profile Editor (WYSIWYG)
    =================================================================== */
 
+/* The profile editor lives directly inside .dashboard-panel — no second
+   card chrome. It used to mirror the public profile layout, but themes now
+   vary too much for that preview to be meaningful. */
 .pe-card {
-  background: var(--admin-surface);
-  border: 1px solid var(--admin-border);
-  border-radius: 24px;
-  padding: 2.5rem;
-  box-shadow: var(--admin-shadow);
-  max-width: 720px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  max-width: 640px;
   margin: 0 auto;
 }
 
@@ -1433,14 +1436,151 @@ input[type="checkbox"] {
   margin-left: auto;
 }
 
+/* ===== Profile toolbar (Theme setting + Preview/Save actions) ===== */
+.pe-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  flex-wrap: wrap;
+  margin: 0 0 1.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 16px;
+  background: var(--admin-bg);
+}
+
+.pe-toolbar-field {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.pe-toolbar-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--admin-ink-muted);
+  white-space: nowrap;
+}
+
+.pe-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pe-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  min-width: 168px;
+  padding: 0.55rem 2.4rem 0.55rem 0.85rem;
+  font-family: var(--admin-font);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--admin-ink);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color var(--admin-transition), box-shadow var(--admin-transition);
+}
+
+.pe-select:hover {
+  border-color: var(--admin-accent);
+}
+
+.pe-select:focus-visible {
+  outline: none;
+  border-color: var(--admin-accent);
+  box-shadow: 0 0 0 3px var(--admin-accent-subtle);
+}
+
+.pe-select-wrap::after {
+  content: '';
+  position: absolute;
+  right: 0.95rem;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--admin-ink-muted);
+  border-bottom: 2px solid var(--admin-ink-muted);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.pe-saved-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #059669;
+  background: rgba(16, 185, 129, 0.12);
+  border-radius: 999px;
+  animation: peSavedIn 220ms ease;
+}
+
+@keyframes peSavedIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+.pe-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+.pe-toolbar-actions .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pe-toolbar-actions .button svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 .pe-link-new {
   border-style: dashed;
 }
 
+@media (max-width: 640px) {
+  .pe-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pe-toolbar-field {
+    justify-content: space-between;
+  }
+
+  .pe-select,
+  .pe-select-wrap {
+    flex: 1;
+  }
+
+  .pe-toolbar-actions {
+    margin-left: 0;
+  }
+
+  .pe-toolbar-actions .button-primary {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 768px) {
   .pe-card {
-    padding: 1.5rem;
-    border-radius: 16px;
+    padding: 0;
+    border-radius: 0;
   }
 
   .pe-name-input {

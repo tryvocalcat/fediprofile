@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS Settings (
     ActorUsername TEXT NOT NULL DEFAULT 'profile',
     ActorBio TEXT,
     ActorAvatarUrl TEXT,
-    UiTheme TEXT NOT NULL DEFAULT 'theme-classic.css',
+    UiTheme TEXT NOT NULL DEFAULT 'theme-default.css',
     SkipReplies INTEGER NOT NULL DEFAULT 0,
     ShowRecentPosts INTEGER NOT NULL DEFAULT 1,
     CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

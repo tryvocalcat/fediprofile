@@ -91,25 +91,33 @@
                     </div>
                 }
 
-                <div class="pe-save-bar pe-save-bar-top">
-                    <div class="pe-save-bar-left">
-                        <label class="muted" style="white-space:nowrap;margin:0">Theme</label>
-                        <select value="@_profileTheme" @onchange="OnThemeChanged" class="form-control">
-                            @foreach (var t in _availableThemes)
+                <div class="pe-toolbar">
+                    @if (_availableThemes.Count > 1)
+                    {
+                        <div class="pe-toolbar-field">
+                            <label for="pe-theme-select" class="pe-toolbar-label">Theme</label>
+                            <div class="pe-select-wrap">
+                                <select id="pe-theme-select" value="@_profileTheme" @onchange="OnThemeChanged" class="pe-select" aria-label="Profile theme">
+                                    @foreach (var t in _availableThemes)
+                                    {
+                                        <option value="@t.FileName">@t.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                            @if (_themeSaved)
                             {
-                                <option value="@t.FileName">@t.DisplayName</option>
+                                <span class="pe-saved-pill" role="status">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    Saved
+                                </span>
                             }
-                        </select>
-                        @if (_themeSaved)
-                        {
-                            <span class="muted" style="font-size:0.8rem">✓ saved</span>
-                        }
-                    </div>
-                    <div class="pe-save-bar-right">
+                        </div>
+                    }
+                    <div class="pe-toolbar-actions">
                         @if (_integrationRef != null)
                         {
                             <button class="button button-success button-small" @onclick="CopyProfileUrl">
-                                <svg style="width:16px;height:16px;vertical-align:-2px;margin-right:0.3rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                                 Copy URL
                             </button>
                             @if (_copied)
@@ -117,9 +125,20 @@
                                 <span class="muted" style="font-size:0.8rem;align-self:center;">Copied!</span>
                             }
                         }
-                        <a href="/@_currentUserSlug" target="_blank" class="button button-ghost button-small">Preview ↗</a>
-                        <button class="button button-primary" @onclick="SaveProfile" disabled="@_isProcessing">
-                            @(_isProcessing ? "Saving..." : "Save Profile")
+                        <a href="/@_currentUserSlug" target="_blank" rel="noopener" class="button button-ghost button-small" aria-label="Preview your public profile (opens in a new tab)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            Preview
+                        </a>
+                        <button class="button button-primary" @onclick="SaveProfile" disabled="@_isProcessing" aria-busy="@_isProcessing">
+                            @if (_isProcessing)
+                            {
+                                <span>Saving…</span>
+                            }
+                            else
+                            {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                <span>Save Profile</span>
+                            }
                         </button>
                     </div>
                 </div>
@@ -453,10 +472,21 @@
 
                 <!-- Footer: Save -->
                 <div class="pe-save-bar">
-                    <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto">
-                        <a href="/@_currentUserSlug" target="_blank" class="button button-ghost button-small">Preview ↗</a>
-                        <button class="button button-primary" @onclick="SaveProfile" disabled="@_isProcessing">
-                            @(_isProcessing ? "Saving..." : "Save Profile")
+                    <div class="pe-toolbar-actions" style="margin-left:auto">
+                        <a href="/@_currentUserSlug" target="_blank" rel="noopener" class="button button-ghost button-small" aria-label="Preview your public profile (opens in a new tab)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            Preview
+                        </a>
+                        <button class="button button-primary" @onclick="SaveProfile" disabled="@_isProcessing" aria-busy="@_isProcessing">
+                            @if (_isProcessing)
+                            {
+                                <span>Saving…</span>
+                            }
+                            else
+                            {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                <span>Save Profile</span>
+                            }
                         </button>
                     </div>
                 </div>
@@ -531,151 +561,9 @@
                     <p class="muted" style="margin:0.25rem 0 0">Badges you've earned and received</p>
                 </div>
 
-                <div style="display:flex;gap:0;border-bottom:2px solid var(--border, #ddd);margin-bottom:1rem">
-                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "badges" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "badges" ? "600" : "400")" @onclick="ShowBadgesTab">
-                        🏅 My Badges
-                    </button>
-                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "import" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "import" ? "600" : "400")" @onclick="ShowImportTab">
-                        ⬇️ Import
-                    </button>
-                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "issuers" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "issuers" ? "600" : "400")" @onclick="ShowIssuersTab">
-                        🔑 Issuers
-                    </button>
-                    <button class="button button-ghost button-small" style="border-radius:6px 6px 0 0;border-bottom:2px solid @(_badgeTab == "verified" ? "var(--primary, #7c3aed)" : "transparent");margin-bottom:-2px;font-weight:@(_badgeTab == "verified" ? "600" : "400")" @onclick="ShowVerifiedTab">
-                        ✅ Verified URIs
-                    </button>
-                </div>
-
-                <!-- Import Badge tab -->
-                @if (_badgeTab == "import")
-                {
-                    <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
-                        <h3 style="margin:0 0 0.25rem">Import a Badge</h3>
-                        <p class="muted" style="margin:0 0 0.75rem">Paste a BadgeFed grant URL to import</p>
-
-                        @if (!string.IsNullOrEmpty(_importBadgeMessage))
-                        {
-                            <div class="alert @(_importBadgeIsError ? "alert-error" : "alert-success")" style="margin-bottom:0.75rem">
-                                @_importBadgeMessage
-                            </div>
-                        }
-
-                            @if (_pendingBadgeImport != null)
-                            {
-                                <div class="alert alert-warning" style="margin-bottom:0.75rem">
-                                    <strong>Recipient mismatch.</strong>
-                                    This import includes @(_pendingBadgeImport.Assertions.Count == 1 ? "a badge" : $"{_pendingBadgeImport.Assertions.Count} badges")
-                                    issued to @(_pendingBadgeImport.MismatchedRecipients.Count == 1 ? "a URI" : "URIs") that are not in your verified URI list.
-                                    Importing anyway will add @(_pendingBadgeImport.Assertions.Count == 1 ? "it" : "them") to your profile.
-                                </div>
-
-                                <div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg, #fff)">
-                                    <div style="font-weight:600;margin-bottom:0.35rem">Recipients not on your verified list</div>
-                                    <div style="display:flex;flex-direction:column;gap:0.35rem;margin-bottom:0.75rem">
-                                        @foreach (var recipient in _pendingBadgeImport.MismatchedRecipients)
-                                        {
-                                            <div class="muted" style="word-break:break-all">@recipient</div>
-                                        }
-                                    </div>
-                                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-                                        <button class="button button-primary" @onclick="ConfirmImportBadge" disabled="@_isImportingBadge">
-                                            @(_isImportingBadge ? "Importing..." : "Import Anyway")
-                                        </button>
-                                        <button class="button button-ghost" @onclick="CancelPendingBadgeImport" disabled="@_isImportingBadge">
-                                            Cancel
-                                        </button>
-                                    </div>
-                                </div>
-                            }
-
-                        <div style="display:flex;gap:0.5rem;align-items:center">
-                                <input type="text" @bind="_importBadgeUrl" @bind:after="OnImportBadgeUrlChanged" placeholder="https://badgefed.org/view/grant/..." class="form-control" style="flex:1" />
-                            <button class="button button-primary" @onclick="ImportBadge" disabled="@(_isImportingBadge || string.IsNullOrWhiteSpace(_importBadgeUrl))">
-                                @(_isImportingBadge ? "Importing..." : "Import")
-                            </button>
-                        </div>
-                    </div>
-                }
-
-                <!-- Badge Issuers tab -->
-                @if (_badgeTab == "issuers")
-                {
-                    <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
-                        <h3 style="margin:0 0 0.75rem">Trusted Badge Issuers</h3>
-
-                        @if (_badgeIssuers == null)
-                        {
-                            <p class="muted">Loading issuers...</p>
-                        }
-                        else if (!_badgeIssuers.Any())
-                        {
-                            <p class="muted">No badge issuers yet. Import a badge to see issuers here.</p>
-                        }
-                        else
-                        {
-                            <div style="display:flex;flex-direction:column;gap:0.75rem">
-                                @foreach (var issuer in _badgeIssuers)
-                                {
-                                    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem;border-radius:6px;background:var(--bg, #fff)">
-                                        @if (!string.IsNullOrEmpty(issuer.Avatar))
-                                        {
-                                            <img src="@issuer.Avatar" alt="@issuer.Name" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" />
-                                        }
-                                        else
-                                        {
-                                            <div style="width:36px;height:36px;border-radius:50%;background:var(--border, #ddd);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1rem">🔑</div>
-                                        }
-                                        <div style="min-width:0;flex:1">
-                                            <div style="font-weight:600">@issuer.Name</div>
-                                            <a href="@issuer.ActorUrl" target="_blank" rel="noopener" style="font-size:0.8rem;color:var(--muted);word-break:break-all">@TruncateUrl(issuer.ActorUrl)</a>
-                                        </div>
-                                        @if (issuer.Following)
-                                        {
-                                            <span style="font-size:0.75rem;padding:2px 8px;border-radius:9999px;background:#4caf50;color:#fff;white-space:nowrap">Following</span>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-
-                <!-- Verified URIs tab -->
-                @if (_badgeTab == "verified")
-                {
-                    <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
-                        <h3 style="margin:0 0 0.75rem">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;color:#4caf50"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Verified URIs
-                        </h3>
-
-                        @if (_verifiedUris == null)
-                        {
-                            <p class="muted">Loading verified URIs...</p>
-                        }
-                        else if (!_verifiedUris.Any())
-                        {
-                            <p class="muted">No verified URIs yet.</p>
-                        }
-                        else
-                        {
-                            <div style="display:flex;flex-direction:column;gap:0.5rem">
-                                @foreach (var uri in _verifiedUris)
-                                {
-                                    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-radius:6px;background:var(--bg, #fff)">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#4caf50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
-                                        <a href="@uri.Uri" target="_blank" rel="noopener" style="flex:1;word-break:break-all;font-size:0.9rem">@TruncateUrl(uri.Uri)</a>
-                                        <span class="muted" style="font-size:0.75rem;white-space:nowrap">@uri.VerifiedUtc</span>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-
-                <!-- Received Badges tab (default) -->
-                @if (_badgeTab == "badges")
-                {
-                <div>
+                <!-- My Badges -->
+                <section style="margin-top:0.5rem">
+                    <h3 style="margin:0 0 0.75rem;display:flex;align-items:center;gap:0.4rem">🏅 My Badges</h3>
                     @if (_receivedBadges == null)
                     {
                         <p class="muted">Loading badges...</p>
@@ -760,8 +648,130 @@
                             }
                         </div>
                     }
-                </div>
-                }
+                </section>
+
+                <!-- Import a Badge -->
+                <section style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border, #eee)">
+                    <div style="padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <h3 style="margin:0 0 0.25rem">⬇️ Import a Badge</h3>
+                        <p class="muted" style="margin:0 0 0.75rem">Paste a BadgeFed grant URL to import</p>
+
+                        @if (!string.IsNullOrEmpty(_importBadgeMessage))
+                        {
+                            <div class="alert @(_importBadgeIsError ? "alert-error" : "alert-success")" style="margin-bottom:0.75rem">
+                                @_importBadgeMessage
+                            </div>
+                        }
+
+                        @if (_pendingBadgeImport != null)
+                        {
+                            <div class="alert alert-warning" style="margin-bottom:0.75rem">
+                                <strong>Recipient mismatch.</strong>
+                                This import includes @(_pendingBadgeImport.Assertions.Count == 1 ? "a badge" : $"{_pendingBadgeImport.Assertions.Count} badges")
+                                issued to @(_pendingBadgeImport.MismatchedRecipients.Count == 1 ? "a URI" : "URIs") that are not in your verified URI list.
+                                Importing anyway will add @(_pendingBadgeImport.Assertions.Count == 1 ? "it" : "them") to your profile.
+                            </div>
+
+                            <div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg, #fff)">
+                                <div style="font-weight:600;margin-bottom:0.35rem">Recipients not on your verified list</div>
+                                <div style="display:flex;flex-direction:column;gap:0.35rem;margin-bottom:0.75rem">
+                                    @foreach (var recipient in _pendingBadgeImport.MismatchedRecipients)
+                                    {
+                                        <div class="muted" style="word-break:break-all">@recipient</div>
+                                    }
+                                </div>
+                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                                    <button class="button button-primary" @onclick="ConfirmImportBadge" disabled="@_isImportingBadge">
+                                        @(_isImportingBadge ? "Importing..." : "Import Anyway")
+                                    </button>
+                                    <button class="button button-ghost" @onclick="CancelPendingBadgeImport" disabled="@_isImportingBadge">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        }
+
+                        <div style="display:flex;gap:0.5rem;align-items:center">
+                            <input type="text" @bind="_importBadgeUrl" @bind:after="OnImportBadgeUrlChanged" placeholder="https://badgefed.org/view/grant/..." class="form-control" style="flex:1" />
+                            <button class="button button-primary" @onclick="ImportBadge" disabled="@(_isImportingBadge || string.IsNullOrWhiteSpace(_importBadgeUrl))">
+                                @(_isImportingBadge ? "Importing..." : "Import")
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Trusted Badge Issuers -->
+                <section style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border, #eee)">
+                    <div style="padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <h3 style="margin:0 0 0.75rem">🔑 Trusted Badge Issuers</h3>
+
+                        @if (_badgeIssuers == null)
+                        {
+                            <p class="muted">Loading issuers...</p>
+                        }
+                        else if (!_badgeIssuers.Any())
+                        {
+                            <p class="muted">No badge issuers yet. Import a badge to see issuers here.</p>
+                        }
+                        else
+                        {
+                            <div style="display:flex;flex-direction:column;gap:0.75rem">
+                                @foreach (var issuer in _badgeIssuers)
+                                {
+                                    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem;border-radius:6px;background:var(--bg, #fff)">
+                                        @if (!string.IsNullOrEmpty(issuer.Avatar))
+                                        {
+                                            <img src="@issuer.Avatar" alt="@issuer.Name" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" />
+                                        }
+                                        else
+                                        {
+                                            <div style="width:36px;height:36px;border-radius:50%;background:var(--border, #ddd);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1rem">🔑</div>
+                                        }
+                                        <div style="min-width:0;flex:1">
+                                            <div style="font-weight:600">@issuer.Name</div>
+                                            <a href="@issuer.ActorUrl" target="_blank" rel="noopener" style="font-size:0.8rem;color:var(--muted);word-break:break-all">@TruncateUrl(issuer.ActorUrl)</a>
+                                        </div>
+                                        @if (issuer.Following)
+                                        {
+                                            <span style="font-size:0.75rem;padding:2px 8px;border-radius:9999px;background:#4caf50;color:#fff;white-space:nowrap">Following</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                <!-- Verified URIs -->
+                <section style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border, #eee)">
+                    <div style="padding:1rem;border:1px solid var(--border, #ddd);border-radius:8px;background:var(--bg-subtle, #f8f9fa)">
+                        <h3 style="margin:0 0 0.75rem;display:flex;align-items:center">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;color:#4caf50"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Verified URIs
+                        </h3>
+
+                        @if (_verifiedUris == null)
+                        {
+                            <p class="muted">Loading verified URIs...</p>
+                        }
+                        else if (!_verifiedUris.Any())
+                        {
+                            <p class="muted">No verified URIs yet.</p>
+                        }
+                        else
+                        {
+                            <div style="display:flex;flex-direction:column;gap:0.5rem">
+                                @foreach (var uri in _verifiedUris)
+                                {
+                                    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-radius:6px;background:var(--bg, #fff)">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#4caf50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                                        <a href="@uri.Uri" target="_blank" rel="noopener" style="flex:1;word-break:break-all;font-size:0.9rem">@TruncateUrl(uri.Uri)</a>
+                                        <span class="muted" style="font-size:0.75rem;white-space:nowrap">@uri.VerifiedUtc</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </section>
                     </article>
                 </div>
             }
@@ -1230,12 +1240,7 @@
     // Verified URIs
     private List<(int Id, string Uri, string VerifiedUtc)>? _verifiedUris;
 
-    // Badge section tab: "badges" (default), "import", "issuers", "verified"
-    private string _badgeTab = "badges";
-    private void ShowBadgesTab() => _badgeTab = "badges";
-    private void ShowImportTab() => _badgeTab = "import";
-    private void ShowIssuersTab() => _badgeTab = "issuers";
-    private void ShowVerifiedTab() => _badgeTab = "verified";
+
 
     // Followers
     private List<Follower>? _followers;
@@ -2423,7 +2428,6 @@
         await LoadBadgeIssuers();
         await LoadReceivedBadges();
         await RegenerateStaticProfileAsync();
-        _badgeTab = "badges";
     }
 
     private void CancelPendingBadgeImport()

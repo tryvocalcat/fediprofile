@@ -11,7 +11,7 @@ public record ThemeOption(string FileName, string DisplayName);
 /// </summary>
 public static class Themes
 {
-    public const string DefaultFile = "theme-classic.css";
+    public const string DefaultFile = "theme-default.css";
     public const string BaseFile = "theme-base.css";
 
     /// <summary>
@@ -20,6 +20,7 @@ public static class Themes
     /// </summary>
     public static readonly IReadOnlyList<ThemeOption> All = new List<ThemeOption>
     {
+        new("theme-default.css",      "Badges"),
         new("theme-classic.css",      "Classic"),
         
         new("theme-cosmos.css",       "Cosmos"),
